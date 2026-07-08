@@ -1,0 +1,328 @@
+{
+  "rootHash": "3d1ef59405a213d10e8cc2f020fcb89d3acecec2eb4fd291aa799f9a9427b08e",
+  "timestamp": 1783408331743,
+  "fileCount": 18,
+  "files": [
+    {
+      "path": ".eslintrc.js",
+      "hash": "bc4157eefff431a9d8e96b4052c9b125b6ea44645134b8257fc5789db60c2565",
+      "size": 791,
+      "modified": 1783407305967.1414
+    },
+    {
+      "path": ".postcssrc.js",
+      "hash": "ef079111a8ccd0a3e14e9ef063cef079a092fffa12f2f65c3674fb5a4ee285f3",
+      "size": 246,
+      "modified": 1783407305968.1409
+    },
+    {
+      "path": "test\\unit\\jest.conf.js",
+      "hash": "6db673dae7a6070c82934ce27744ac41fa8d60e75ce676f39190fc41a28a3bcf",
+      "size": 725,
+      "modified": 1783407305976.1438
+    },
+    {
+      "path": "test\\unit\\setup.js",
+      "hash": "277bccb1f25d0466828e4a0927b9f789773338597224d9e4531a325f007ac3a1",
+      "size": 56,
+      "modified": 1783407305975.1443
+    },
+    {
+      "path": "test\\unit\\specs\\HelloWorld.spec.js",
+      "hash": "a516bad6826aaeb8a2e56b44d3565fdc593d08a1f9967322a9088740ac8dd92f",
+      "size": 354,
+      "modified": 1783407305972.1404
+    },
+    {
+      "path": "test\\e2e\\nightwatch.conf.js",
+      "hash": "02c4ed57814c9ebcb86d749f62f0bd243a9cbcca9ee74408ed219f413863d4bd",
+      "size": 1028,
+      "modified": 1783407305974.141
+    },
+    {
+      "path": "test\\e2e\\runner.js",
+      "hash": "c522ac6a6e89a58c5055833aea52a2e530bb0b689b01ce2ff5dd0fa1cb874a73",
+      "size": 1542,
+      "modified": 1783407305974.141
+    },
+    {
+      "path": "test\\e2e\\specs\\test.js",
+      "hash": "52249c2fc85c13f387b4e3831c38684fa6ca2096962792f72a5b89bb0da313d3",
+      "size": 561,
+      "modified": 1783407305970.1401
+    },
+    {
+      "path": "test\\e2e\\custom-assertions\\elementCount.js",
+      "hash": "e0c2c7951e890ef51953eed7fb96d5cd2e2c875bb2447af0f31f42b8ef0f6383",
+      "size": 765,
+      "modified": 1783407305975.1443
+    },
+    {
+      "path": "src\\App.vue",
+      "hash": "f8e68113a7b7a8030c71a290241f0c00d332ed871ad903c128708a7aa23eb08a",
+      "size": 374,
+      "modified": 1783407305966.136
+    },
+    {
+      "path": "src\\main.js",
+      "hash": "abe1aeb25e1d800dc8386ba07fef949037235add43cfbc4c201369316cd7b9cb",
+      "size": 360,
+      "modified": 1783407305968.1409
+    },
+    {
+      "path": "src\\router\\index.js",
+      "hash": "205a6ce21e8cb6cc69a97f45fbc6134f8a3377ccabbaecc01db7af8a05b24e8a",
+      "size": 251,
+      "modified": 1783407305974.141
+    },
+    {
+      "path": "src\\components\\HelloWorld.vue",
+      "hash": "da177cc3d2de228b0654436ea7e2171c0acef6f262d3bd4b42abcb2d2d3bccdb",
+      "size": 1899,
+      "modified": 1783407305974.141
+    },
+    {
+      "path": "config\\dev.env.js",
+      "hash": "b686a13b0096a7290973fa9290e62d4f32f1d4fe7458a8e97aa00f4ff08cc753",
+      "size": 156,
+      "modified": 1783407305966.136
+    },
+    {
+      "path": "config\\index.js",
+      "hash": "b8ca93826ae7b78b08356507f70f08b8974a641aebcccedfe4f80b0b6add0319",
+      "size": 2291,
+      "modified": 1783407305968.1409
+    },
+    {
+      "path": "config\\prod.env.js",
+      "hash": "3d095c641a684e26b15121489d7a2faafe6db7a16e7506b4f77938efa22bd543",
+      "size": 61,
+      "modified": 1783407305968.1409
+    },
+    {
+      "path": "config\\test.env.js",
+      "hash": "cd8fbf2c14f440c560fa42077c1832feece749913d61d5d19b6cab59159c01da",
+      "size": 149,
+      "modified": 1783407305968.1409
+    },
+    {
+      "path": ".codeartsdoer\\temp\\accept\\ses_0c49bb2b4ffeVqSluyN5AhtRjk_webpack.base.conf_297370a9c781.original.js",
+      "hash": "cca012467752608a173df1b9718b62c93bd1ceaf126253dca98b40a4686a95f8",
+      "size": 2385,
+      "modified": 1783408329442.5437
+    }
+  ],
+  "tree": {
+    "hash": "3d1ef59405a213d10e8cc2f020fcb89d3acecec2eb4fd291aa799f9a9427b08e",
+    "left": {
+      "hash": "cd6bb8e73a8f212b4adb4bbafe19c69caf825d5da6f39a7e12713d0c1b697c6d",
+      "left": {
+        "hash": "cc23172fc11d6c285806c6899127c3c0aee1ffc70795700fd57b539998b93ebb",
+        "left": {
+          "hash": "cc333eec7b4d6cf0f14bdb507caa944f77c30069f8af8e4acc4bc75d4be29f33",
+          "left": {
+            "hash": "e6ea45e7ffe777e88752a1b160d7a3fb8dbe7c17775bc598b58cebf3f29b5278",
+            "left": {
+              "hash": "cca012467752608a173df1b9718b62c93bd1ceaf126253dca98b40a4686a95f8",
+              "file": {
+                "path": ".codeartsdoer\\temp\\accept\\ses_0c49bb2b4ffeVqSluyN5AhtRjk_webpack.base.conf_297370a9c781.original.js",
+                "hash": "cca012467752608a173df1b9718b62c93bd1ceaf126253dca98b40a4686a95f8",
+                "size": 2385,
+                "modified": 1783408329442.5437
+              }
+            },
+            "right": {
+              "hash": "bc4157eefff431a9d8e96b4052c9b125b6ea44645134b8257fc5789db60c2565",
+              "file": {
+                "path": ".eslintrc.js",
+                "hash": "bc4157eefff431a9d8e96b4052c9b125b6ea44645134b8257fc5789db60c2565",
+                "size": 791,
+                "modified": 1783407305967.1414
+              }
+            }
+          },
+          "right": {
+            "hash": "92901190c40f25a352f9e43e6327ffb59b1e42d0f2680fa30b26bb3f08704a74",
+            "left": {
+              "hash": "ef079111a8ccd0a3e14e9ef063cef079a092fffa12f2f65c3674fb5a4ee285f3",
+              "file": {
+                "path": ".postcssrc.js",
+                "hash": "ef079111a8ccd0a3e14e9ef063cef079a092fffa12f2f65c3674fb5a4ee285f3",
+                "size": 246,
+                "modified": 1783407305968.1409
+              }
+            },
+            "right": {
+              "hash": "b686a13b0096a7290973fa9290e62d4f32f1d4fe7458a8e97aa00f4ff08cc753",
+              "file": {
+                "path": "config\\dev.env.js",
+                "hash": "b686a13b0096a7290973fa9290e62d4f32f1d4fe7458a8e97aa00f4ff08cc753",
+                "size": 156,
+                "modified": 1783407305966.136
+              }
+            }
+          }
+        },
+        "right": {
+          "hash": "2d7e0c8580eae9e464579115c91968865491cd7343c7f4d7e2591bf1bddf7c1e",
+          "left": {
+            "hash": "fbfc01aabe5277794981c1d200b282b25c00bcabf80f42f8f915927d8c7451bf",
+            "left": {
+              "hash": "b8ca93826ae7b78b08356507f70f08b8974a641aebcccedfe4f80b0b6add0319",
+              "file": {
+                "path": "config\\index.js",
+                "hash": "b8ca93826ae7b78b08356507f70f08b8974a641aebcccedfe4f80b0b6add0319",
+                "size": 2291,
+                "modified": 1783407305968.1409
+              }
+            },
+            "right": {
+              "hash": "3d095c641a684e26b15121489d7a2faafe6db7a16e7506b4f77938efa22bd543",
+              "file": {
+                "path": "config\\prod.env.js",
+                "hash": "3d095c641a684e26b15121489d7a2faafe6db7a16e7506b4f77938efa22bd543",
+                "size": 61,
+                "modified": 1783407305968.1409
+              }
+            }
+          },
+          "right": {
+            "hash": "69f49d949ebbb1818675e0ed8afc14cfac8d63b8da9a9bb9765ddff96a130b50",
+            "left": {
+              "hash": "cd8fbf2c14f440c560fa42077c1832feece749913d61d5d19b6cab59159c01da",
+              "file": {
+                "path": "config\\test.env.js",
+                "hash": "cd8fbf2c14f440c560fa42077c1832feece749913d61d5d19b6cab59159c01da",
+                "size": 149,
+                "modified": 1783407305968.1409
+              }
+            },
+            "right": {
+              "hash": "f8e68113a7b7a8030c71a290241f0c00d332ed871ad903c128708a7aa23eb08a",
+              "file": {
+                "path": "src\\App.vue",
+                "hash": "f8e68113a7b7a8030c71a290241f0c00d332ed871ad903c128708a7aa23eb08a",
+                "size": 374,
+                "modified": 1783407305966.136
+              }
+            }
+          }
+        }
+      },
+      "right": {
+        "hash": "dd0b02c80548b68c3a74339e4c3ccb3e5aa0870f42115d2d1eeb7456404d2f40",
+        "left": {
+          "hash": "7e76d2ec21798d706ac9a35455c00cdb9ce10d6e5c043842196e00a872df0f7d",
+          "left": {
+            "hash": "516b64d9da5f7d02ad445541d237aa13d3a9d492bb7c3e9f00b712a611ef84b9",
+            "left": {
+              "hash": "da177cc3d2de228b0654436ea7e2171c0acef6f262d3bd4b42abcb2d2d3bccdb",
+              "file": {
+                "path": "src\\components\\HelloWorld.vue",
+                "hash": "da177cc3d2de228b0654436ea7e2171c0acef6f262d3bd4b42abcb2d2d3bccdb",
+                "size": 1899,
+                "modified": 1783407305974.141
+              }
+            },
+            "right": {
+              "hash": "abe1aeb25e1d800dc8386ba07fef949037235add43cfbc4c201369316cd7b9cb",
+              "file": {
+                "path": "src\\main.js",
+                "hash": "abe1aeb25e1d800dc8386ba07fef949037235add43cfbc4c201369316cd7b9cb",
+                "size": 360,
+                "modified": 1783407305968.1409
+              }
+            }
+          },
+          "right": {
+            "hash": "f725e8421a53bbc7dfa92cfd4a29a21d4cb946aaf3600d6c0ee38467c98d97e4",
+            "left": {
+              "hash": "205a6ce21e8cb6cc69a97f45fbc6134f8a3377ccabbaecc01db7af8a05b24e8a",
+              "file": {
+                "path": "src\\router\\index.js",
+                "hash": "205a6ce21e8cb6cc69a97f45fbc6134f8a3377ccabbaecc01db7af8a05b24e8a",
+                "size": 251,
+                "modified": 1783407305974.141
+              }
+            },
+            "right": {
+              "hash": "e0c2c7951e890ef51953eed7fb96d5cd2e2c875bb2447af0f31f42b8ef0f6383",
+              "file": {
+                "path": "test\\e2e\\custom-assertions\\elementCount.js",
+                "hash": "e0c2c7951e890ef51953eed7fb96d5cd2e2c875bb2447af0f31f42b8ef0f6383",
+                "size": 765,
+                "modified": 1783407305975.1443
+              }
+            }
+          }
+        },
+        "right": {
+          "hash": "ea8a25dccf54eceb5c7d4df1c21b2dcaf7cdfcf69b0169759abf260018c2fe53",
+          "left": {
+            "hash": "8223c2feb4622eab46e6fdff5bac90b55197ac1a7534e591b43ed2804f5b94ce",
+            "left": {
+              "hash": "02c4ed57814c9ebcb86d749f62f0bd243a9cbcca9ee74408ed219f413863d4bd",
+              "file": {
+                "path": "test\\e2e\\nightwatch.conf.js",
+                "hash": "02c4ed57814c9ebcb86d749f62f0bd243a9cbcca9ee74408ed219f413863d4bd",
+                "size": 1028,
+                "modified": 1783407305974.141
+              }
+            },
+            "right": {
+              "hash": "c522ac6a6e89a58c5055833aea52a2e530bb0b689b01ce2ff5dd0fa1cb874a73",
+              "file": {
+                "path": "test\\e2e\\runner.js",
+                "hash": "c522ac6a6e89a58c5055833aea52a2e530bb0b689b01ce2ff5dd0fa1cb874a73",
+                "size": 1542,
+                "modified": 1783407305974.141
+              }
+            }
+          },
+          "right": {
+            "hash": "0646c661a8a9fc9ddeea49827071433a2416b3cf1e24acdf38fe024a184d4e7c",
+            "left": {
+              "hash": "52249c2fc85c13f387b4e3831c38684fa6ca2096962792f72a5b89bb0da313d3",
+              "file": {
+                "path": "test\\e2e\\specs\\test.js",
+                "hash": "52249c2fc85c13f387b4e3831c38684fa6ca2096962792f72a5b89bb0da313d3",
+                "size": 561,
+                "modified": 1783407305970.1401
+              }
+            },
+            "right": {
+              "hash": "6db673dae7a6070c82934ce27744ac41fa8d60e75ce676f39190fc41a28a3bcf",
+              "file": {
+                "path": "test\\unit\\jest.conf.js",
+                "hash": "6db673dae7a6070c82934ce27744ac41fa8d60e75ce676f39190fc41a28a3bcf",
+                "size": 725,
+                "modified": 1783407305976.1438
+              }
+            }
+          }
+        }
+      }
+    },
+    "right": {
+      "hash": "3aca257b78677b45ce0aff39174461db541e2c6ee4b820a89afca8d46686cd2e",
+      "left": {
+        "hash": "277bccb1f25d0466828e4a0927b9f789773338597224d9e4531a325f007ac3a1",
+        "file": {
+          "path": "test\\unit\\setup.js",
+          "hash": "277bccb1f25d0466828e4a0927b9f789773338597224d9e4531a325f007ac3a1",
+          "size": 56,
+          "modified": 1783407305975.1443
+        }
+      },
+      "right": {
+        "hash": "a516bad6826aaeb8a2e56b44d3565fdc593d08a1f9967322a9088740ac8dd92f",
+        "file": {
+          "path": "test\\unit\\specs\\HelloWorld.spec.js",
+          "hash": "a516bad6826aaeb8a2e56b44d3565fdc593d08a1f9967322a9088740ac8dd92f",
+          "size": 354,
+          "modified": 1783407305972.1404
+        }
+      }
+    }
+  }
+}
