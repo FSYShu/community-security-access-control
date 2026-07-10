@@ -7,7 +7,7 @@
     <div class="login-card">
       <div class="login-brand">
         <div class="brand-icon">
-          <van-icon name="shield-o" size="28" :style="{ color: 'var(--dark-accent-light)' }" />
+          <i class="el-icon-lock" style="font-size:28px;color:var(--dark-accent-light)"></i>
         </div>
         <h2 class="login-title">社区安防门禁系统</h2>
         <p class="login-subtitle">Community Security Access Control</p>
@@ -20,7 +20,7 @@
           :rules="[{ required: true, message: '请输入用户名' }]"
         >
           <template #left-icon>
-            <van-icon name="user-o" :style="{ color: 'var(--dark-text-secondary)' }" />
+            <i class="el-icon-user" :style="{ color: 'var(--dark-text-secondary)' }"></i>
           </template>
         </van-field>
         <van-field
@@ -31,7 +31,7 @@
           :rules="[{ required: true, message: '请输入密码' }]"
         >
           <template #left-icon>
-            <van-icon name="lock" :style="{ color: 'var(--dark-text-secondary)' }" />
+            <i class="el-icon-lock" :style="{ color: 'var(--dark-text-secondary)' }"></i>
           </template>
         </van-field>
         <div class="login-action">

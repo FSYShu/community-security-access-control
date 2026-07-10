@@ -8,9 +8,9 @@
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="brand-icon">
-          <van-icon name="shield-o" size="20" :style="{ color: 'var(--dark-accent-light)' }" />
+          <i class="el-icon-lock brand-el-icon" :style="{ color: 'var(--dark-accent-light)' }"></i>
         </div>
-        <span class="brand-text">安防系统</span>
+        <span class="brand-text">社区安防门禁系统后台</span>
       </div>
 
       <nav class="sidebar-nav">
@@ -22,13 +22,17 @@
           @click="$router.push(item.path)"
         >
           <div class="nav-icon-wrap">
-            <van-icon :name="item.icon" size="20" />
+            <i :class="item.icon"></i>
           </div>
           <span class="nav-label">{{ item.label }}</span>
         </div>
       </nav>
 
       <div class="sidebar-footer">
+        <div class="sidebar-datetime">
+          <span class="sidebar-date">{{ currentDate }}</span>
+          <span class="sidebar-time">{{ currentTime }}</span>
+        </div>
         <div class="sidebar-status">
           <span class="status-dot"></span>
           <span class="status-text">运行中</span>
@@ -61,20 +65,45 @@ export default {
   },
   data () {
     return {
+      currentTime: '',
+      currentDate: '',
+      timeTimer: null,
       navItems: [
-        { label: '安防总览', icon: 'home-o', path: '/dashboard' },
-        { label: '人脸管理', icon: 'friends-o', path: '/face-management' },
-        { label: '门禁权限', icon: 'shield-o', path: '/access-control' },
-        { label: '禁区检测', icon: 'warning-o', path: '/danger-zone' },
-        { label: '视频监控', icon: 'eye-o', path: '/video-monitor' },
-        { label: '告警中心', icon: 'bell', path: '/alarm-center' },
-        { label: '安防日报', icon: 'notes-o', path: '/report' },
-        { label: '通行日志', icon: 'orders-o', path: '/property-admin/pass-logs' },
-        { label: '告警日志', icon: 'records', path: '/property-admin/alarm-logs' }
+        { label: '安防总览', icon: 'el-icon-monitor', path: '/dashboard' },
+        { label: '人脸管理', icon: 'el-icon-user', path: '/face-management' },
+        { label: '门禁权限', icon: 'el-icon-lock', path: '/access-control' },
+        { label: '禁区检测', icon: 'el-icon-warning-outline', path: '/danger-zone' },
+        { label: '视频监控', icon: 'el-icon-view', path: '/video-monitor' },
+        { label: '告警中心', icon: 'el-icon-bell', path: '/alarm-center' },
+        { label: '安防日报', icon: 'el-icon-document', path: '/report' },
+        { label: '通行日志', icon: 'el-icon-notebook-2', path: '/property-admin/pass-logs' },
+        { label: '告警日志', icon: 'el-icon-tickets', path: '/property-admin/alarm-logs' }
       ]
     }
   },
+  mounted () {
+    this.updateTime()
+    this.timeTimer = setInterval(this.updateTime, 1000)
+  },
+  beforeDestroy () {
+    if (this.timeTimer) {
+      clearInterval(this.timeTimer)
+    }
+  },
   methods: {
+    updateTime () {
+      const now = new Date()
+      const h = String(now.getHours()).padStart(2, '0')
+      const m = String(now.getMinutes()).padStart(2, '0')
+      const s = String(now.getSeconds()).padStart(2, '0')
+      this.currentTime = `${h}:${m}:${s}`
+      const year = now.getFullYear()
+      const month = now.getMonth() + 1
+      const day = now.getDate()
+      const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+      const weekDay = weekDays[now.getDay()]
+      this.currentDate = `${year}年${month}月${day}日 周${weekDay}`
+    },
     isActive (path) {
       return this.$route.path === path || this.$route.path.startsWith(path + '/')
     }
@@ -140,7 +169,7 @@ export default {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 200px;
+  width: 260px;
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -167,6 +196,10 @@ export default {
   justify-content: center;
 }
 
+.brand-el-icon {
+  font-size: 20px;
+}
+
 .brand-text {
   font-size: 15px;
   font-weight: 600;
@@ -190,7 +223,7 @@ export default {
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
-  color: var(--dark-text);
+  color: var(--dark-text-secondary);
 }
 
 .nav-item:hover {
@@ -214,6 +247,7 @@ export default {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
+  font-size: 18px;
 }
 
 .nav-label {
@@ -225,6 +259,26 @@ export default {
 .sidebar-footer {
   padding: 16px 20px;
   border-top: 1px solid var(--dark-border-light);
+}
+
+.sidebar-datetime {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.sidebar-date {
+  font-size: 14px;
+  color: var(--dark-text-secondary);
+}
+
+.sidebar-time {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--dark-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .sidebar-status {
@@ -248,7 +302,7 @@ export default {
 }
 
 .main-area {
-  margin-left: 200px;
+  margin-left: 260px;
   flex: 1;
   position: relative;
   z-index: 1;

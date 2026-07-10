@@ -2,7 +2,7 @@
   <div class="face-list">
     <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
       <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
-        <van-cell v-for="item in list" :key="item.id" :title="item.person_name" :label="item.person_type" is-link>
+        <van-cell v-for="item in list" :key="item.id" :title="item.person_name" :label="typeMap[item.person_type] || item.person_type" is-link>
           <template #right-icon>
             <van-tag :type="item.status === 'active' ? 'success' : 'danger'">
               {{ item.status === 'active' ? '启用' : '停用' }}
@@ -26,7 +26,11 @@ export default {
       loading: false,
       finished: false,
       refreshing: false,
-      page: 1
+      page: 1,
+      typeMap: {
+        owner: '业主',
+        blacklist: '黑名单'
+      }
     }
   },
   methods: {
