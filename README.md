@@ -72,7 +72,7 @@
 ```bash
 cd backend
 pip install -r requirements.txt
-python run.py
+python start.py
 ```
 
 ### 前端启动（物业后台端）
