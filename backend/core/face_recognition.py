@@ -4,6 +4,55 @@ import threading
 import numpy as np
 import dlib
 
+DLIB_MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dat')
+DLIB_MODELS = {
+    'shape_predictor_68_face_landmarks.dat': {
+        'url': 'https://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2',
+        'sha256': None
+    },
+    'dlib_face_recognition_resnet_model_v1.dat': {
+        'url': 'https://dlib.net/files/dlib_face_recognition_resnet_model_v1.dat.bz2',
+        'sha256': None
+    }
+}
+
+
+def ensure_models_downloaded():
+    """检查并自动下载dlib模型文件"""
+    os.makedirs(DLIB_MODEL_DIR, exist_ok=True)
+    missing = []
+    for filename in DLIB_MODELS:
+        filepath = os.path.join(DLIB_MODEL_DIR, filename)
+        if not os.path.exists(filepath):
+            missing.append(filename)
+    if not missing:
+        return
+    try:
+        import bz2
+        from urllib.request import urlretrieve
+    except ImportError:
+        print('[WARN] 缺少bz2或urllib模块，无法自动下载dlib模型，请手动下载到 backend/dat/ 目录')
+        return
+    for filename in missing:
+        model_info = DLIB_MODELS[filename]
+        url = model_info['url']
+        target_path = os.path.join(DLIB_MODEL_DIR, filename)
+        print('[INFO] 正在下载dlib模型: {} ...'.format(filename))
+        try:
+            bz2_path = target_path + '.bz2'
+            urlretrieve(url, bz2_path)
+            with open(bz2_path, 'rb') as f_src:
+                decompressed = bz2.decompress(f_src.read())
+            with open(target_path, 'wb') as f_dst:
+                f_dst.write(decompressed)
+            os.remove(bz2_path)
+            print('[INFO] 模型下载完成: {}'.format(filename))
+        except Exception as e:
+            print('[ERROR] 模型下载失败: {} - {}'.format(filename, str(e)))
+            print('[INFO] 请手动从 {} 下载并解压到 {}'.format(url, DLIB_MODEL_DIR))
+            if os.path.exists(bz2_path):
+                os.remove(bz2_path)
+
 
 class FaceRecognizer:
     _instance = None
@@ -17,7 +66,8 @@ class FaceRecognizer:
     def __init__(self):
         if self._initialized:
             return
-        dat_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dat')
+        ensure_models_downloaded()
+        dat_dir = DLIB_MODEL_DIR
         predictor_path = os.path.join(dat_dir, 'shape_predictor_68_face_landmarks.dat')
         recognition_model_path = os.path.join(dat_dir, 'dlib_face_recognition_resnet_model_v1.dat')
 
