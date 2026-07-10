@@ -8,7 +8,7 @@
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="brand-icon">
-          <van-icon name="shield-o" size="20" color="#818CF8" />
+          <van-icon name="shield-o" size="20" :style="{ color: 'var(--dark-accent-light)' }" />
         </div>
         <span class="brand-text">安防系统</span>
       </div>
@@ -131,7 +131,7 @@
               </span>
             </div>
             <div v-if="!recentAlarms.length" class="alarm-empty">
-              <van-icon name="checked" size="28" color="#3b3b3b" />
+              <van-icon name="checked" size="28" :style="{ color: 'var(--dark-text-dim)' }" />
               <span>暂无告警</span>
             </div>
           </div>
@@ -240,8 +240,8 @@ export default {
 .dashboard-page {
   display: flex;
   min-height: 100vh;
-  background: #050506;
-  color: #EDEDEF;
+  background: var(--dark-bg);
+  color: var(--dark-text);
   position: relative;
   overflow-x: hidden;
 }
@@ -263,7 +263,7 @@ export default {
 .bg-orb-1 {
   width: 400px;
   height: 400px;
-  background: #6366F1;
+  background: var(--dark-accent);
   top: -100px;
   right: -80px;
   animation: float-orb 20s ease-in-out infinite;
@@ -272,7 +272,7 @@ export default {
 .bg-orb-2 {
   width: 300px;
   height: 300px;
-  background: #A855F7;
+  background: var(--dark-purple);
   bottom: 10%;
   left: 60px;
   animation: float-orb 25s ease-in-out infinite reverse;
@@ -287,10 +287,10 @@ export default {
   z-index: 20;
   display: flex;
   flex-direction: column;
-  background: rgba(8, 8, 8, 0.92);
+  background: var(--dark-bg-sidebar);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--dark-border);
 }
 
 .sidebar-brand {
@@ -314,7 +314,7 @@ export default {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #EDEDEF;
+  color: var(--dark-text);
 }
 
 .sidebar-nav {
@@ -333,21 +333,21 @@ export default {
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
 }
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.04);
-  color: #EDEDEF;
+  color: var(--dark-text);
 }
 
 .nav-item-active {
   background: rgba(99, 102, 241, 0.1);
-  color: #EDEDEF;
+  color: var(--dark-text);
 }
 
 .nav-item-active .nav-icon-wrap {
-  color: #818CF8;
+  color: var(--dark-accent-light);
 }
 
 .nav-icon-wrap {
@@ -367,7 +367,7 @@ export default {
 
 .sidebar-footer {
   padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid var(--dark-border-light);
 }
 
 .sidebar-status {
@@ -380,14 +380,14 @@ export default {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #10B981;
+  background: var(--dark-success);
   animation: breathe 3s ease-in-out infinite;
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
 
 .status-text {
   font-size: 12px;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
 }
 
 .main-area {
@@ -408,10 +408,10 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
-  background: rgba(5, 5, 6, 0.7);
+  background: var(--dark-bg-header);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--dark-border);
 }
 
 .header-title {
@@ -419,12 +419,12 @@ export default {
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0;
-  color: #EDEDEF;
+  color: var(--dark-text);
 }
 
 .header-subtitle {
   font-size: 13px;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
   margin-top: 2px;
   display: block;
 }
@@ -433,7 +433,7 @@ export default {
   font-size: 32px;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -454,8 +454,8 @@ export default {
   overflow: hidden;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--dark-border);
+  background: var(--dark-card);
 }
 
 .stat-card:active {
@@ -479,15 +479,15 @@ export default {
 }
 
 .stat-card-primary .stat-card-glow {
-  background: #6366F1;
+  background: var(--dark-accent);
 }
 
 .stat-card-danger .stat-card-glow {
-  background: #EF4444;
+  background: var(--dark-danger);
 }
 
 .stat-card-success .stat-card-glow {
-  background: #10B981;
+  background: var(--dark-success);
 }
 
 .stat-card-inner {
@@ -528,17 +528,17 @@ export default {
 
 .stat-icon-indigo {
   background: rgba(99, 102, 241, 0.15);
-  color: #818CF8;
+  color: var(--dark-accent-light);
 }
 
 .stat-icon-rose {
   background: rgba(239, 68, 68, 0.15);
-  color: #F87171;
+  color: var(--dark-danger-light);
 }
 
 .stat-icon-emerald {
   background: rgba(16, 185, 129, 0.15);
-  color: #34D399;
+  color: var(--dark-success-light);
 }
 
 .stat-info {
@@ -553,18 +553,18 @@ export default {
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
-  color: #EDEDEF;
+  color: var(--dark-text);
 }
 
 .stat-label {
   font-size: 12px;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
   line-height: 1.2;
 }
 
 .stat-arrow {
   margin-left: auto;
-  color: #3b3b3b;
+  color: var(--dark-text-dim);
   flex-shrink: 0;
 }
 
@@ -583,20 +583,19 @@ export default {
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #EDEDEF;
-  margin: 0;
+  color: var(--dark-text);
 }
 
 .section-more {
   font-size: 12px;
-  color: #6366F1;
+  color: var(--dark-accent);
   cursor: pointer;
 }
 
 .alarm-list {
   border-radius: 16px;
-  background: rgba(10, 10, 10, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--dark-card);
+  border: 1px solid var(--dark-border);
   overflow: hidden;
 }
 
@@ -605,7 +604,7 @@ export default {
   align-items: center;
   gap: 14px;
   padding: 14px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--dark-border-light);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -626,7 +625,7 @@ export default {
 }
 
 .alarm-dot-high {
-  background: #EF4444;
+  background: var(--dark-danger);
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
   animation: breathe 2s ease-in-out infinite;
 }
@@ -645,7 +644,7 @@ export default {
 
 .alarm-title {
   font-size: 14px;
-  color: #EDEDEF;
+  color: var(--dark-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -653,7 +652,7 @@ export default {
 
 .alarm-meta {
   font-size: 11px;
-  color: #6b6b6b;
+  color: var(--dark-text-muted);
 }
 
 .alarm-badge {
@@ -666,12 +665,12 @@ export default {
 
 .badge-high {
   background: rgba(239, 68, 68, 0.15);
-  color: #F87171;
+  color: var(--dark-danger-light);
 }
 
 .badge-low {
   background: rgba(245, 158, 11, 0.15);
-  color: #FBBF24;
+  color: var(--dark-warning);
 }
 
 .alarm-empty {
@@ -680,7 +679,7 @@ export default {
   align-items: center;
   gap: 8px;
   padding: 32px 16px;
-  color: #3b3b3b;
+  color: var(--dark-text-dim);
   font-size: 13px;
 }
 
@@ -695,7 +694,7 @@ export default {
     height: 64px;
     flex-direction: row;
     border-right: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--dark-border);
   }
 
   .sidebar-brand,

@@ -113,9 +113,9 @@ export default {
 
 <style scoped>
 .dark-card {
-  background: rgba(10, 10, 10, 0.8);
+  background: var(--dark-card);
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border);
   padding: 20px;
   margin-bottom: 16px;
 }
@@ -139,16 +139,16 @@ export default {
 }
 .face-result-card {
   margin: 8px 0;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border);
   border-radius: 8px;
   overflow: hidden;
 }
 .value-success {
-  color: #07c160;
+  color: var(--dark-success-green);
   font-weight: 500;
 }
 .value-warn {
-  color: #ff976a;
+  color: var(--dark-orange);
   font-weight: 500;
 }
 </style>

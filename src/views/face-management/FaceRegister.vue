@@ -110,7 +110,7 @@ export default {
   max-width: 480px;
   border-radius: 12px;
   background: #000;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border);
 }
 .form-area {
   margin-top: 12px;

@@ -7,7 +7,7 @@
     <div class="login-card">
       <div class="login-brand">
         <div class="brand-icon">
-          <van-icon name="shield-o" size="28" color="#818CF8" />
+          <van-icon name="shield-o" size="28" :style="{ color: 'var(--dark-accent-light)' }" />
         </div>
         <h2 class="login-title">社区安防门禁系统</h2>
         <p class="login-subtitle">Community Security Access Control</p>
@@ -20,7 +20,7 @@
           :rules="[{ required: true, message: '请输入用户名' }]"
         >
           <template #left-icon>
-            <van-icon name="user-o" color="#8A8F98" />
+            <van-icon name="user-o" :style="{ color: 'var(--dark-text-secondary)' }" />
           </template>
         </van-field>
         <van-field
@@ -31,7 +31,7 @@
           :rules="[{ required: true, message: '请输入密码' }]"
         >
           <template #left-icon>
-            <van-icon name="lock" color="#8A8F98" />
+            <van-icon name="lock" :style="{ color: 'var(--dark-text-secondary)' }" />
           </template>
         </van-field>
         <div class="login-action">
@@ -82,7 +82,7 @@ export default {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: #050506;
+  background: var(--dark-bg);
   position: relative;
   overflow: hidden;
 }
@@ -103,7 +103,7 @@ export default {
 .bg-orb-1 {
   width: 500px;
   height: 500px;
-  background: #6366F1;
+  background: var(--dark-accent);
   top: -150px;
   right: -100px;
   animation: float-orb 20s ease-in-out infinite;
@@ -112,7 +112,7 @@ export default {
 .bg-orb-2 {
   width: 400px;
   height: 400px;
-  background: #A855F7;
+  background: var(--dark-purple);
   bottom: -100px;
   left: -80px;
   animation: float-orb 25s ease-in-out infinite reverse;
@@ -124,9 +124,9 @@ export default {
   width: 90%;
   max-width: 420px;
   padding: 40px 32px;
-  background: rgba(10, 10, 10, 0.8);
+  background: var(--dark-card);
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
@@ -151,13 +151,13 @@ export default {
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: #EDEDEF;
+  color: var(--dark-text);
   margin: 0;
 }
 
 .login-subtitle {
   font-size: 12px;
-  color: #6b6b6b;
+  color: var(--dark-text-muted);
   margin-top: 6px;
   letter-spacing: 0.05em;
 }
@@ -166,7 +166,7 @@ export default {
   background: rgba(255, 255, 255, 0.04) !important;
   border-radius: 12px;
   margin-bottom: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border);
 }
 
 .login-action {

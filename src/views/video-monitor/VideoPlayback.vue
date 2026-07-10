@@ -27,8 +27,8 @@
               <span class="file-meta">{{ file.duration_text }} | {{ file.file_size_text }}</span>
             </template>
             <div class="file-actions">
-              <van-icon name="delete-o" size="20" color="#ee0a24" class="action-icon" @click.stop="confirmDelete(file)" />
-              <van-icon name="play-circle-o" size="20" color="#1989fa" />
+              <van-icon name="delete-o" size="20" :style="{ color: 'var(--dark-danger)' }" class="action-icon" @click.stop="confirmDelete(file)" />
+              <van-icon name="play-circle-o" size="20" :style="{ color: 'var(--dark-info)' }" />
             </div>
           </van-cell>
         </van-collapse-item>
@@ -186,15 +186,15 @@ export default {
 }
 .group-label {
   font-size: 12px;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
 }
 .file-time {
   font-size: 14px;
-  color: #EDEDEF;
+  color: var(--dark-text);
 }
 .file-meta {
   font-size: 12px;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
   margin-top: 2px;
 }
 .file-actions {
@@ -213,7 +213,7 @@ export default {
 }
 .player-header {
   padding: 10px 16px;
-  color: #EDEDEF;
+  color: var(--dark-text);
   font-size: 14px;
   background: #1a1a1a;
   text-align: center;
@@ -236,7 +236,7 @@ export default {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: #ff976a;
+  color: var(--dark-orange);
   text-align: center;
   font-size: 14px;
 }

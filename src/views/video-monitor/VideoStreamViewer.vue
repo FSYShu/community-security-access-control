@@ -34,7 +34,7 @@
         />
       </div>
       <div v-if="streamError" class="stream-error-overlay">
-        <van-icon name="warning-o" size="40" color="#ff976a" />
+        <van-icon name="warning-o" size="40" :style="{ color: 'var(--dark-orange)' }" />
         <p class="error-text">{{ statusText }}</p>
         <p class="retry-text" v-if="autoRetrying">自动重连中（第{{ retryCount }}次）...</p>
         <van-button size="small" type="info" @click="manualRefresh">立即重试</van-button>
@@ -190,7 +190,7 @@ export default {
 }
 .selector-label {
   font-size: 14px;
-  color: #EDEDEF;
+  color: var(--dark-text);
   margin-bottom: 8px;
 }
 .controls {
@@ -202,8 +202,9 @@ export default {
 .control-label {
   margin-left: 8px;
   font-size: 14px;
-  color: #EDEDEF;
+  color: var(--dark-text);
 }
+
 .refresh-btn {
   margin-left: auto;
 }
@@ -211,7 +212,7 @@ export default {
   width: 100%;
   background: #000;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border);
   overflow: hidden;
   position: relative;
 }
@@ -240,24 +241,24 @@ export default {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.85);
-  color: #EDEDEF;
+  color: var(--dark-text);
 }
 .error-text {
   margin: 8px 0 4px;
   font-size: 14px;
-  color: #ff976a;
+  color: var(--dark-orange);
 }
 .retry-text {
   margin: 0 0 12px;
   font-size: 12px;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
 }
 .status-bar {
   display: flex;
   align-items: center;
   padding: 6px 8px;
   font-size: 12px;
-  color: #8A8F98;
+  color: var(--dark-text-secondary);
 }
 .status-dot {
   width: 8px;
@@ -266,10 +267,10 @@ export default {
   margin-right: 6px;
 }
 .dot-green {
-  background: #07c160;
+  background: var(--dark-success-green);
 }
 .dot-yellow {
-  background: #ff976a;
+  background: var(--dark-orange);
 }
 .detection-status {
   margin-top: 8px;

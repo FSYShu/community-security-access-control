@@ -60,14 +60,14 @@ export default {
 
 <style scoped>
 .dark-card {
-  background: rgba(10, 10, 10, 0.8);
+  background: var(--dark-card);
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border);
   padding: 20px;
   margin-bottom: 16px;
 }
 .stats-card { padding: 12px; }
 .stat-item { text-align: center; }
-.stat-value { font-size: 24px; font-weight: bold; color: #818CF8; }
-.stat-label { font-size: 12px; color: #8A8F98; margin-top: 4px; }
+.stat-value { font-size: 24px; font-weight: bold; color: var(--dark-accent-light); }
+.stat-label { font-size: 12px; color: var(--dark-text-secondary); margin-top: 4px; }
 </style>

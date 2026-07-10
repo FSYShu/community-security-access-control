@@ -124,6 +124,19 @@ const routes = [
   }
 ]
 
+const originalPush = Router.prototype.push
+const originalReplace = Router.prototype.replace
+Router.prototype.push = function push (location) {
+  return originalPush.call(this, location).catch(function (err) {
+    if (err.name !== 'NavigationDuplicated') return Promise.reject(err)
+  })
+}
+Router.prototype.replace = function replace (location) {
+  return originalReplace.call(this, location).catch(function (err) {
+    if (err.name !== 'NavigationDuplicated') return Promise.reject(err)
+  })
+}
+
 const router = new Router({
   mode: 'history',
   routes
