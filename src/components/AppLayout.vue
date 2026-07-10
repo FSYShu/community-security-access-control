@@ -69,7 +69,7 @@ export default {
         { label: '视频监控', icon: 'eye-o', path: '/video-monitor' },
         { label: '告警中心', icon: 'bell', path: '/alarm-center' },
         { label: '安防日报', icon: 'notes-o', path: '/report' },
-        { label: '通行日志', icon: 'log', path: '/property-admin/pass-logs' },
+        { label: '通行日志', icon: 'orders-o', path: '/property-admin/pass-logs' },
         { label: '告警日志', icon: 'records', path: '/property-admin/alarm-logs' },
         { label: '人脸测试', icon: 'scan', path: '/property-admin/face-test' }
       ]
