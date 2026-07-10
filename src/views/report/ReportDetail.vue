@@ -1,7 +1,6 @@
 <template>
-  <div class="report-detail-page">
-    <van-nav-bar title="日报详情" left-arrow @click-left="$router.back()" />
-    <div class="page-content" v-if="report">
+  <app-layout page-title="日报详情">
+    <div v-if="report" class="dark-card">
       <van-cell-group title="基本信息">
         <van-cell title="日报日期" :value="report.report_date" />
         <van-cell title="生成状态" :value="report.generate_status" />
@@ -23,7 +22,7 @@
         <van-button size="small" @click="onRegenerate">重新生成</van-button>
       </div>
     </div>
-  </div>
+  </app-layout>
 </template>
 
 <script>
@@ -60,9 +59,15 @@ export default {
 </script>
 
 <style scoped>
-.page-content { padding: 12px; }
+.dark-card {
+  background: rgba(10, 10, 10, 0.8);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px;
+  margin-bottom: 16px;
+}
 .stats-card { padding: 12px; }
 .stat-item { text-align: center; }
-.stat-value { font-size: 24px; font-weight: bold; color: #1989fa; }
-.stat-label { font-size: 12px; color: #999; margin-top: 4px; }
+.stat-value { font-size: 24px; font-weight: bold; color: #818CF8; }
+.stat-label { font-size: 12px; color: #8A8F98; margin-top: 4px; }
 </style>

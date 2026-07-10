@@ -1,0 +1,209 @@
+:root {
+  --dark-bg: #050506;
+  --dark-card: rgba(10, 10, 10, 0.8);
+  --dark-border: rgba(255, 255, 255, 0.06);
+  --dark-text: #EDEDEF;
+  --dark-text-secondary: #8A8F98;
+  --dark-text-muted: #6b6b6b;
+  --dark-accent: #6366F1;
+}
+
+.van-nav-bar {
+  background: rgba(5, 5, 6, 0.75) !important;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.van-nav-bar .van-nav-bar__title {
+  color: #EDEDEF !important;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.van-nav-bar .van-icon {
+  color: #8A8F98 !important;
+}
+
+.van-cell {
+  background: transparent !important;
+  color: #EDEDEF !important;
+}
+
+.van-cell::after {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.van-cell__title {
+  color: #EDEDEF !important;
+}
+
+.van-cell__label {
+  color: #8A8F98 !important;
+}
+
+.van-cell__value {
+  color: #8A8F98 !important;
+}
+
+.van-field .van-field__label {
+  color: #8A8F98 !important;
+}
+
+.van-field .van-field__control {
+  color: #EDEDEF !important;
+}
+
+.van-field .van-field__control::placeholder {
+  color: #6b6b6b !important;
+}
+
+.van-cell-group {
+  background: rgba(10, 10, 10, 0.8) !important;
+  border-radius: 16px !important;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  margin-bottom: 12px;
+}
+
+.van-cell-group__title {
+  color: #8A8F98 !important;
+  background: transparent !important;
+}
+
+.van-button--primary {
+  background: #6366F1 !important;
+  border-color: #6366F1 !important;
+}
+
+.van-button--info {
+  background: #3B82F6 !important;
+  border-color: #3B82F6 !important;
+}
+
+.van-button--default {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #EDEDEF !important;
+}
+
+.van-tabs__nav {
+  background: transparent !important;
+}
+
+.van-tab {
+  color: #8A8F98 !important;
+}
+
+.van-tab--active {
+  color: #818CF8 !important;
+}
+
+.van-tabs__line {
+  background: #6366F1 !important;
+}
+
+.van-tag--primary {
+  background: rgba(99, 102, 241, 0.15) !important;
+  color: #818CF8 !important;
+}
+
+.van-tag--success {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #34D399 !important;
+}
+
+.van-tag--danger {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #F87171 !important;
+}
+
+.van-tag--warning {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #FBBF24 !important;
+}
+
+.van-empty__description {
+  color: #6b6b6b !important;
+}
+
+.van-empty__image img {
+  filter: brightness(0.4) invert(0.8);
+}
+
+.van-pull-refresh {
+  color: #EDEDEF;
+}
+
+.van-list__finished-text {
+  color: #6b6b6b !important;
+}
+
+.van-loading__text {
+  color: #8A8F98 !important;
+}
+
+.van-switch--on {
+  background: #6366F1 !important;
+}
+
+.van-radio__label {
+  color: #EDEDEF !important;
+}
+
+.van-radio__icon--checked .van-icon {
+  background: #6366F1 !important;
+  border-color: #6366F1 !important;
+}
+
+.van-collapse-item {
+  background: transparent !important;
+}
+
+.van-collapse-item__title {
+  background: transparent !important;
+  color: #EDEDEF !important;
+}
+
+.van-collapse-item__content {
+  background: transparent !important;
+  color: #EDEDEF !important;
+}
+
+.van-notice-bar {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: #818CF8 !important;
+}
+
+.van-dialog {
+  background: #0A0A0A !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.van-dialog__header {
+  color: #EDEDEF !important;
+}
+
+.van-popup {
+  background: #0A0A0A !important;
+}
+
+.van-picker {
+  background: #0A0A0A !important;
+}
+
+.van-picker__toolbar {
+  background: #0A0A0A !important;
+}
+
+.van-picker__title {
+  color: #EDEDEF !important;
+}
+
+.van-picker-item {
+  color: #8A8F98 !important;
+}
+
+.van-picker-item--selected {
+  color: #EDEDEF !important;
+}

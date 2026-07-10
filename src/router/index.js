@@ -129,16 +129,30 @@ const router = new Router({
   routes
 })
 
+/**
+ * 解析 JWT 判断是否过期
+ */
+function isJwtExpired (token) {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return true
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+    if (!payload.exp) return false
+    return Date.now() >= payload.exp * 1000
+  } catch (e) {
+    return true
+  }
+}
+
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
-  // 设置页面标题
-  document.title = to.meta.title ? `${to.meta.title} - 社区安防门禁系统` : '社区安防门禁系统'
+  document.title = to.meta.title ? to.meta.title + ' - 社区安防门禁系统' : '社区安防门禁系统'
 
   const token = store.getters['user/token']
 
   // 不需要认证的页面直接放行
   if (!to.meta.requiresAuth) {
-    if (token && to.path === '/login') {
+    if (token && !isJwtExpired(token) && to.path === '/login') {
       next('/dashboard')
       return
     }
@@ -146,9 +160,10 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
-  // 需要认证但没有 token，跳转登录
-  if (!token) {
-    next(`/login?redirect=${to.path}`)
+  // 需要认证但没有 token 或 token 已过期
+  if (!token || isJwtExpired(token)) {
+    store.commit('user/CLEAR_USER')
+    next('/login?redirect=' + to.path)
     return
   }
 
@@ -158,7 +173,7 @@ router.beforeEach(async (to, from, next) => {
       await store.dispatch('user/getUserInfoAction')
     } catch (error) {
       store.commit('user/CLEAR_USER')
-      next(`/login?redirect=${to.path}`)
+      next('/login?redirect=' + to.path)
       return
     }
   }
@@ -166,7 +181,7 @@ router.beforeEach(async (to, from, next) => {
   // 角色权限校验
   const roles = to.meta.roles
   const userRoles = store.getters['user/roles'] || []
-  if (roles && !roles.some(role => userRoles.includes(role))) {
+  if (roles && !roles.some(function (role) { return userRoles.includes(role) })) {
     next('/dashboard')
     return
   }

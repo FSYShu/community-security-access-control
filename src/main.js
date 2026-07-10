@@ -10,8 +10,10 @@ import store from './store'
 // 注册 Vant 组件
 import Vant from 'vant'
 import 'vant/lib/index.css'
+import './styles/dark-theme.css'
 
 Vue.use(Vant)
+Vue.component('AppLayout', () => import('@/components/AppLayout.vue'))
 
 Vue.config.productionTip = false
 

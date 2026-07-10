@@ -1,43 +1,40 @@
 <template>
-  <div class="video-monitor-page">
-    <van-nav-bar title="实时视频监控" left-arrow @click-left="$router.back()" />
-    <div class="page-content">
-      <div class="layout-controls">
-        <van-button
-          :type="layoutMode === 'single' ? 'primary' : 'default'"
-          size="small"
-          @click="layoutMode = 'single'"
-        >单路</van-button>
-        <van-button
-          :type="layoutMode === 'grid' ? 'primary' : 'default'"
-          size="small"
-          @click="layoutMode = 'grid'"
-        >四路</van-button>
-        <van-button
-          size="small"
-          icon="video-o"
-          type="info"
-          plain
-          class="playback-btn"
-          @click="$router.push('/video-monitor/playback')"
-        >历史回放</van-button>
-      </div>
+  <app-layout page-title="实时视频监控">
+    <div class="layout-controls">
+      <van-button
+        :type="layoutMode === 'single' ? 'primary' : 'default'"
+        size="small"
+        @click="layoutMode = 'single'"
+      >单路</van-button>
+      <van-button
+        :type="layoutMode === 'grid' ? 'primary' : 'default'"
+        size="small"
+        @click="layoutMode = 'grid'"
+      >四路</van-button>
+      <van-button
+        size="small"
+        icon="video-o"
+        type="info"
+        plain
+        class="playback-btn"
+        @click="$router.push('/video-monitor/playback')"
+      >历史回放</van-button>
+    </div>
 
-      <div v-if="layoutMode === 'single'" class="single-layout">
+    <div v-if="layoutMode === 'single'" class="single-layout">
+      <video-stream-viewer :gate-list="gateList" />
+    </div>
+
+    <div v-else class="grid-layout">
+      <div
+        v-for="index in 4"
+        :key="index"
+        class="grid-item"
+      >
         <video-stream-viewer :gate-list="gateList" />
       </div>
-
-      <div v-else class="grid-layout">
-        <div
-          v-for="index in 4"
-          :key="index"
-          class="grid-item"
-        >
-          <video-stream-viewer :gate-list="gateList" />
-        </div>
-      </div>
     </div>
-  </div>
+  </app-layout>
 </template>
 
 <script>
@@ -75,9 +72,6 @@ export default {
 </script>
 
 <style scoped>
-.page-content {
-  padding: 12px;
-}
 .layout-controls {
   display: flex;
   gap: 8px;

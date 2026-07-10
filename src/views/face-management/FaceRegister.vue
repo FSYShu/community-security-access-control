@@ -108,8 +108,9 @@ export default {
 .camera-preview {
   width: 100%;
   max-width: 480px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .form-area {
   margin-top: 12px;

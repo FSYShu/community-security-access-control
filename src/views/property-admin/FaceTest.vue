@@ -1,7 +1,6 @@
 <template>
-  <div class="face-test-page">
-    <van-nav-bar title="人脸识别测试" left-arrow @click-left="$router.back()" />
-    <div class="page-content">
+  <app-layout page-title="人脸识别测试">
+    <div class="dark-card">
       <div class="camera-area">
         <video ref="video" class="camera-preview" autoplay playsinline></video>
         <canvas ref="canvas" style="display:none;"></canvas>
@@ -43,7 +42,7 @@
         </van-cell-group>
       </div>
     </div>
-  </div>
+  </app-layout>
 </template>
 
 <script>
@@ -113,8 +112,12 @@ export default {
 </script>
 
 <style scoped>
-.page-content {
-  padding: 12px;
+.dark-card {
+  background: rgba(10, 10, 10, 0.8);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px;
+  margin-bottom: 16px;
 }
 .camera-area {
   width: 100%;
@@ -124,8 +127,9 @@ export default {
 .camera-preview {
   width: 100%;
   max-width: 480px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .action-bar {
   margin-top: 8px;
@@ -135,7 +139,7 @@ export default {
 }
 .face-result-card {
   margin: 8px 0;
-  border: 1px solid #ebedf0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
   overflow: hidden;
 }

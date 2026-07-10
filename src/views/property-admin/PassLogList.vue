@@ -1,13 +1,14 @@
 <template>
-  <div class="pass-log-page">
-    <van-nav-bar title="历史通行日志" left-arrow @click-left="$router.back()" />
-    <div class="page-content">
+  <app-layout page-title="历史通行日志">
+    <div class="dark-card">
       <van-cell-group>
         <van-field v-model="filter.startTime" label="开始时间" placeholder="YYYY-MM-DD" />
         <van-field v-model="filter.endTime" label="结束时间" placeholder="YYYY-MM-DD" />
         <van-field v-model="filter.gateLevel" label="终端层级" placeholder="全部" readonly is-link @click="showLevelPicker = true" />
       </van-cell-group>
       <div style="margin: 8px 0"><van-button type="primary" size="small" @click="onSearch">查询</van-button></div>
+    </div>
+    <div class="dark-card">
       <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
         <van-cell v-for="item in logList" :key="item.id">
           <template #title>{{ item.person_name || '未知' }}</template>
@@ -21,7 +22,7 @@
     <van-popup v-model="showLevelPicker" position="bottom">
       <van-picker :columns="levelOptions" @confirm="onLevelConfirm" @cancel="showLevelPicker = false" />
     </van-popup>
-  </div>
+  </app-layout>
 </template>
 
 <script>
@@ -66,5 +67,11 @@ export default {
 </script>
 
 <style scoped>
-.page-content { padding: 12px; }
+.dark-card {
+  background: rgba(10, 10, 10, 0.8);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px;
+  margin-bottom: 16px;
+}
 </style>

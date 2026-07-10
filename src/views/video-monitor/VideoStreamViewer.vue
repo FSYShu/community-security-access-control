@@ -190,7 +190,7 @@ export default {
 }
 .selector-label {
   font-size: 14px;
-  color: #333;
+  color: #EDEDEF;
   margin-bottom: 8px;
 }
 .controls {
@@ -202,7 +202,7 @@ export default {
 .control-label {
   margin-left: 8px;
   font-size: 14px;
-  color: #333;
+  color: #EDEDEF;
 }
 .refresh-btn {
   margin-left: auto;
@@ -210,7 +210,8 @@ export default {
 .stream-container {
   width: 100%;
   background: #000;
-  border-radius: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
   position: relative;
 }
@@ -239,7 +240,7 @@ export default {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.85);
-  color: #fff;
+  color: #EDEDEF;
 }
 .error-text {
   margin: 8px 0 4px;
@@ -249,14 +250,14 @@ export default {
 .retry-text {
   margin: 0 0 12px;
   font-size: 12px;
-  color: #999;
+  color: #8A8F98;
 }
 .status-bar {
   display: flex;
   align-items: center;
   padding: 6px 8px;
   font-size: 12px;
-  color: #666;
+  color: #8A8F98;
 }
 .status-dot {
   width: 8px;

@@ -1,7 +1,6 @@
 <template>
-  <div class="gate-permission-page">
-    <van-nav-bar title="门禁权限配置" left-arrow @click-left="$router.back()" />
-    <div class="page-content">
+  <app-layout page-title="门禁权限配置">
+    <div class="dark-card">
       <van-cell-group title="通行时段配置">
         <van-field v-model="form.pass_time_config" label="通行时段" type="textarea" rows="3" placeholder='{"start":"06:00","end":"22:00"}' />
       </van-cell-group>
@@ -20,7 +19,7 @@
         <van-button type="primary" block @click="onSubmit">保存配置</van-button>
       </div>
     </div>
-  </div>
+  </app-layout>
 </template>
 
 <script>
@@ -63,5 +62,11 @@ export default {
 </script>
 
 <style scoped>
-.page-content { padding: 12px; }
+.dark-card {
+  background: rgba(10, 10, 10, 0.8);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px;
+  margin-bottom: 16px;
+}
 </style>

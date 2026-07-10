@@ -1,69 +1,66 @@
 <template>
-  <div class="playback-page">
-    <van-nav-bar title="历史视频回放" left-arrow @click-left="$router.back()" />
-    <div class="page-content">
-      <van-loading v-if="loading" class="page-loading" size="24px" vertical>加载中...</van-loading>
-      <van-empty v-else-if="recordings.length === 0" description="暂无历史录像" />
+  <app-layout page-title="历史视频回放">
+    <van-loading v-if="loading" class="page-loading" size="24px" vertical>加载中...</van-loading>
+    <van-empty v-else-if="recordings.length === 0" description="暂无历史录像" />
 
-      <template v-else>
-        <van-collapse v-model="activeGroups">
-          <van-collapse-item
-            v-for="group in recordings"
-            :key="group.push_key"
-            :title="group.gate_name"
-            :name="group.push_key"
+    <template v-else>
+      <van-collapse v-model="activeGroups">
+        <van-collapse-item
+          v-for="group in recordings"
+          :key="group.push_key"
+          :title="group.gate_name"
+          :name="group.push_key"
+        >
+          <template #label>
+            <span class="group-label">推流码: {{ group.push_key }} | {{ group.files.length }}段录像</span>
+          </template>
+          <van-cell
+            v-for="file in group.files"
+            :key="file.filename"
+            clickable
+            @click="playRecording(file)"
           >
-            <template #label>
-              <span class="group-label">推流码: {{ group.push_key }} | {{ group.files.length }}段录像</span>
+            <template #title>
+              <span class="file-time">{{ file.datetime }}</span>
             </template>
-            <van-cell
-              v-for="file in group.files"
-              :key="file.filename"
-              clickable
-              @click="playRecording(file)"
-            >
-              <template #title>
-                <span class="file-time">{{ file.datetime }}</span>
-              </template>
-              <template #label>
-                <span class="file-meta">{{ file.duration_text }} | {{ file.file_size_text }}</span>
-              </template>
-              <div class="file-actions">
-                <van-icon name="delete-o" size="20" color="#ee0a24" class="action-icon" @click.stop="confirmDelete(file)" />
-                <van-icon name="play-circle-o" size="20" color="#1989fa" />
-              </div>
-            </van-cell>
-          </van-collapse-item>
-        </van-collapse>
-      </template>
+            <template #label>
+              <span class="file-meta">{{ file.duration_text }} | {{ file.file_size_text }}</span>
+            </template>
+            <div class="file-actions">
+              <van-icon name="delete-o" size="20" color="#ee0a24" class="action-icon" @click.stop="confirmDelete(file)" />
+              <van-icon name="play-circle-o" size="20" color="#1989fa" />
+            </div>
+          </van-cell>
+        </van-collapse-item>
+      </van-collapse>
+    </template>
 
-      <van-popup
-        v-model="showPlayer"
-        position="bottom"
-        :style="{ height: '70%' }"
-        round
-        closeable
-        close-icon="cross"
-        @close="stopPlayback"
-      >
-        <div class="player-popup">
-          <div class="player-header">{{ currentFile ? currentFile.datetime : '' }}</div>
-          <div class="player-wrapper">
-            <video
-              ref="videoPlayer"
-              class="player-video"
-              controls
-              muted
-            ></video>
-          </div>
-          <div v-if="playerError" class="player-error">
-            <van-icon name="warning-o" size="24" />
-            <p>{{ playerError }}</p>
-          </div>
+    <van-popup
+      v-model="showPlayer"
+      position="bottom"
+      :style="{ height: '70%' }"
+      round
+      closeable
+      close-icon="cross"
+      @close="stopPlayback"
+    >
+      <div class="player-popup">
+        <div class="player-header">{{ currentFile ? currentFile.datetime : '' }}</div>
+        <div class="player-wrapper">
+          <video
+            ref="videoPlayer"
+            class="player-video"
+            controls
+            muted
+          ></video>
         </div>
-      </van-popup>
-    </div>
-  </div>
+        <div v-if="playerError" class="player-error">
+          <van-icon name="warning-o" size="24" />
+          <p>{{ playerError }}</p>
+        </div>
+      </div>
+    </van-popup>
+  </app-layout>
 </template>
 
 <script>
@@ -182,9 +179,6 @@ export default {
 </script>
 
 <style scoped>
-.page-content {
-  padding: 12px;
-}
 .page-loading {
   display: flex;
   justify-content: center;
@@ -192,15 +186,15 @@ export default {
 }
 .group-label {
   font-size: 12px;
-  color: #999;
+  color: #8A8F98;
 }
 .file-time {
   font-size: 14px;
-  color: #333;
+  color: #EDEDEF;
 }
 .file-meta {
   font-size: 12px;
-  color: #999;
+  color: #8A8F98;
   margin-top: 2px;
 }
 .file-actions {
@@ -219,7 +213,7 @@ export default {
 }
 .player-header {
   padding: 10px 16px;
-  color: #fff;
+  color: #EDEDEF;
   font-size: 14px;
   background: #1a1a1a;
   text-align: center;

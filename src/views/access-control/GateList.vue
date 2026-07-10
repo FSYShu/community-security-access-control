@@ -1,7 +1,6 @@
 <template>
-  <div class="gate-list-page">
-    <van-nav-bar title="门禁终端管理" left-arrow @click-left="$router.back()" />
-    <div class="page-content">
+  <app-layout page-title="门禁终端管理">
+    <div class="dark-card">
       <van-cell-group>
         <van-field v-model="filterLevel" label="终端层级" placeholder="全部" readonly is-link @click="showLevelPicker = true" />
         <van-field v-model="filterStatus" label="状态" placeholder="全部" readonly is-link @click="showStatusPicker = true" />
@@ -9,6 +8,8 @@
       <div style="margin: 12px 0">
         <van-button type="primary" size="small" @click="$router.push('/access-control/edit')">新增终端</van-button>
       </div>
+    </div>
+    <div class="dark-card">
       <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
         <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
           <van-cell v-for="item in gateList" :key="item.id" is-link @click="goDetail(item)">
@@ -33,7 +34,7 @@
     <van-popup v-model="showStatusPicker" position="bottom">
       <van-picker :columns="statusOptions" @confirm="onStatusConfirm" @cancel="showStatusPicker = false" />
     </van-popup>
-  </div>
+  </app-layout>
 </template>
 
 <script>
@@ -91,5 +92,11 @@ export default {
 </script>
 
 <style scoped>
-.page-content { padding: 12px; }
+.dark-card {
+  background: rgba(10, 10, 10, 0.8);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px;
+  margin-bottom: 16px;
+}
 </style>

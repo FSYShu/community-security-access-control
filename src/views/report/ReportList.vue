@@ -1,7 +1,6 @@
 <template>
-  <div class="report-list-page">
-    <van-nav-bar title="安防监控日报" left-arrow @click-left="$router.back()" />
-    <div class="page-content">
+  <app-layout page-title="安防监控日报">
+    <div class="dark-card">
       <van-cell-group>
         <van-field v-model="startDate" label="开始日期" placeholder="YYYY-MM-DD" />
         <van-field v-model="endDate" label="结束日期" placeholder="YYYY-MM-DD" />
@@ -10,6 +9,8 @@
         <van-button type="primary" size="small" @click="loadData">查询</van-button>
         <van-button size="small" @click="showGenerate = true">生成日报</van-button>
       </div>
+    </div>
+    <div class="dark-card">
       <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
         <van-cell v-for="item in reportList" :key="item.id" is-link @click="goDetail(item)">
           <template #title>{{ item.report_date }}</template>
@@ -22,7 +23,7 @@
     <van-dialog v-model="showGenerate" title="生成日报" show-cancel-button @confirm="onGenerate">
       <van-field v-model="generateDate" label="日期" placeholder="YYYY-MM-DD" />
     </van-dialog>
-  </div>
+  </app-layout>
 </template>
 
 <script>
@@ -73,5 +74,11 @@ export default {
 </script>
 
 <style scoped>
-.page-content { padding: 12px; }
+.dark-card {
+  background: rgba(10, 10, 10, 0.8);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px;
+  margin-bottom: 16px;
+}
 </style>

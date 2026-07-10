@@ -1,7 +1,6 @@
 <template>
-  <div class="gate-edit-page">
-    <van-nav-bar :title="isEdit ? '编辑门禁终端' : '新增门禁终端'" left-arrow @click-left="$router.back()" />
-    <div class="page-content">
+  <app-layout :page-title="isEdit ? '编辑门禁终端' : '新增门禁终端'">
+    <div class="dark-card">
       <van-cell-group>
         <van-field v-model="form.gate_name" label="终端名称" placeholder="请输入终端名称" required />
         <van-field v-model="form.location" label="安装位置" placeholder="请输入安装位置" required />
@@ -20,7 +19,7 @@
     <van-popup v-model="showStatusPicker" position="bottom">
       <van-picker :columns="statusTexts" @confirm="onStatusConfirm" @cancel="showStatusPicker = false" show-toolbar title="选择状态" />
     </van-popup>
-  </div>
+  </app-layout>
 </template>
 
 <script>
@@ -103,5 +102,11 @@ export default {
 </script>
 
 <style scoped>
-.page-content { padding: 12px; }
+.dark-card {
+  background: rgba(10, 10, 10, 0.8);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px;
+  margin-bottom: 16px;
+}
 </style>
