@@ -7,6 +7,9 @@
       <van-tab title="人脸列表">
         <FaceList />
       </van-tab>
+      <van-tab title="人脸测试">
+        <FaceTest />
+      </van-tab>
     </van-tabs>
   </app-layout>
 </template>
@@ -14,10 +17,11 @@
 <script>
 import FaceRegister from './FaceRegister.vue'
 import FaceList from './FaceList.vue'
+import FaceTest from './FaceTest.vue'
 
 export default {
   name: 'FaceManagementPage',
-  components: { FaceRegister, FaceList },
+  components: { FaceRegister, FaceList, FaceTest },
   data () {
     return {
       activeTab: 0

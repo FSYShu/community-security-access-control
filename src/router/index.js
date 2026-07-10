@@ -103,12 +103,7 @@ const routes = [
     component: () => import('@/views/property-admin/AlarmLogList.vue'),
     meta: { title: '历史告警日志', requiresAuth: true, roles: ['admin', 'guard'] }
   },
-  {
-    path: '/property-admin/face-test',
-    name: 'FaceTest',
-    component: () => import('@/views/property-admin/FaceTest.vue'),
-    meta: { title: '人脸识别测试', requiresAuth: true, roles: ['admin'] }
-  },
+
   // 安防监控日报模块
   {
     path: '/report',

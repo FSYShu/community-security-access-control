@@ -9,9 +9,7 @@
         <van-cell title="通行日志" is-link to="/property-admin/pass-logs" />
         <van-cell title="告警日志" is-link to="/property-admin/alarm-logs" />
       </van-cell-group>
-      <van-cell-group title="系统测试">
-        <van-cell title="人脸识别测试" is-link to="/property-admin/face-test" />
-      </van-cell-group>
+
     </div>
   </app-layout>
 </template>
