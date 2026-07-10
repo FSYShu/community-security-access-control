@@ -8,6 +8,21 @@ yarn-error.log*
 /test/e2e/reports/
 selenium-debug.log
 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+
+# 环境配置
+.env
+backend/.env
+
+# 上传文件
+uploads/
+
 # Editor directories and files
 .idea
 .vscode

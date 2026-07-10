@@ -1,0 +1,75 @@
+# 社区安防门禁系统 - Docker Compose 编排
+version: '3.8'
+
+services:
+  # 前端服务
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: security-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - security-network
+
+  # 后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: security-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=mysql+pymysql://root:${DB_PASSWORD}@mysql:3306/security_access?charset=utf8mb4
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - AI_SERVICE_URL=http://ai-service:8001
+      - PUSH_SERVICE_URL=http://push-service:8002
+    depends_on:
+      - mysql
+      - redis
+    restart: always
+    networks:
+      - security-network
+
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: security-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=security_access
+      - MYSQL_CHARSET=utf8mb4
+    volumes:
+      - mysql-data:/var/lib/mysql
+    restart: always
+    networks:
+      - security-network
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: security-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: always
+    networks:
+      - security-network
+
+volumes:
+  mysql-data:
+  redis-data:
+
+networks:
+  security-network:
+    driver: bridge
