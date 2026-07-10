@@ -10,7 +10,7 @@
         <template #input>
           <van-radio-group v-model="personType" direction="horizontal">
             <van-radio name="owner">业主</van-radio>
-            <van-radio name="visitor">访客</van-radio>
+
             <van-radio name="blacklist">黑名单</van-radio>
           </van-radio-group>
         </template>
