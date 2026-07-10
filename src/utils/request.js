@@ -21,7 +21,7 @@ service.interceptors.request.use(
     // 从 localStorage 获取 token
     const token = localStorage.getItem('access_token')
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`
+      config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
@@ -41,7 +41,9 @@ service.interceptors.response.use(
       // token 过期或无效
       if (res.code === 401) {
         localStorage.removeItem('access_token')
-        router.push('/login')
+        if (router.currentRoute.path !== '/login') {
+          router.push('/login')
+        }
       }
       return Promise.reject(new Error(res.message || '请求失败'))
     }
@@ -61,7 +63,9 @@ service.interceptors.response.use(
 
     if (status === 401) {
       localStorage.removeItem('access_token')
-      router.push('/login')
+      if (router.currentRoute.path !== '/login') {
+        router.replace('/login').catch(function () {})
+      }
     }
     return Promise.reject(error)
   }

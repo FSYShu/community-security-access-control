@@ -36,7 +36,25 @@ const routes = [
   {
     path: '/access-control',
     name: 'AccessControl',
-    component: () => import('@/views/access-control/index.vue'),
+    component: () => import('@/views/access-control/GateList.vue'),
+    meta: { title: '门禁终端管理', requiresAuth: true, roles: ['admin'] }
+  },
+  {
+    path: '/access-control/edit',
+    name: 'GateEdit',
+    component: () => import('@/views/access-control/GateEdit.vue'),
+    meta: { title: '编辑门禁终端', requiresAuth: true, roles: ['admin'] }
+  },
+  {
+    path: '/access-control/edit/:id',
+    name: 'GateEditById',
+    component: () => import('@/views/access-control/GateEdit.vue'),
+    meta: { title: '编辑门禁终端', requiresAuth: true, roles: ['admin'] }
+  },
+  {
+    path: '/access-control/permission/:id',
+    name: 'GatePermission',
+    component: () => import('@/views/access-control/GatePermission.vue'),
     meta: { title: '门禁权限配置', requiresAuth: true, roles: ['admin'] }
   },
   // 禁区入侵检测模块
@@ -53,6 +71,12 @@ const routes = [
     component: () => import('@/views/video-monitor/index.vue'),
     meta: { title: '实时视频监控', requiresAuth: true, roles: ['admin', 'guard'] }
   },
+  {
+    path: '/video-monitor/playback',
+    name: 'VideoPlayback',
+    component: () => import('@/views/video-monitor/VideoPlayback.vue'),
+    meta: { title: '历史视频回放', requiresAuth: true, roles: ['admin', 'guard'] }
+  },
   // 告警中心模块
   {
     path: '/alarm-center',
@@ -66,6 +90,37 @@ const routes = [
     name: 'PropertyAdmin',
     component: () => import('@/views/property-admin/index.vue'),
     meta: { title: '物业后台管理', requiresAuth: true, roles: ['admin'] }
+  },
+  {
+    path: '/property-admin/pass-logs',
+    name: 'PassLogList',
+    component: () => import('@/views/property-admin/PassLogList.vue'),
+    meta: { title: '历史通行日志', requiresAuth: true, roles: ['admin', 'guard'] }
+  },
+  {
+    path: '/property-admin/alarm-logs',
+    name: 'AlarmLogList',
+    component: () => import('@/views/property-admin/AlarmLogList.vue'),
+    meta: { title: '历史告警日志', requiresAuth: true, roles: ['admin', 'guard'] }
+  },
+  {
+    path: '/property-admin/face-test',
+    name: 'FaceTest',
+    component: () => import('@/views/property-admin/FaceTest.vue'),
+    meta: { title: '人脸识别测试', requiresAuth: true, roles: ['admin'] }
+  },
+  // 安防监控日报模块
+  {
+    path: '/report',
+    name: 'ReportList',
+    component: () => import('@/views/report/ReportList.vue'),
+    meta: { title: '安防监控日报', requiresAuth: true, roles: ['admin'] }
+  },
+  {
+    path: '/report/detail/:id',
+    name: 'ReportDetail',
+    component: () => import('@/views/report/ReportDetail.vue'),
+    meta: { title: '日报详情', requiresAuth: true, roles: ['admin'] }
   }
 ]
 
@@ -110,7 +165,8 @@ router.beforeEach(async (to, from, next) => {
 
   // 角色权限校验
   const roles = to.meta.roles
-  if (roles && !roles.some(role => store.getters['user/roles'].includes(role))) {
+  const userRoles = store.getters['user/roles'] || []
+  if (roles && !roles.some(role => userRoles.includes(role))) {
     next('/dashboard')
     return
   }

@@ -8,16 +8,16 @@ const state = {
 }
 
 const mutations = {
-  SET_UNREAD_COUNT(state, count) {
+  SET_UNREAD_COUNT (state, count) {
     state.unreadCount = count
   },
-  SET_LATEST_ALARMS(state, alarms) {
+  SET_LATEST_ALARMS (state, alarms) {
     state.latestAlarms = alarms
   },
-  INCREMENT_UNREAD(state) {
+  INCREMENT_UNREAD (state) {
     state.unreadCount += 1
   },
-  DECREMENT_UNREAD(state) {
+  DECREMENT_UNREAD (state) {
     if (state.unreadCount > 0) {
       state.unreadCount -= 1
     }
@@ -26,13 +26,13 @@ const mutations = {
 
 const actions = {
   /** 新告警到达 */
-  onNewAlarm({ commit }, alarm) {
+  onNewAlarm ({ commit }, alarm) {
     commit('INCREMENT_UNREAD')
     commit('SET_LATEST_ALARMS', [alarm, ...state.latestAlarms.slice(0, 49)])
   },
 
   /** 重置未读数量 */
-  resetUnread({ commit }) {
+  resetUnread ({ commit }) {
     commit('SET_UNREAD_COUNT', 0)
   }
 }

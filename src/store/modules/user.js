@@ -11,16 +11,16 @@ const state = {
 }
 
 const mutations = {
-  SET_TOKEN(state, token) {
+  SET_TOKEN (state, token) {
     state.token = token
   },
-  SET_USER_INFO(state, userInfo) {
+  SET_USER_INFO (state, userInfo) {
     state.userInfo = userInfo
   },
-  SET_ROLES(state, roles) {
+  SET_ROLES (state, roles) {
     state.roles = roles
   },
-  CLEAR_USER(state) {
+  CLEAR_USER (state) {
     state.token = ''
     state.userInfo = null
     state.roles = []
@@ -30,7 +30,7 @@ const mutations = {
 
 const actions = {
   /** 用户登录 */
-  async loginAction({ commit }, loginForm) {
+  async loginAction ({ commit }, loginForm) {
     const res = await login(loginForm)
     const token = res.data.token
     commit('SET_TOKEN', token)
@@ -39,15 +39,17 @@ const actions = {
   },
 
   /** 获取用户信息 */
-  async getUserInfoAction({ commit }) {
+  async getUserInfoAction ({ commit }) {
     const res = await getUserInfo()
-    commit('SET_USER_INFO', res.data)
-    commit('SET_ROLES', res.data.roles)
+    const userData = res.data
+    commit('SET_USER_INFO', userData)
+    const roles = userData.roles || (userData.role ? [userData.role] : [])
+    commit('SET_ROLES', roles)
     return res.data
   },
 
   /** 用户登出 */
-  async logoutAction({ commit }) {
+  async logoutAction ({ commit }) {
     try {
       await logout()
     } finally {
