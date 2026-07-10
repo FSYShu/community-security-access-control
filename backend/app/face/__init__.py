@@ -219,6 +219,18 @@ def face_register():
             json.dump(registered, f, ensure_ascii=False)
 
         log_audit(operation_type='face_register', operation_content='人脸注册: {}({})'.format(person_name, person_type))
+
+        face_image_path = _save_face_image(face_image_base64, person_type, person_name)
+        face_record = FaceInfo(
+            person_type=person_type,
+            person_name=person_name,
+            face_image_path=face_image_path,
+            face_feature=json.dumps(encoding),
+            status='active'
+        )
+        db.session.add(face_record)
+        db.session.commit()
+
         return success_response(data={'person_name': person_name, 'encoding_length': len(encoding)}, message='注册成功')
 
     except ImportError:
