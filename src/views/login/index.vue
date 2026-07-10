@@ -29,7 +29,7 @@ import { mapActions } from 'vuex'
 
 export default {
   name: 'LoginPage',
-  data() {
+  data () {
     return {
       form: {
         username: '',
@@ -39,7 +39,7 @@ export default {
   },
   methods: {
     ...mapActions('user', ['loginAction']),
-    async onSubmit() {
+    async onSubmit () {
       try {
         await this.loginAction(this.form)
         const redirect = this.$route.query.redirect || '/dashboard'
