@@ -2,6 +2,7 @@
 社区安防门禁系统 - Flask 应用工厂
 """
 import os
+import logging
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -10,7 +11,9 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-# 初始化扩展
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
@@ -24,22 +27,30 @@ def create_app(config_name=None):
     """应用工厂函数"""
     app = Flask(__name__)
 
-    # 加载配置
     config_name = config_name or os.getenv('FLASK_ENV', 'development')
     app.config.from_object(get_config(config_name))
 
-    # 初始化扩展
+    data_dir = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), 'data')
+    os.makedirs(data_dir, exist_ok=True)
+
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
     CORS(app, supports_credentials=True)
     limiter.init_app(app)
 
-    # 注册蓝图
-    register_blueprints(app)
+    with app.app_context():
+        from sqlalchemy import text
+        try:
+            db.engine.execute(text('PRAGMA journal_mode=WAL'))
+        except Exception:
+            pass
 
-    # 注册错误处理
+    register_blueprints(app)
     register_error_handlers(app)
+
+    with app.app_context():
+        init_database(app)
 
     return app
 
@@ -64,6 +75,10 @@ def register_blueprints(app):
     from app.gate import gate_bp
     from app.report import report_bp
     from app.property import property_bp
+    from app.gate_level import gate_level_bp
+    from app.stream import stream_bp
+    from app.visitor_auth import visitor_auth_bp
+    from app.audit import audit_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(face_bp, url_prefix='/api/v1/face')
@@ -73,6 +88,10 @@ def register_blueprints(app):
     app.register_blueprint(gate_bp, url_prefix='/api/v1/gate')
     app.register_blueprint(report_bp, url_prefix='/api/v1/report')
     app.register_blueprint(property_bp, url_prefix='/api/v1/property')
+    app.register_blueprint(gate_level_bp, url_prefix='/api/v1/gate-level')
+    app.register_blueprint(stream_bp, url_prefix='/api/v1/stream')
+    app.register_blueprint(visitor_auth_bp, url_prefix='/api/v1/visitor-auth')
+    app.register_blueprint(audit_bp, url_prefix='/api/v1/audit')
 
 
 def register_error_handlers(app):
@@ -95,6 +114,56 @@ def register_error_handlers(app):
     def not_found(e):
         return error_response(message='请求资源不存在', code=404)
 
+    @app.errorhandler(409)
+    def conflict(e):
+        return error_response(message='资源冲突', code=409)
+
+    @app.errorhandler(422)
+    def unprocessable(e):
+        return error_response(message='不可处理的实体', code=422)
+
     @app.errorhandler(500)
     def internal_error(e):
         return error_response(message='服务器内部错误', code=500)
+
+
+def init_database(app):
+    """初始化数据库：创建表、插入默认数据"""
+    from app.models import User, GateLevel
+
+    db_path = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    if db_path.startswith('sqlite:///'):
+        db_file = db_path.replace('sqlite:///', '')
+        if not os.path.exists(db_file):
+            logger.info('Database not found, creating tables...')
+            db.create_all()
+            _seed_default_data()
+        else:
+            db.create_all()
+    else:
+        db.create_all()
+
+
+def _seed_default_data():
+    """插入默认数据"""
+    from app.models import User, GateLevel
+
+    if not User.query.filter_by(username='admin0').first():
+        admin0 = User(username='admin0', real_name='管理员', role='admin')
+        admin0.set_password('csac123456')
+        db.session.add(admin0)
+
+    default_levels = [
+        GateLevel(level_code='community_gate', level_name='社区大门', security_level='较高',
+                  default_pass_policy='{"allow_owner": true, "allow_visitor": true, "allow_stranger": false}'),
+        GateLevel(level_code='unit_door', level_name='单元门', security_level='一般',
+                  default_pass_policy='{"allow_owner": true, "allow_visitor": true, "allow_stranger": false}'),
+        GateLevel(level_code='dangerous_area', level_name='危险防护区域', security_level='最高',
+                  default_pass_policy='{"allow_owner": false, "allow_visitor": false, "allow_stranger": false}')
+    ]
+    for level in default_levels:
+        if not GateLevel.query.get(level.level_code):
+            db.session.add(level)
+
+    db.session.commit()
+    logger.info('Default data seeded.')
