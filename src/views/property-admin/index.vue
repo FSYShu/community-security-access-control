@@ -1,10 +1,7 @@
 <template>
   <app-layout page-title="物业后台管理">
     <div class="dark-card">
-      <van-cell-group title="门禁终端管理">
-        <van-cell title="终端列表" is-link to="/access-control" />
-        <van-cell title="新增终端" is-link to="/access-control/edit" />
-      </van-cell-group>
+
       <van-cell-group title="安防监控日报">
         <van-cell title="日报列表" is-link to="/report" />
       </van-cell-group>
