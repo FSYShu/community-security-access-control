@@ -3,68 +3,64 @@
     <van-loading v-if="loading" class="page-loading" size="24px" vertical>加载中...</van-loading>
     <van-empty v-else-if="recordings.length === 0" description="暂无历史录像" />
 
-    <template v-else>
-      <van-collapse v-model="activeGroups">
-        <van-collapse-item
-          v-for="group in recordings"
-          :key="group.push_key"
-          :title="group.gate_name"
-          :name="group.push_key"
-        >
-          <template #label>
-            <span class="group-label">推流码: {{ group.push_key }} | {{ group.files.length }}段录像</span>
-          </template>
-          <van-cell
-            v-for="file in group.files"
-            :key="file.filename"
-            clickable
-            @click="playRecording(file)"
-          >
-            <template #title>
-              <span class="file-time">{{ file.datetime }}</span>
-            </template>
-            <template #label>
-              <span class="file-meta">{{ file.duration_text }} | {{ file.file_size_text }}</span>
-            </template>
-            <div class="file-actions">
-              <i class="el-icon-delete action-icon" style="font-size:20px;color:var(--dark-danger)" @click.stop="confirmDelete(file)"></i>
-              <i class="el-icon-video-play" style="font-size:20px;color:var(--dark-info)"></i>
-            </div>
-          </van-cell>
-        </van-collapse-item>
-      </van-collapse>
-    </template>
-
-    <van-popup
-      v-model="showPlayer"
-      position="bottom"
-      :style="{ height: '70%' }"
-      round
-      closeable
-      close-icon="cross"
-      @close="stopPlayback"
-    >
-      <div class="player-popup">
-        <div class="player-header">{{ currentFile ? currentFile.datetime : '' }}</div>
-        <div class="player-wrapper">
-          <video
-            ref="videoPlayer"
-            class="player-video"
-            controls
-            muted
-          ></video>
+    <div v-else class="playback-layout">
+      <div class="playback-list">
+        <div class="group-mode-tabs">
+          <div class="mode-tab" :class="{ 'is-active': groupMode === 'location' }" @click="groupMode = 'location'">按位置</div>
+          <div class="mode-tab" :class="{ 'is-active': groupMode === 'date' }" @click="groupMode = 'date'">按日期</div>
         </div>
-        <div v-if="playerError" class="player-error">
-          <i class="el-icon-warning-outline" style="font-size:24px"></i>
-          <p>{{ playerError }}</p>
+        <div v-for="(group, idx) in groupedRecordings" :key="idx" class="record-group">
+          <div class="group-header">
+            <span class="group-name">{{ group.label }}</span>
+            <span class="group-count">{{ group.files.length }}段录像</span>
+          </div>
+          <div class="card-grid">
+            <div
+              v-for="file in group.files"
+              :key="file.filename"
+              class="video-card"
+              :class="{ 'is-active': currentFile && currentFile.filename === file.filename }"
+              @click="playRecording(file)"
+            >
+              <div class="card-icon">
+                <i class="el-icon-video-camera"></i>
+              </div>
+              <div class="card-info">
+                <span class="card-time">{{ file.datetime }}</span>
+                <span class="card-meta">{{ file._gate_name }} | {{ file.duration_text }} | {{ file.file_size_text }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </van-popup>
+
+      <div class="playback-player">
+        <div v-if="!currentFile" class="player-empty">
+          <i class="el-icon-video-play" style="font-size:48px;color:var(--dark-text-dim)"></i>
+          <p>选择录像开始播放</p>
+        </div>
+        <template v-else>
+          <div class="player-header">{{ currentFile.datetime }}</div>
+          <div class="player-wrapper">
+            <video
+              ref="videoPlayer"
+              class="player-video"
+              controls
+              muted
+            ></video>
+          </div>
+          <div v-if="playerError" class="player-error">
+            <i class="el-icon-warning-outline" style="font-size:24px"></i>
+            <p>{{ playerError }}</p>
+          </div>
+        </template>
+      </div>
+    </div>
   </app-layout>
 </template>
 
 <script>
-import { getRecordings, deleteRecording } from '@/api/videoMonitor'
+import { getRecordings } from '@/api/videoMonitor'
 import flvjs from 'flv.js'
 
 export default {
@@ -73,11 +69,31 @@ export default {
     return {
       loading: false,
       recordings: [],
-      activeGroups: [],
-      showPlayer: false,
+      groupMode: 'location',
       currentFile: null,
       flvPlayer: null,
       playerError: ''
+    }
+  },
+  computed: {
+    groupedRecordings () {
+      if (this.groupMode === 'location') {
+        return this.recordings.map(function (g) {
+          return { label: g.gate_name, files: g.files.map(function (f) { return Object.assign({}, f, { _gate_name: g.gate_name }) }) }
+        })
+      }
+      const dateMap = {}
+      this.recordings.forEach(function (g) {
+        g.files.forEach(function (f) {
+          const dateKey = f.datetime ? f.datetime.split(' ')[0] : '未知日期'
+          if (!dateMap[dateKey]) dateMap[dateKey] = []
+          dateMap[dateKey].push(Object.assign({}, f, { _gate_name: g.gate_name }))
+        })
+      })
+      const keys = Object.keys(dateMap).sort().reverse()
+      return keys.map(function (k) {
+        return { label: k, files: dateMap[k] }
+      })
     }
   },
   created () {
@@ -93,9 +109,6 @@ export default {
         const res = await getRecordings()
         if (res.code === 0 && res.data) {
           this.recordings = res.data || []
-          if (this.recordings.length > 0) {
-            this.activeGroups = [this.recordings[0].push_key]
-          }
         }
       } catch (error) {
         console.error('Failed to fetch recordings:', error)
@@ -104,15 +117,14 @@ export default {
       }
     },
     playRecording (file) {
+      this.stopPlayback()
       this.currentFile = file
-      this.showPlayer = true
       this.playerError = ''
       this.$nextTick(function () {
         this.startFlvPlayback(file.url)
       })
     },
     startFlvPlayback (url) {
-      this.stopPlayback()
       if (!flvjs.isSupported()) {
         this.playerError = '当前浏览器不支持FLV播放'
         return
@@ -151,28 +163,6 @@ export default {
         }
         this.flvPlayer = null
       }
-    },
-    confirmDelete (file) {
-      this.$dialog.confirm({
-        title: '确认删除',
-        message: '确定删除录像 ' + file.datetime + ' 吗？删除后不可恢复。'
-      }).then(function () {
-        this.doDelete(file)
-      }.bind(this)).catch(function () {})
-    },
-    async doDelete (file) {
-      try {
-        const res = await deleteRecording(file.filename)
-        if (res.code === 0) {
-          this.$toast.success('删除成功')
-          this.fetchRecordings()
-        } else {
-          this.$toast.fail(res.message || '删除失败')
-        }
-      } catch (error) {
-        console.error('Failed to delete recording:', error)
-        this.$toast.fail('删除失败')
-      }
     }
   }
 }
@@ -184,53 +174,210 @@ export default {
   justify-content: center;
   padding: 40px 0;
 }
-.group-label {
-  font-size: 12px;
-  color: var(--dark-text-secondary);
+
+.playback-layout {
+  display: flex;
+  gap: 16px;
+  height: calc(100vh - 140px);
+  overflow: hidden;
 }
-.file-time {
-  font-size: 14px;
+
+.playback-list {
+  width: 340px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  max-height: calc(60px * 10 + 80px);
+}
+
+.playback-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.playback-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.playback-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.group-mode-tabs {
+  display: flex;
+  gap: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 3px;
+  border: 1px solid var(--dark-border-field);
+  margin-bottom: 14px;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  text-align: center;
+  transition: background 0.2s, color 0.2s;
+  user-select: none;
+}
+
+.mode-tab:hover {
   color: var(--dark-text);
 }
-.file-meta {
-  font-size: 12px;
-  color: var(--dark-text-secondary);
-  margin-top: 2px;
+
+.mode-tab.is-active {
+  background: var(--dark-accent);
+  color: #fff;
 }
-.file-actions {
+
+.record-group {
+  margin-bottom: 16px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+
+.group-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dark-text);
+}
+
+.group-count {
+  font-size: 12px;
+  color: var(--dark-text-muted);
+}
+
+.card-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.video-card {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.action-icon {
+  padding: 12px;
+  background: var(--dark-card);
+  border: 1px solid var(--dark-border);
+  border-radius: 12px;
   cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
 }
-.player-popup {
+
+.video-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.video-card.is-active {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--dark-text-secondary);
+  flex-shrink: 0;
+}
+
+.video-card.is-active .card-icon {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--dark-accent-light);
+}
+
+.card-info {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: #000;
+  gap: 2px;
+  min-width: 0;
 }
+
+.card-time {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dark-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.video-card.is-active .card-time {
+  color: var(--dark-accent-light);
+}
+
+.card-meta {
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+}
+
+.playback-player {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--dark-card);
+  border-radius: 16px;
+  border: 1px solid var(--dark-border);
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+.player-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--dark-text-muted);
+  font-size: 14px;
+}
+
 .player-header {
   padding: 10px 16px;
   color: var(--dark-text);
   font-size: 14px;
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--dark-border);
   text-align: center;
 }
+
 .player-wrapper {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 8px;
+  background: #000;
 }
+
 .player-video {
   width: 100%;
   max-height: 100%;
   object-fit: contain;
   background: #000;
 }
+
 .player-error {
   position: absolute;
   top: 50%;
@@ -240,7 +387,56 @@ export default {
   text-align: center;
   font-size: 14px;
 }
+
 .player-error p {
   margin-top: 8px;
+}
+
+@media (max-width: 1024px) {
+  .playback-layout {
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+
+  .playback-player {
+    order: -1;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    min-height: 220px;
+    max-height: 40vh;
+    flex-shrink: 0;
+  }
+
+  .playback-list {
+    width: 100%;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .video-card {
+    padding: 10px;
+  }
+
+  .card-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+
+  .card-time {
+    font-size: 12px;
+  }
+
+  .card-meta {
+    font-size: 11px;
+  }
 }
 </style>

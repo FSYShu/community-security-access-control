@@ -99,18 +99,24 @@ export default {
 <style scoped>
 .face-register {
   padding: 12px;
+  overflow: hidden;
 }
 .camera-area {
   width: 100%;
   margin-bottom: 16px;
-  text-align: center;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--dark-border);
+  background: #000;
+  line-height: 0;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .camera-preview {
   width: 100%;
-  max-width: 480px;
-  border-radius: 12px;
-  background: #000;
-  border: 1px solid var(--dark-border);
+  display: block;
+  object-fit: cover;
 }
 .form-area {
   margin-top: 12px;
