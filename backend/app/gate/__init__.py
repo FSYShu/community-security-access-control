@@ -1,0 +1,226 @@
+"""
+门禁终端模块蓝图
+提供门禁终端管理、权限配置等接口
+"""
+import json
+from flask import Blueprint, request
+from flask_jwt_extended import jwt_required, get_jwt_identity
+
+from app import db
+from app.models.gate import Gate
+from app.models.gate_level import GateLevel
+from app.models.pass_record import PassRecord
+from utils.response import success_response, error_response
+from utils.permissions import admin_required
+from core.db_lock import with_write_lock
+from core.audit_logger import log_audit
+
+gate_bp = Blueprint('gate', __name__)
+
+
+@gate_bp.route('/list', methods=['GET'])
+@jwt_required()
+def get_gate_list():
+    """获取门禁终端列表"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    gate_level = request.args.get('gate_level', '')
+    status = request.args.get('status', '')
+
+    query = Gate.query
+    if gate_level:
+        query = query.filter_by(gate_level=gate_level)
+    if status:
+        query = query.filter_by(status=status)
+
+    query = query.order_by(Gate.created_at.desc())
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    items = []
+    for g in pagination.items:
+        d = g.to_dict()
+        level = GateLevel.query.get(g.gate_level)
+        d['level_name'] = level.level_name if level else g.gate_level
+        d['security_level'] = level.security_level if level else ''
+        if g.stream_channel_id:
+            from app.models.stream_channel import StreamChannel
+            ch = StreamChannel.query.get(g.stream_channel_id)
+            d['stream_channel_name'] = ch.channel_name if ch else ''
+        if g.push_key:
+            d['push_key'] = g.push_key
+        items.append(d)
+
+    return success_response(data={
+        'items': items,
+        'total': pagination.total,
+        'page': pagination.page,
+        'per_page': pagination.per_page
+    })
+
+
+@gate_bp.route('/with-stream', methods=['GET'])
+@jwt_required()
+def get_gates_with_stream():
+    """获取绑定了视频流的门禁终端列表"""
+    gates = Gate.query.filter(Gate.push_key != '', Gate.push_key.isnot(None)).order_by(Gate.created_at.desc()).all()
+    items = []
+    for g in gates:
+        d = g.to_dict()
+        level = GateLevel.query.get(g.gate_level)
+        d['level_name'] = level.level_name if level else g.gate_level
+        items.append(d)
+    return success_response(data=items)
+
+
+@gate_bp.route('/<int:gate_id>', methods=['GET'])
+@jwt_required()
+def get_gate_detail(gate_id):
+    """获取门禁终端详情"""
+    gate = Gate.query.get(gate_id)
+    if not gate:
+        return error_response(message='门禁终端不存在', code=404)
+    d = gate.to_dict()
+    level = GateLevel.query.get(gate.gate_level)
+    d['level_name'] = level.level_name if level else gate.gate_level
+    return success_response(data=d)
+
+
+@gate_bp.route('/add', methods=['POST'])
+@admin_required
+@with_write_lock
+def add_gate():
+    """新增门禁终端"""
+    data = request.get_json()
+    gate_name = data.get('gate_name', '')
+    location = data.get('location', '')
+    gate_level = data.get('gate_level', '')
+
+    if not gate_name or not location or not gate_level:
+        return error_response(message='终端名称、位置和层级不能为空', code=400)
+
+    level = GateLevel.query.get(gate_level)
+    if not level:
+        return error_response(message='终端层级不存在', code=400)
+
+    if gate_level == 'unit_door' and not data.get('building_unit'):
+        return error_response(message='单元门层级必须填写楼栋/单元', code=400)
+
+    require_secondary_auth = 1 if gate_level == 'dangerous_area' else 0
+
+    default_policy = {}
+    try:
+        default_policy = json.loads(level.default_pass_policy)
+    except Exception:
+        pass
+
+    gate = Gate(
+        gate_name=gate_name,
+        location=location,
+        gate_level=gate_level,
+        building_unit=data.get('building_unit', ''),
+        camera_id=data.get('camera_id'),
+        stream_channel_id=data.get('stream_channel_id'),
+        push_key=data.get('push_key', ''),
+        pass_time_config=json.dumps(data.get('pass_time_config', default_policy), ensure_ascii=False),
+        allowed_persons=json.dumps(data.get('allowed_persons', default_policy), ensure_ascii=False),
+        custom_pass_policy=json.dumps(data.get('custom_pass_policy', {}), ensure_ascii=False),
+        require_secondary_auth=require_secondary_auth,
+        status=data.get('status', 'online')
+    )
+    db.session.add(gate)
+    db.session.commit()
+    log_audit(operation_type='add_gate', operation_content=f'新增门禁终端: {gate_name}')
+    return success_response(data=gate.to_dict(), message='新增成功')
+
+
+@gate_bp.route('/<int:gate_id>', methods=['PUT'])
+@admin_required
+@with_write_lock
+def update_gate(gate_id):
+    """更新门禁终端"""
+    gate = Gate.query.get(gate_id)
+    if not gate:
+        return error_response(message='门禁终端不存在', code=404)
+
+    data = request.get_json()
+    if 'gate_name' in data:
+        gate.gate_name = data['gate_name']
+    if 'location' in data:
+        gate.location = data['location']
+    if 'gate_level' in data:
+        level = GateLevel.query.get(data['gate_level'])
+        if not level:
+            return error_response(message='终端层级不存在', code=400)
+        gate.gate_level = data['gate_level']
+    if 'building_unit' in data:
+        gate.building_unit = data['building_unit']
+    if 'camera_id' in data:
+        gate.camera_id = data['camera_id']
+    if 'stream_channel_id' in data:
+        gate.stream_channel_id = data['stream_channel_id']
+    if 'push_key' in data:
+        gate.push_key = data['push_key']
+    if 'status' in data:
+        gate.status = data['status']
+
+    db.session.commit()
+    log_audit(operation_type='update_gate', operation_content=f'更新门禁终端: {gate_id}')
+    return success_response(data=gate.to_dict(), message='更新成功')
+
+
+@gate_bp.route('/<int:gate_id>', methods=['DELETE'])
+@admin_required
+@with_write_lock
+def delete_gate(gate_id):
+    """删除门禁终端"""
+    gate = Gate.query.get(gate_id)
+    if not gate:
+        return error_response(message='门禁终端不存在', code=404)
+
+    related_count = PassRecord.query.filter_by(gate_id=gate_id).count()
+    if related_count > 0:
+        return error_response(message=f'该终端存在{related_count}条关联通行记录，无法删除', code=400)
+
+    db.session.delete(gate)
+    db.session.commit()
+    log_audit(operation_type='delete_gate', operation_content=f'删除门禁终端: {gate_id}')
+    return success_response(message='删除成功')
+
+
+@gate_bp.route('/<int:gate_id>/permission', methods=['PUT'])
+@admin_required
+@with_write_lock
+def config_gate_permission(gate_id):
+    """配置门禁权限"""
+    gate = Gate.query.get(gate_id)
+    if not gate:
+        return error_response(message='门禁终端不存在', code=404)
+
+    data = request.get_json()
+    level = GateLevel.query.get(gate.gate_level)
+    if not level:
+        return error_response(message='终端层级信息缺失', code=400)
+
+    if 'custom_pass_policy' in data:
+        if not level.allow_custom_override:
+            return error_response(message='该层级不允许自定义策略覆盖', code=400)
+        custom = data['custom_pass_policy']
+        if gate.gate_level == 'dangerous_area':
+            if custom.get('allow_all_owners'):
+                return error_response(message='危险防护区域不允许设置为所有业主通行', code=400)
+        gate.custom_pass_policy = json.dumps(custom, ensure_ascii=False)
+
+    if 'pass_time_config' in data:
+        gate.pass_time_config = json.dumps(data['pass_time_config'], ensure_ascii=False)
+
+    if 'allowed_persons' in data:
+        gate.allowed_persons = json.dumps(data['allowed_persons'], ensure_ascii=False)
+
+    if 'require_secondary_auth' in data:
+        if gate.gate_level == 'dangerous_area' and not data['require_secondary_auth']:
+            return error_response(message='危险防护区域必须启用二次验证', code=400)
+        gate.require_secondary_auth = 1 if data['require_secondary_auth'] else 0
+
+    db.session.commit()
+    log_audit(operation_type='config_gate_permission', operation_content=f'配置门禁权限: {gate_id}')
+    return success_response(data=gate.to_dict(), message='权限配置成功')

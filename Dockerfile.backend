@@ -1,0 +1,30 @@
+# 社区安防门禁系统 - 后端 Docker 镜像
+
+FROM python:3.11-slim
+WORKDIR /app
+
+# 安装系统依赖（dlib编译依赖cmake和libopencv）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    cmake \
+    libopencv-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Python 依赖
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# 复制dlib模型文件
+COPY backend/dat/ ./dat/
+
+# 复制应用代码
+COPY backend/ .
+
+# 创建数据目录和非root用户
+RUN mkdir -p /data/face_images /data/recordings /data/backups && \
+    useradd -m appuser && chown -R appuser:appuser /app /data
+USER appuser
+
+EXPOSE 5000
+CMD ["gunicorn", "--config", "gunicorn_config.py", "run:app"]

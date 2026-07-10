@@ -8,6 +8,36 @@ yarn-error.log*
 /test/e2e/reports/
 selenium-debug.log
 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+
+# 环境配置
+.env
+backend/.env
+
+# 上传文件
+uploads/
+
+# dlib模型文件
+backend/dat/*.dat
+
+# 日志文件
+*.log
+backend/stderr.log
+backend/stdout.log
+
+# 注册人脸数据
+backend/registered_faces.json
+
+# 数据目录
+backend/dat/
+backend/data/
+
 # Editor directories and files
 .idea
 .vscode
