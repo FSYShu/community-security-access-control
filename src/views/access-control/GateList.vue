@@ -1,12 +1,46 @@
 <template>
   <app-layout page-title="门禁终端管理">
     <div class="dark-card">
-      <van-cell-group>
-        <van-field v-model="filterLevel" label="终端层级" placeholder="全部" readonly is-link @click="showLevelPicker = true" />
-        <van-field v-model="filterStatus" label="状态" placeholder="全部" readonly is-link @click="showStatusPicker = true" />
-      </van-cell-group>
-      <div style="margin: 12px 0">
-        <van-button type="primary" size="small" @click="$router.push('/access-control/edit')">新增终端</van-button>
+      <div class="filter-row">
+        <div class="filter-select" :class="{ 'is-open': showLevelDropdown }">
+          <div class="select-trigger" @click="toggleLevelDropdown">
+            <span class="select-value">{{ filterLevel || '终端层级' }}</span>
+            <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showLevelDropdown }"></i>
+          </div>
+          <transition name="dropdown">
+            <div v-if="showLevelDropdown" class="select-dropdown">
+              <div
+                v-for="opt in levelOptions"
+                :key="opt"
+                class="select-option"
+                :class="{ 'is-active': filterLevel === opt || (!filterLevel && opt === '全部') }"
+                @click="selectLevel(opt)"
+              >{{ opt }}</div>
+            </div>
+          </transition>
+        </div>
+        <div class="filter-select" :class="{ 'is-open': showStatusDropdown }">
+          <div class="select-trigger" @click="toggleStatusDropdown">
+            <span class="select-value">{{ filterStatus || '状态' }}</span>
+            <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showStatusDropdown }"></i>
+          </div>
+          <transition name="dropdown">
+            <div v-if="showStatusDropdown" class="select-dropdown">
+              <div
+                v-for="opt in statusOptions"
+                :key="opt"
+                class="select-option"
+                :class="{ 'is-active': filterStatus === opt || (!filterStatus && opt === '全部') }"
+                @click="selectStatus(opt)"
+              >{{ opt }}</div>
+            </div>
+          </transition>
+        </div>
+        <div class="filter-spacer"></div>
+        <button class="add-btn" @click="showAddDialog = true">
+          <i class="el-icon-plus"></i>
+          <span>新增终端</span>
+        </button>
       </div>
     </div>
     <div class="dark-card">
@@ -28,17 +62,67 @@
         </van-list>
       </van-pull-refresh>
     </div>
-    <van-popup v-model="showLevelPicker" position="bottom">
-      <van-picker :columns="levelOptions" @confirm="onLevelConfirm" @cancel="showLevelPicker = false" />
-    </van-popup>
-    <van-popup v-model="showStatusPicker" position="bottom">
-      <van-picker :columns="statusOptions" @confirm="onStatusConfirm" @cancel="showStatusPicker = false" />
-    </van-popup>
+
+    <el-dialog :visible.sync="showAddDialog" title="新增门禁终端" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog">
+      <div class="form-grid">
+        <div class="form-item">
+          <label class="form-label">终端名称 <span class="form-required">*</span></label>
+          <input v-model="form.gate_name" class="form-input" placeholder="请输入终端名称" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">安装位置 <span class="form-required">*</span></label>
+          <input v-model="form.location" class="form-input" placeholder="请输入安装位置" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">终端层级 <span class="form-required">*</span></label>
+          <div class="filter-select" :class="{ 'is-open': showFormLevelDropdown }">
+            <div class="select-trigger" @click="showFormLevelDropdown = !showFormLevelDropdown; showFormStatusDropdown = false">
+              <span class="select-value">{{ formLevelLabel || '请选择终端层级' }}</span>
+              <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showFormLevelDropdown }"></i>
+            </div>
+            <transition name="dropdown">
+              <div v-if="showFormLevelDropdown" class="select-dropdown">
+                <div v-for="opt in formLevelOptions" :key="opt.value" class="select-option" :class="{ 'is-active': form.gate_level === opt.value }" @click="form.gate_level = opt.value; showFormLevelDropdown = false">{{ opt.text }}</div>
+              </div>
+            </transition>
+          </div>
+        </div>
+        <div class="form-item">
+          <label class="form-label">楼栋/单元</label>
+          <input v-model="form.building_unit" class="form-input" placeholder="单元门层级必填" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">状态</label>
+          <div class="filter-select" :class="{ 'is-open': showFormStatusDropdown }">
+            <div class="select-trigger" @click="showFormStatusDropdown = !showFormStatusDropdown; showFormLevelDropdown = false">
+              <span class="select-value">{{ formStatusLabel || '请选择状态' }}</span>
+              <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showFormStatusDropdown }"></i>
+            </div>
+            <transition name="dropdown">
+              <div v-if="showFormStatusDropdown" class="select-dropdown">
+                <div v-for="opt in formStatusOptions" :key="opt.value" class="select-option" :class="{ 'is-active': form.status === opt.value }" @click="form.status = opt.value; showFormStatusDropdown = false">{{ opt.text }}</div>
+              </div>
+            </transition>
+          </div>
+        </div>
+        <div class="form-item">
+          <label class="form-label">推流码</label>
+          <input v-model="form.push_key" class="form-input" placeholder="请输入推流码" />
+        </div>
+      </div>
+      <div class="form-footer">
+        <button class="form-btn form-btn-cancel" @click="showAddDialog = false">取消</button>
+        <button class="form-btn form-btn-primary" @click="onAddSubmit">
+          <i v-if="addLoading" class="el-icon-loading"></i>
+          确认
+        </button>
+      </div>
+    </el-dialog>
   </app-layout>
 </template>
 
 <script>
-import { getGateList } from '@/api/property'
+import { getGateList, addGate } from '@/api/property'
 
 export default {
   name: 'GateListPage',
@@ -51,13 +135,70 @@ export default {
       page: 1,
       filterLevel: '',
       filterStatus: '',
-      showLevelPicker: false,
-      showStatusPicker: false,
+      showLevelDropdown: false,
+      showStatusDropdown: false,
       levelOptions: ['全部', '社区大门', '单元门', '危险防护区域'],
-      statusOptions: ['全部', '在线', '离线', '维护中']
+      statusOptions: ['全部', '在线', '离线', '维护中'],
+      showAddDialog: false,
+      addLoading: false,
+      showFormLevelDropdown: false,
+      showFormStatusDropdown: false,
+      form: { gate_name: '', location: '', gate_level: '', building_unit: '', push_key: '', status: 'online' },
+      formLevelOptions: [
+        { text: '社区大门', value: 'community_gate' },
+        { text: '单元门', value: 'unit_door' },
+        { text: '危险防护区域', value: 'dangerous_area' }
+      ],
+      formStatusOptions: [
+        { text: '在线', value: 'online' },
+        { text: '离线', value: 'offline' },
+        { text: '维护中', value: 'maintenance' }
+      ]
     }
   },
+  computed: {
+    formLevelLabel () {
+      const opt = this.formLevelOptions.find(o => o.value === this.form.gate_level)
+      return opt ? opt.text : ''
+    },
+    formStatusLabel () {
+      const opt = this.formStatusOptions.find(o => o.value === this.form.status)
+      return opt ? opt.text : ''
+    }
+  },
+  mounted () {
+    document.addEventListener('click', this.closeDropdowns)
+  },
+  beforeDestroy () {
+    document.removeEventListener('click', this.closeDropdowns)
+  },
   methods: {
+    closeDropdowns (e) {
+      if (!e.target.closest('.filter-select')) {
+        this.showLevelDropdown = false
+        this.showStatusDropdown = false
+        this.showFormLevelDropdown = false
+        this.showFormStatusDropdown = false
+      }
+    },
+    toggleLevelDropdown () {
+      this.showStatusDropdown = false
+      this.showLevelDropdown = !this.showLevelDropdown
+    },
+    toggleStatusDropdown () {
+      this.showLevelDropdown = false
+      this.showStatusDropdown = !this.showStatusDropdown
+    },
+    selectLevel (opt) {
+      this.filterLevel = opt === '全部' ? '' : opt
+      this.showLevelDropdown = false
+      this.onRefresh()
+    },
+    selectStatus (opt) {
+      this.filterStatus = opt === '全部' ? '' : opt
+      this.showStatusDropdown = false
+      this.onRefresh()
+    },
     async loadData () {
       try {
         const levelMap = { 社区大门: 'community_gate', 单元门: 'unit_door', 危险防护区域: 'dangerous_area' }
@@ -80,13 +221,34 @@ export default {
       this.refreshing = false
     },
     onRefresh () { this.page = 1; this.finished = false; this.loadData() },
-    onLevelConfirm (val) { this.filterLevel = val; this.showLevelPicker = false; this.onRefresh() },
-    onStatusConfirm (val) { this.filterStatus = val; this.showStatusPicker = false; this.onRefresh() },
     levelTagType (level) {
       const map = { community_gate: 'primary', unit_door: 'success', dangerous_area: 'danger' }
       return map[level] || 'default'
     },
-    goDetail (item) { this.$router.push(`/access-control/edit/${item.id}`) }
+    goDetail (item) { this.$router.push(`/access-control/edit/${item.id}`) },
+    async onAddSubmit () {
+      if (!this.form.gate_name || !this.form.location || !this.form.gate_level) {
+        return this.$message.warning('请填写必填项')
+      }
+      this.addLoading = true
+      try {
+        await addGate({
+          gate_name: this.form.gate_name,
+          location: this.form.location,
+          gate_level: this.form.gate_level,
+          building_unit: this.form.building_unit,
+          push_key: this.form.push_key,
+          status: this.form.status
+        })
+        this.$message.success('新增成功')
+        this.showAddDialog = false
+        this.form = { gate_name: '', location: '', gate_level: '', building_unit: '', push_key: '', status: 'online' }
+        this.onRefresh()
+      } catch (e) {
+        this.$message.error('新增失败')
+      }
+      this.addLoading = false
+    }
   }
 }
 </script>
@@ -99,4 +261,222 @@ export default {
   padding: 20px;
   margin-bottom: 16px;
 }
+
+.filter-spacer {
+  flex: 1;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  position: relative;
+  min-width: 140px;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.filter-select.is-open .select-trigger {
+  border-color: var(--dark-accent);
+}
+
+.select-value {
+  font-size: 13px;
+  color: var(--dark-text);
+  white-space: nowrap;
+}
+
+.select-arrow {
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+  transition: transform 0.2s;
+  margin-left: 6px;
+}
+
+.select-arrow.is-reverse {
+  transform: rotate(180deg);
+}
+
+.select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--dark-bg-secondary);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  padding: 4px 0;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.select-option {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.select-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dark-text);
+}
+
+.select-option.is-active {
+  color: var(--dark-accent-light);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.dropdown-enter,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.add-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: var(--dark-accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.add-btn:hover {
+  background: var(--dark-accent-light);
+}
+
+.add-btn i {
+  font-size: 14px;
+}
+
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  font-weight: 500;
+}
+
+.form-required {
+  color: var(--dark-danger);
+}
+
+.form-input {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--dark-text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-input::placeholder {
+  color: var(--dark-text-muted);
+}
+
+.form-input:focus {
+  border-color: var(--dark-accent-light);
+}
+
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.form-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.form-btn-cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dark-text);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.form-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.form-btn-primary {
+  background: var(--dark-accent);
+  color: #fff;
+}
+
+.form-btn-primary:hover {
+  background: var(--dark-accent-light);
+}
+</style>
+
+<style>
+.dark-dialog {
+  background: #0A0A0A !important;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
+
+.dark-dialog .el-dialog__header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 16px 20px;
+}
+
+.dark-dialog .el-dialog__title {
+  color: #EDEDEF;
+  font-weight: 600;
+}
+
+.dark-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: #8A8F98;
+}
+
+.dark-dialog .el-dialog__body {
+  padding: 20px;
+}
+
 </style>
