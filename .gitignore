@@ -26,6 +26,18 @@ uploads/
 # dlib模型文件
 backend/dat/*.dat
 
+# 日志文件
+*.log
+backend/stderr.log
+backend/stdout.log
+
+# 注册人脸数据
+backend/registered_faces.json
+
+# 数据目录
+backend/dat/
+backend/data/
+
 # Editor directories and files
 .idea
 .vscode
