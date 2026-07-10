@@ -40,9 +40,9 @@
       <header class="main-header">
         <div class="header-left">
           <h1 class="header-title">安防总览</h1>
-          <span class="header-subtitle">{{ currentDate }}</span>
         </div>
         <div class="header-right">
+          <span class="header-date">{{ currentDate }}</span>
           <span class="header-time">{{ currentTime }}</span>
         </div>
       </header>
@@ -425,11 +425,10 @@ export default {
   color: var(--dark-text);
 }
 
-.header-subtitle {
+.header-date {
   font-size: 13px;
   color: var(--dark-text-secondary);
-  margin-top: 2px;
-  display: block;
+  margin-right: 12px;
 }
 
 .header-time {
