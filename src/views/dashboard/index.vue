@@ -5,7 +5,9 @@
       <div class="bg-orb bg-orb-2"></div>
     </div>
 
-    <aside class="sidebar">
+    <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false"></div>
+
+    <aside class="sidebar" :class="{ 'is-open': sidebarOpen }">
       <div class="sidebar-brand">
         <div class="brand-icon">
           <i class="el-icon-lock brand-el-icon" :style="{ color: 'var(--dark-accent-light)' }"></i>
@@ -19,7 +21,7 @@
           :key="item.path"
           class="nav-item"
           :class="{ 'nav-item-active': isActive(item.path) }"
-          @click="$router.push(item.path)"
+          @click="$router.push(item.path); sidebarOpen = false"
         >
           <div class="nav-icon-wrap">
             <i :class="item.icon"></i>
@@ -43,9 +45,23 @@
     <main class="main-area">
       <header class="main-header">
         <div class="header-left">
+          <button class="header-menu-btn" @click="sidebarOpen = !sidebarOpen">
+            <i :class="sidebarOpen ? 'el-icon-close' : 'el-icon-s-unfold'"></i>
+          </button>
           <h1 class="header-title">安防总览</h1>
         </div>
-
+        <div class="header-right">
+          <div class="header-datetime-mobile">
+            <div class="header-status-mobile">
+              <span class="status-dot"></span>
+              <span class="status-text-mobile">运行中</span>
+            </div>
+            <div class="header-time-row">
+              <span class="header-date-mobile">{{ currentDate }}</span>
+              <span class="header-time-mobile">{{ currentTime }}</span>
+            </div>
+          </div>
+        </div>
       </header>
 
       <div class="main-content">
@@ -152,6 +168,7 @@ export default {
       currentTime: '',
       currentDate: '',
       timeTimer: null,
+      sidebarOpen: false,
       stats: {
         passCount: 0,
         alarmCount: 0,
@@ -162,9 +179,10 @@ export default {
       navItems: [
         { label: '安防总览', icon: 'el-icon-monitor', path: '/dashboard' },
         { label: '人脸管理', icon: 'el-icon-user', path: '/face-management' },
-        { label: '门禁权限', icon: 'el-icon-lock', path: '/access-control' },
+        { label: '门禁管理', icon: 'el-icon-lock', path: '/access-control' },
         { label: '禁区检测', icon: 'el-icon-warning-outline', path: '/danger-zone' },
-        { label: '视频监控', icon: 'el-icon-view', path: '/video-monitor' },
+        { label: '实时监控', icon: 'el-icon-view', path: '/video-monitor' },
+        { label: '历史回放', icon: 'el-icon-video-play', path: '/video-monitor/playback' },
         { label: '告警中心', icon: 'el-icon-bell', path: '/alarm-center' },
         { label: '安防日报', icon: 'el-icon-document', path: '/report' },
         { label: '通行日志', icon: 'el-icon-notebook-2', path: '/property-admin/pass-logs' },
@@ -295,6 +313,14 @@ export default {
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border-right: 1px solid var(--dark-border);
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 15;
 }
 
 .sidebar-brand {
@@ -451,6 +477,77 @@ export default {
   color: var(--dark-text);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-menu-btn {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  color: var(--dark-text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+
+.header-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--dark-text);
+}
+
+.header-right {
+  display: none;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-datetime-mobile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.header-status-mobile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.status-text-mobile {
+  font-size: 11px;
+  color: var(--dark-text-secondary);
+}
+
+.header-time-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.header-date-mobile {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--dark-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.header-time-mobile {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--dark-text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
 
 .main-content {
   padding: 24px 28px 40px;
@@ -700,61 +797,49 @@ export default {
 
 @media (max-width: 768px) {
   .sidebar {
-    position: fixed;
-    bottom: 0;
-    top: auto;
-    left: 0;
-    right: 0;
-    width: 100%;
-    height: 64px;
-    flex-direction: row;
-    border-right: none;
-    border-top: 1px solid var(--dark-border);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
   }
 
-  .sidebar-brand,
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block;
+  }
+
   .sidebar-footer {
     display: none;
   }
 
-  .sidebar-nav {
-    flex-direction: row;
-    justify-content: space-around;
-    align-items: center;
-    padding: 0 8px;
-    gap: 0;
-  }
-
-  .nav-item {
-    flex-direction: column;
-    gap: 2px;
-    padding: 6px 4px;
-    border-radius: 8px;
-  }
-
-  .nav-label {
-    font-size: 10px;
-  }
-
   .main-area {
     margin-left: 0;
-    padding-bottom: 64px;
   }
 
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
+  .header-menu-btn {
+    display: flex;
+  }
+
+  .header-right {
+    display: flex;
   }
 
   .main-header {
-    padding: 16px 16px;
+    padding: 12px 16px;
+  }
+
+  .header-title {
+    font-size: 16px;
   }
 
   .main-content {
     padding: 16px 16px 32px;
   }
 
-  .header-time {
-    font-size: 24px;
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
+
 </style>

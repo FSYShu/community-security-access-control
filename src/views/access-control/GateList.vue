@@ -37,7 +37,7 @@
           </transition>
         </div>
         <div class="filter-spacer"></div>
-        <button class="add-btn" @click="showAddDialog = true">
+        <button class="add-btn" @click="openAddDialog">
           <i class="el-icon-plus"></i>
           <span>新增终端</span>
         </button>
@@ -46,7 +46,7 @@
     <div class="dark-card">
       <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
         <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
-          <van-cell v-for="item in gateList" :key="item.id" is-link @click="goDetail(item)">
+          <van-cell v-for="item in gateList" :key="item.id" is-link @click="openEditDialog(item)">
             <template #title>
               <span>{{ item.gate_name }}</span>
               <van-tag :type="levelTagType(item.gate_level)" style="margin-left: 8px">{{ item.level_name || item.gate_level }}</van-tag>
@@ -63,7 +63,7 @@
       </van-pull-refresh>
     </div>
 
-    <el-dialog :visible.sync="showAddDialog" title="新增门禁终端" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog">
+    <el-dialog :visible.sync="showDialog" :title="dialogTitle" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetForm">
       <div class="form-grid">
         <div class="form-item">
           <label class="form-label">终端名称 <span class="form-required">*</span></label>
@@ -111,9 +111,9 @@
         </div>
       </div>
       <div class="form-footer">
-        <button class="form-btn form-btn-cancel" @click="showAddDialog = false">取消</button>
-        <button class="form-btn form-btn-primary" @click="onAddSubmit">
-          <i v-if="addLoading" class="el-icon-loading"></i>
+        <button class="form-btn form-btn-cancel" @click="showDialog = false">取消</button>
+        <button class="form-btn form-btn-primary" @click="onSubmit">
+          <i v-if="submitLoading" class="el-icon-loading"></i>
           确认
         </button>
       </div>
@@ -122,7 +122,7 @@
 </template>
 
 <script>
-import { getGateList, addGate } from '@/api/property'
+import { getGateList, addGate, updateGate, getGateDetail } from '@/api/property'
 
 export default {
   name: 'GateListPage',
@@ -139,8 +139,10 @@ export default {
       showStatusDropdown: false,
       levelOptions: ['全部', '社区大门', '单元门', '危险防护区域'],
       statusOptions: ['全部', '在线', '离线', '维护中'],
-      showAddDialog: false,
-      addLoading: false,
+      showDialog: false,
+      isEdit: false,
+      editId: null,
+      submitLoading: false,
       showFormLevelDropdown: false,
       showFormStatusDropdown: false,
       form: { gate_name: '', location: '', gate_level: '', building_unit: '', push_key: '', status: 'online' },
@@ -157,6 +159,9 @@ export default {
     }
   },
   computed: {
+    dialogTitle () {
+      return this.isEdit ? '编辑门禁终端' : '新增门禁终端'
+    },
     formLevelLabel () {
       const opt = this.formLevelOptions.find(o => o.value === this.form.gate_level)
       return opt ? opt.text : ''
@@ -225,29 +230,62 @@ export default {
       const map = { community_gate: 'primary', unit_door: 'success', dangerous_area: 'danger' }
       return map[level] || 'default'
     },
-    goDetail (item) { this.$router.push(`/access-control/edit/${item.id}`) },
-    async onAddSubmit () {
+    resetForm () {
+      this.form = { gate_name: '', location: '', gate_level: '', building_unit: '', push_key: '', status: 'online' }
+      this.isEdit = false
+      this.editId = null
+      this.showFormLevelDropdown = false
+      this.showFormStatusDropdown = false
+    },
+    openAddDialog () {
+      this.resetForm()
+      this.showDialog = true
+    },
+    async openEditDialog (item) {
+      this.resetForm()
+      this.isEdit = true
+      this.editId = item.id
+      try {
+        const res = await getGateDetail(item.id)
+        const d = res.data
+        this.form.gate_name = d.gate_name || ''
+        this.form.location = d.location || ''
+        this.form.gate_level = d.gate_level || ''
+        this.form.building_unit = d.building_unit || ''
+        this.form.push_key = d.push_key || ''
+        this.form.status = d.status || 'online'
+      } catch (e) {
+        this.$toast.fail('加载终端信息失败')
+      }
+      this.showDialog = true
+    },
+    async onSubmit () {
       if (!this.form.gate_name || !this.form.location || !this.form.gate_level) {
         return this.$message.warning('请填写必填项')
       }
-      this.addLoading = true
+      this.submitLoading = true
       try {
-        await addGate({
+        const data = {
           gate_name: this.form.gate_name,
           location: this.form.location,
           gate_level: this.form.gate_level,
           building_unit: this.form.building_unit,
           push_key: this.form.push_key,
           status: this.form.status
-        })
-        this.$message.success('新增成功')
-        this.showAddDialog = false
-        this.form = { gate_name: '', location: '', gate_level: '', building_unit: '', push_key: '', status: 'online' }
+        }
+        if (this.isEdit) {
+          await updateGate(this.editId, data)
+          this.$message.success('保存成功')
+        } else {
+          await addGate(data)
+          this.$message.success('新增成功')
+        }
+        this.showDialog = false
         this.onRefresh()
       } catch (e) {
-        this.$message.error('新增失败')
+        this.$message.error(this.isEdit ? '保存失败' : '新增失败')
       }
-      this.addLoading = false
+      this.submitLoading = false
     }
   }
 }
@@ -478,5 +516,4 @@ export default {
 .dark-dialog .el-dialog__body {
   padding: 20px;
 }
-
 </style>

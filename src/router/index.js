@@ -40,18 +40,7 @@ const routes = [
     meta: { title: '门禁终端管理', requiresAuth: true, roles: ['admin'] }
   },
   {
-    path: '/access-control/edit',
-    name: 'GateEdit',
-    component: () => import('@/views/access-control/GateEdit.vue'),
-    meta: { title: '编辑门禁终端', requiresAuth: true, roles: ['admin'] }
-  },
-  {
-    path: '/access-control/edit/:id',
-    name: 'GateEditById',
-    component: () => import('@/views/access-control/GateEdit.vue'),
-    meta: { title: '编辑门禁终端', requiresAuth: true, roles: ['admin'] }
-  },
-  {
+
     path: '/access-control/permission/:id',
     name: 'GatePermission',
     component: () => import('@/views/access-control/GatePermission.vue'),
