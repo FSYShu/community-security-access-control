@@ -4,7 +4,7 @@
 import request from '@/utils/request'
 
 /** 提交人脸识别通行请求 */
-export function submitFacePass(data) {
+export function submitFacePass (data) {
   return request({
     url: '/face/pass',
     method: 'post',
@@ -13,7 +13,7 @@ export function submitFacePass(data) {
 }
 
 /** 获取通行记录列表 */
-export function getPassRecords(params) {
+export function getPassRecords (params) {
   return request({
     url: '/face/records',
     method: 'get',
@@ -22,7 +22,7 @@ export function getPassRecords(params) {
 }
 
 /** 获取人脸信息列表 */
-export function getFaceList(params) {
+export function getFaceList (params) {
   return request({
     url: '/face/list',
     method: 'get',
@@ -31,7 +31,7 @@ export function getFaceList(params) {
 }
 
 /** 新增人脸信息 */
-export function addFace(data) {
+export function addFace (data) {
   return request({
     url: '/face/add',
     method: 'post',
@@ -40,7 +40,7 @@ export function addFace(data) {
 }
 
 /** 更新人脸信息 */
-export function updateFace(id, data) {
+export function updateFace (id, data) {
   return request({
     url: `/face/${id}`,
     method: 'put',
@@ -49,7 +49,7 @@ export function updateFace(id, data) {
 }
 
 /** 删除人脸信息 */
-export function deleteFace(id) {
+export function deleteFace (id) {
   return request({
     url: `/face/${id}`,
     method: 'delete'
@@ -57,10 +57,30 @@ export function deleteFace(id) {
 }
 
 /** 申请访客临时授权 */
-export function applyVisitorAuth(data) {
+export function applyVisitorAuth (data) {
   return request({
     url: '/face/visitor-auth',
     method: 'post',
     data
+  })
+}
+
+/** 人脸注册 */
+export function registerFace (data) {
+  return request({
+    url: '/face/face-register',
+    method: 'post',
+    data,
+    timeout: 60000
+  })
+}
+
+/** 人脸识别测试 */
+export function testFace (data) {
+  return request({
+    url: '/face/test',
+    method: 'post',
+    data,
+    timeout: 60000
   })
 }

@@ -4,7 +4,7 @@
 import request from '@/utils/request'
 
 /** 获取告警列表 */
-export function getAlarmList(params) {
+export function getAlarmList (params) {
   return request({
     url: '/alarm/list',
     method: 'get',
@@ -13,7 +13,7 @@ export function getAlarmList(params) {
 }
 
 /** 获取告警详情 */
-export function getAlarmDetail(id) {
+export function getAlarmDetail (id) {
   return request({
     url: `/alarm/${id}`,
     method: 'get'
@@ -21,7 +21,7 @@ export function getAlarmDetail(id) {
 }
 
 /** 处置告警 */
-export function handleAlarm(id, data) {
+export function handleAlarm (id, data) {
   return request({
     url: `/alarm/${id}/handle`,
     method: 'put',
@@ -30,7 +30,7 @@ export function handleAlarm(id, data) {
 }
 
 /** 导出告警日志 */
-export function exportAlarmLog(params) {
+export function exportAlarmLog (params) {
   return request({
     url: '/alarm/export',
     method: 'get',

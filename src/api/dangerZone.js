@@ -4,7 +4,7 @@
 import request from '@/utils/request'
 
 /** 获取禁区列表 */
-export function getDangerZoneList(params) {
+export function getDangerZoneList (params) {
   return request({
     url: '/danger-zone/list',
     method: 'get',
@@ -13,7 +13,7 @@ export function getDangerZoneList(params) {
 }
 
 /** 新增禁区 */
-export function addDangerZone(data) {
+export function addDangerZone (data) {
   return request({
     url: '/danger-zone/add',
     method: 'post',
@@ -22,7 +22,7 @@ export function addDangerZone(data) {
 }
 
 /** 更新禁区配置 */
-export function updateDangerZone(id, data) {
+export function updateDangerZone (id, data) {
   return request({
     url: `/danger-zone/${id}`,
     method: 'put',
@@ -31,7 +31,7 @@ export function updateDangerZone(id, data) {
 }
 
 /** 删除禁区 */
-export function deleteDangerZone(id) {
+export function deleteDangerZone (id) {
   return request({
     url: `/danger-zone/${id}`,
     method: 'delete'
