@@ -11,25 +11,23 @@ class User(db.Model):
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    username = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    real_name = db.Column(db.String(50), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default='owner')  # owner/admin/guard
-    phone = db.Column(db.String(20), unique=True, nullable=True)
-    status = db.Column(db.String(20), default='active')  # active/disabled
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    username = db.Column(db.Text, unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.Text, nullable=False)
+    real_name = db.Column(db.Text, nullable=False)
+    role = db.Column(db.Text, nullable=False, default='owner')
+    phone = db.Column(db.Text, unique=True, nullable=True)
+    status = db.Column(db.Text, default='active')
+    created_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
+    updated_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat(),
+                           onupdate=lambda: datetime.utcnow().isoformat())
 
     def set_password(self, password):
-        """设置密码哈希"""
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
-        """校验密码"""
         return check_password_hash(self.password_hash, password)
 
     def to_dict(self):
-        """转换为字典"""
         return {
             'id': self.id,
             'username': self.username,
@@ -37,5 +35,5 @@ class User(db.Model):
             'role': self.role,
             'phone': self.phone,
             'status': self.status,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at
         }
