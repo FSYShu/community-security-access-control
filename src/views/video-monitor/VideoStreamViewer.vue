@@ -34,7 +34,7 @@
         />
       </div>
       <div v-if="streamError" class="stream-error-overlay">
-        <van-icon name="warning-o" size="40" :style="{ color: 'var(--dark-orange)' }" />
+        <i class="el-icon-warning-outline" style="font-size:40px;color:var(--dark-orange)"></i>
         <p class="error-text">{{ statusText }}</p>
         <p class="retry-text" v-if="autoRetrying">自动重连中（第{{ retryCount }}次）...</p>
         <van-button size="small" type="info" @click="manualRefresh">立即重试</van-button>

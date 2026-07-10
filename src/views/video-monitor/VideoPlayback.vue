@@ -27,8 +27,8 @@
               <span class="file-meta">{{ file.duration_text }} | {{ file.file_size_text }}</span>
             </template>
             <div class="file-actions">
-              <van-icon name="delete-o" size="20" :style="{ color: 'var(--dark-danger)' }" class="action-icon" @click.stop="confirmDelete(file)" />
-              <van-icon name="play-circle-o" size="20" :style="{ color: 'var(--dark-info)' }" />
+              <i class="el-icon-delete action-icon" style="font-size:20px;color:var(--dark-danger)" @click.stop="confirmDelete(file)"></i>
+              <i class="el-icon-video-play" style="font-size:20px;color:var(--dark-info)"></i>
             </div>
           </van-cell>
         </van-collapse-item>
@@ -55,7 +55,7 @@
           ></video>
         </div>
         <div v-if="playerError" class="player-error">
-          <van-icon name="warning-o" size="24" />
+          <i class="el-icon-warning-outline" style="font-size:24px"></i>
           <p>{{ playerError }}</p>
         </div>
       </div>
