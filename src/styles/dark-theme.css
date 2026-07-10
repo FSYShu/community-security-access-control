@@ -216,10 +216,198 @@
   color: var(--dark-text) !important;
 }
 
+.van-picker__cancel {
+  color: var(--dark-text-secondary) !important;
+}
+
+.van-picker__confirm {
+  color: var(--dark-accent-light) !important;
+}
+
+.van-picker-column__item {
+  color: var(--dark-text-secondary) !important;
+}
+
+.van-picker-column__item--selected {
+  color: var(--dark-text) !important;
+}
+
+.van-picker__mask {
+  background-image: linear-gradient(180deg, rgba(10,10,10,0.9), rgba(10,10,10,0.4), rgba(10,10,10,0.9)) !important;
+}
+
+.van-picker__frame {
+  border-color: var(--dark-border-field) !important;
+}
+
 .van-picker-item {
   color: var(--dark-text-secondary) !important;
 }
 
 .van-picker-item--selected {
   color: var(--dark-text) !important;
+}
+
+.el-dialog__wrapper {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.el-dialog {
+  background: #0A0A0A !important;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
+
+.el-dialog__header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.el-dialog__title {
+  color: #EDEDEF !important;
+}
+
+.el-dialog__headerbtn .el-dialog__close {
+  color: #8A8F98 !important;
+}
+
+.el-dialog__footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.el-form-item__label {
+  color: #8A8F98 !important;
+}
+
+.el-form-item {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.el-form-item::before,
+.el-form-item::after {
+  display: none !important;
+  background: none !important;
+}
+
+.el-input__inner {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #EDEDEF !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  outline: none !important;
+}
+
+.el-input {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.el-input::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.el-input::-webkit-scrollbar-track-piece {
+  background: transparent !important;
+}
+
+.el-input::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+.el-input::before,
+.el-input::after {
+  display: none !important;
+  background: none !important;
+  border: none !important;
+  content: none !important;
+}
+
+.el-input__suffix {
+  background: transparent !important;
+}
+
+.el-select .el-input .el-input__inner {
+  border-radius: 4px !important;
+}
+
+.el-select .el-input.is-focus .el-input__inner {
+  border-color: #818CF8 !important;
+}
+
+.el-input__inner::placeholder {
+  color: #6b6b6b !important;
+}
+
+.el-input__inner:focus {
+  border-color: #818CF8 !important;
+}
+
+.el-select .el-input .el-select__caret {
+  color: #8A8F98 !important;
+}
+
+.el-select-dropdown {
+  background: #0A0A0A !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+.el-select-dropdown .popper__arrow,
+.el-select-dropdown .popper__arrow::after {
+  border-bottom-color: #0A0A0A !important;
+  border-top-color: #0A0A0A !important;
+}
+
+.el-popper[x-placement^=bottom] .popper__arrow {
+  border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.el-popper[x-placement^=bottom] .popper__arrow::after {
+  border-bottom-color: #0A0A0A !important;
+}
+
+.el-popper[x-placement^=top] .popper__arrow {
+  border-top-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.el-popper[x-placement^=top] .popper__arrow::after {
+  border-top-color: #0A0A0A !important;
+}
+
+.el-select-dropdown__item {
+  color: #8A8F98 !important;
+}
+
+.el-select-dropdown__item:hover,
+.el-select-dropdown__item.hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #EDEDEF !important;
+}
+
+.el-select-dropdown__item.selected {
+  color: #818CF8 !important;
+}
+
+.el-button--default {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #EDEDEF !important;
+}
+
+.el-button--default:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #EDEDEF !important;
+}
+
+.el-button--primary {
+  background: #6366F1 !important;
+  border-color: #6366F1 !important;
+}
+
+.el-button--primary:hover {
+  background: #818CF8 !important;
+  border-color: #818CF8 !important;
 }
