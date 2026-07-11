@@ -51,10 +51,7 @@
               <span class="type-tag" :class="levelTagClass(item.gate_level)">{{ item.level_name || item.gate_level }}</span>
               <span class="cell-name">{{ item.gate_name }}</span>
             </template>
-            <template #label>
-              <div>{{ item.location }}</div>
-              <div v-if="item.building_unit">楼栋/单元: {{ item.building_unit }}</div>
-            </template>
+
             <template #right-icon>
               <span class="cell-status">
                 <span class="status-dot" :class="item.status === 'online' ? 'dot-online' : 'dot-offline'"></span>
@@ -228,7 +225,7 @@ export default {
       this.loading = false
       this.refreshing = false
     },
-    onRefresh () { this.page = 1; this.finished = false; this.loadData() },
+    onRefresh () { this.page = 1; this.finished = false; this.gateList = []; this.loading = true; this.loadData() },
     levelTagClass (level) {
       const map = { community_gate: 'tag-community', unit_door: 'tag-unit', dangerous_area: 'tag-danger' }
       return map[level] || ''
