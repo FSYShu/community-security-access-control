@@ -40,11 +40,42 @@
     <el-dialog :visible.sync="showAddDialog" title="新增人脸" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetAddForm">
       <div class="form-grid">
         <div class="form-item">
+          <label class="form-label">录入方式</label>
+          <div class="mode-tabs">
+            <div class="mode-tab" :class="{ active: addMode === 'camera' }" @click="switchAddMode('camera')">
+              <i class="el-icon-camera"></i>
+              <span>摄像头拍照</span>
+            </div>
+            <div class="mode-tab" :class="{ active: addMode === 'photo' }" @click="switchAddMode('photo')">
+              <i class="el-icon-picture"></i>
+              <span>照片上传</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="addMode === 'camera'" class="form-item">
           <label class="form-label">摄像头画面</label>
           <div class="camera-area">
             <video ref="addVideo" class="camera-preview" autoplay playsinline></video>
             <canvas ref="addCanvas" style="display: none;"></canvas>
           </div>
+        </div>
+        <div v-if="addMode === 'photo'" class="form-item">
+          <label class="form-label">上传照片</label>
+          <div class="upload-area" @click="triggerPhotoUpload">
+            <div v-if="!addPhotoPreview" class="upload-placeholder">
+              <i class="el-icon-plus upload-icon"></i>
+              <span class="upload-text">点击上传人脸照片</span>
+              <span class="upload-hint">支持 JPG/PNG 格式</span>
+            </div>
+            <div v-else class="upload-preview-wrap">
+              <img :src="addPhotoPreview" class="upload-preview-img" />
+              <div class="upload-replace">
+                <i class="el-icon-refresh"></i>
+                <span>更换照片</span>
+              </div>
+            </div>
+          </div>
+          <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/jpg" style="display: none;" @change="onPhotoSelected" />
         </div>
         <div class="form-item">
           <label class="form-label">姓名 <span class="form-required">*</span></label>
@@ -138,6 +169,9 @@ export default {
       testResult: null,
       addStream: null,
       testStream: null,
+      addMode: 'camera',
+      addPhotoPreview: null,
+      addPhotoBase64: null,
       addForm: { personName: '', personType: 'owner' },
       typeOptions: [
         { text: '业主', value: 'owner' },
@@ -215,12 +249,50 @@ export default {
     resetAddForm () {
       this.addForm = { personName: '', personType: 'owner' }
       this.showTypeDropdown = false
+      this.addMode = 'camera'
+      this.addPhotoPreview = null
+      this.addPhotoBase64 = null
       this.stopAddCamera()
     },
     openAddDialog () {
       this.resetAddForm()
       this.showAddDialog = true
-      this.$nextTick(() => this.startAddCamera())
+      this.$nextTick(() => {
+        if (this.addMode === 'camera') this.startAddCamera()
+      })
+    },
+    switchAddMode (mode) {
+      if (this.addMode === mode) return
+      this.addMode = mode
+      if (mode === 'camera') {
+        this.addPhotoPreview = null
+        this.addPhotoBase64 = null
+        this.$nextTick(() => this.startAddCamera())
+      } else {
+        this.stopAddCamera()
+      }
+    },
+    triggerPhotoUpload () {
+      this.$refs.photoInput && this.$refs.photoInput.click()
+    },
+    onPhotoSelected (e) {
+      const file = e.target.files && e.target.files[0]
+      if (!file) return
+      if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
+        this.$message.warning('仅支持 JPG/PNG 格式')
+        return
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        this.$message.warning('图片大小不能超过5MB')
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        this.addPhotoPreview = ev.target.result
+        this.addPhotoBase64 = ev.target.result.split(',')[1]
+      }
+      reader.readAsDataURL(file)
+      e.target.value = ''
     },
     async startAddCamera () {
       try {
@@ -240,16 +312,24 @@ export default {
       if (!this.addForm.personName) {
         return this.$message.warning('请输入姓名')
       }
-      const video = this.$refs.addVideo
-      const canvas = this.$refs.addCanvas
-      if (!video || !video.videoWidth) {
-        return this.$message.warning('摄像头未就绪')
+      let base64Image = null
+      if (this.addMode === 'camera') {
+        const video = this.$refs.addVideo
+        const canvas = this.$refs.addCanvas
+        if (!video || !video.videoWidth) {
+          return this.$message.warning('摄像头未就绪')
+        }
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(video, 0, 0)
+        base64Image = canvas.toDataURL('image/jpeg').split(',')[1]
+      } else {
+        if (!this.addPhotoBase64) {
+          return this.$message.warning('请上传人脸照片')
+        }
+        base64Image = this.addPhotoBase64
       }
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(video, 0, 0)
-      const base64Image = canvas.toDataURL('image/jpeg').split(',')[1]
       this.addLoading = true
       try {
         const res = await registerFace({
@@ -510,6 +590,106 @@ export default {
   width: 100%;
   display: block;
   object-fit: cover;
+}
+
+.mode-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--dark-text);
+}
+
+.mode-tab.active {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--dark-accent-light);
+  color: var(--dark-accent-light);
+}
+
+.upload-area {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 200px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.upload-area:hover {
+  border-color: var(--dark-accent-light);
+}
+
+.upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  gap: 8px;
+}
+
+.upload-icon {
+  font-size: 32px;
+  color: var(--dark-text-muted);
+}
+
+.upload-text {
+  font-size: 14px;
+  color: var(--dark-text-secondary);
+}
+
+.upload-hint {
+  font-size: 12px;
+  color: var(--dark-text-muted);
+}
+
+.upload-preview-wrap {
+  position: relative;
+  line-height: 0;
+}
+
+.upload-preview-img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  display: block;
+}
+
+.upload-replace {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .filter-select {
