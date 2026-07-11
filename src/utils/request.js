@@ -99,12 +99,18 @@ service.interceptors.response.use(
     }
     const status = error.response ? error.response.status : 0
     if (status === 429) {
-      const retryAfter = error.response.headers['retry-after'] || 2
-      return new Promise(function (resolve) {
-        setTimeout(function () {
-          resolve(service(error.config))
-        }, retryAfter * 1000)
-      })
+      const config = error.config
+      config.__retryCount = config.__retryCount || 0
+      if (config.__retryCount < 2) {
+        config.__retryCount++
+        return new Promise(function (resolve) {
+          setTimeout(function () {
+            resolve(service(config))
+          }, 2000)
+        })
+      }
+      Toast.fail('请求过于频繁，请稍后再试')
+      return Promise.reject(error)
     }
     const messageMap = {
       400: '请求参数错误',
