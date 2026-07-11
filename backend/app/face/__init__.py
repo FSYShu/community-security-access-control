@@ -136,6 +136,8 @@ def delete_face(face_id):
         except Exception:
             pass
 
+    _remove_from_registered_faces(face.person_name, face.person_type)
+
     db.session.delete(face)
     db.session.commit()
     log_audit(operation_type='delete_face', operation_content=f'删除人脸: {face_id}')
@@ -322,3 +324,23 @@ def _save_face_image(face_image_base64, person_type, person_name):
     except Exception as e:
         logger.error(f'Save face image error: {str(e)}')
         return ''
+
+
+def _remove_from_registered_faces(person_name, person_type):
+    """从registered_faces.json中删除匹配的人脸记录"""
+    try:
+        from flask import current_app
+        faces_file = current_app.config.get('REGISTERED_FACES_FILE')
+        if not faces_file:
+            faces_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'registered_faces.json')
+        if not os.path.exists(faces_file):
+            return
+        with open(faces_file, 'r', encoding='utf-8') as f:
+            registered = json.load(f)
+        original_len = len(registered)
+        registered = [r for r in registered if not (r.get('person_name') == person_name and r.get('person_type') == person_type)]
+        if len(registered) < original_len:
+            with open(faces_file, 'w', encoding='utf-8') as f:
+                json.dump(registered, f, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f'Remove registered face error: {str(e)}')
