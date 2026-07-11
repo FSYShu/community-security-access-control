@@ -23,51 +23,22 @@ def generate_frames_with_detection(stream_id):
     return _do_generate_frames_with_detection(stream_url, max_width)
 
 
-def generate_frames_with_detection_url(stream_url, frame_skip=5, max_width=640, detect_width=320):
-    return _do_generate_frames_with_detection(stream_url, max_width)
+def generate_frames_with_detection_url(stream_url, frame_skip=5, max_width=640, detect_width=320, cap=None, first_frame=None):
+    return _do_generate_frames_with_detection(stream_url, max_width, cap=cap, first_frame=first_frame)
 
 
-def _do_generate_frames_with_detection(stream_url, max_width=640):
-    cap_result = {'cap': None, 'opened': False}
-    cap_error = threading.Event()
-
-    def try_open():
-        try:
-            cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
-            cap_result['cap'] = cap
-            cap_result['opened'] = cap.isOpened()
-        except Exception:
-            cap_result['opened'] = False
-        cap_error.set()
-
-    t = threading.Thread(target=try_open, daemon=True)
-    t.start()
-    placeholder_size = (max_width, int(max_width * 9 / 16))
-    if not cap_error.wait(timeout=8):
-        from . import _generate_placeholder
-        placeholder = _generate_placeholder('RTMP连接超时', placeholder_size)
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
+def _do_generate_frames_with_detection(stream_url, max_width=640, cap=None, first_frame=None):
+    if cap is None:
+        from . import _try_connect_rtmp
+        cap, first_frame = _try_connect_rtmp(stream_url)
+    if cap is None:
         return
-
-    if not cap_result['opened']:
-        from . import _generate_placeholder
-        placeholder = _generate_placeholder('RTMP连接失败', placeholder_size)
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
-        return
-
-    cap = cap_result['cap']
 
     try:
         recognizer = FaceRecognizer()
     except Exception as e:
         logger.error('FaceRecognizer init failed: {}'.format(str(e)))
         cap.release()
-        from . import _generate_placeholder
-        placeholder = _generate_placeholder('人脸识别初始化失败', placeholder_size)
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
         return
 
     try:

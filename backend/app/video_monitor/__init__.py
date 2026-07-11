@@ -21,9 +21,9 @@ video_monitor_bp = Blueprint('video_monitor', __name__)
 logger = logging.getLogger(__name__)
 
 
-def generate_frames(stream_url, frame_skip=3, max_width=640):
+def _try_connect_rtmp(stream_url, timeout=8):
     import threading
-    cap_result = {'cap': None, 'opened': False}
+    cap_result = {'cap': None, 'opened': False, 'error': None}
     cap_error = threading.Event()
 
     def try_open():
@@ -31,38 +31,39 @@ def generate_frames(stream_url, frame_skip=3, max_width=640):
             cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
             cap_result['cap'] = cap
             cap_result['opened'] = cap.isOpened()
-        except Exception:
+        except Exception as e:
             cap_result['opened'] = False
+            cap_result['error'] = str(e)
         cap_error.set()
 
     t = threading.Thread(target=try_open, daemon=True)
     t.start()
-    if not cap_error.wait(timeout=8):
+    if not cap_error.wait(timeout=timeout):
         logger.error('Timeout opening RTMP stream: {}'.format(stream_url))
-        placeholder = _generate_placeholder('RTMP连接超时', (max_width, int(max_width * 9 / 16)))
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
-        return
+        return None, 'RTMP连接超时'
 
     if not cap_result['opened']:
         logger.error('Failed to open RTMP stream: {}'.format(stream_url))
-        placeholder = _generate_placeholder('RTMP连接失败', (max_width, int(max_width * 9 / 16)))
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
-        return
+        return None, 'RTMP连接失败'
 
     cap = cap_result['cap']
-
     success, frame = cap.read()
     if not success or frame is None:
         logger.warning('Failed to read first frame from stream: {}'.format(stream_url))
         cap.release()
-        placeholder = _generate_placeholder('无法读取视频帧', (max_width, int(max_width * 9 / 16)))
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
+        return None, '无法读取视频帧'
+
+    return cap, frame
+
+
+def generate_frames(stream_url, frame_skip=3, max_width=640, cap=None, first_frame=None):
+    import threading
+    if cap is None:
+        cap, first_frame = _try_connect_rtmp(stream_url)
+    if cap is None:
         return
 
-    latest = {'frame': frame, 'lock': threading.Lock(), 'alive': True}
+    latest = {'frame': first_frame, 'lock': threading.Lock(), 'alive': True}
 
     def reader():
         while latest['alive']:
@@ -114,8 +115,11 @@ def video_feed(stream_id):
     frame_skip = config.get('VIDEO_FRAME_SKIP', 5)
     max_width = config.get('VIDEO_MAX_WIDTH', 640)
     try:
+        cap, first_frame = _try_connect_rtmp(stream_url)
+        if cap is None:
+            return jsonify({'error': 'RTMP连接失败', 'code': 503}), 503
         return Response(
-            generate_frames(stream_url, frame_skip=frame_skip, max_width=max_width),
+            generate_frames(stream_url, frame_skip=frame_skip, max_width=max_width, cap=cap, first_frame=first_frame),
             mimetype='multipart/x-mixed-replace; boundary=frame'
         )
     except Exception as e:
@@ -137,8 +141,11 @@ def video_feed_by_gate(gate_id):
     frame_skip = config.get('VIDEO_FRAME_SKIP', 5)
     max_width = config.get('VIDEO_MAX_WIDTH', 640)
     try:
+        cap, first_frame = _try_connect_rtmp(stream_url)
+        if cap is None:
+            return jsonify({'error': 'RTMP连接失败', 'code': 503}), 503
         return Response(
-            generate_frames(stream_url, frame_skip=frame_skip, max_width=max_width),
+            generate_frames(stream_url, frame_skip=frame_skip, max_width=max_width, cap=cap, first_frame=first_frame),
             mimetype='multipart/x-mixed-replace; boundary=frame'
         )
     except Exception as e:
@@ -161,9 +168,12 @@ def video_feed_by_gate_with_detection(gate_id):
     max_width = config.get('VIDEO_MAX_WIDTH', 640)
     detect_width = config.get('VIDEO_DETECT_WIDTH', 320)
     try:
+        cap, first_frame = _try_connect_rtmp(stream_url)
+        if cap is None:
+            return jsonify({'error': 'RTMP连接失败', 'code': 503}), 503
         from .face_detection_stream import generate_frames_with_detection_url
         return Response(
-            generate_frames_with_detection_url(stream_url, frame_skip=frame_skip, max_width=max_width, detect_width=detect_width),
+            generate_frames_with_detection_url(stream_url, frame_skip=frame_skip, max_width=max_width, detect_width=detect_width, cap=cap, first_frame=first_frame),
             mimetype='multipart/x-mixed-replace; boundary=frame'
         )
     except Exception as e:
