@@ -84,7 +84,8 @@ service.interceptors.response.use(
   response => {
     const res = response.data
     if (res.code !== 0) {
-      Message({ message: res.message || '请求失败', type: 'error' })
+      const msgType = (res.code === 409 && res.message && res.message.includes('已被')) ? 'warning' : 'error'
+      Message({ message: res.message || '请求失败', type: msgType })
       if (res.code === 401) {
         handleUnauthorized()
       }

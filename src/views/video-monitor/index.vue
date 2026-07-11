@@ -97,7 +97,7 @@ export default {
       this.faceDetectionEnabled = !this.faceDetectionEnabled
       this.$message({
         message: this.faceDetectionEnabled ? '人脸检测已开启：绿色框=已注册人员，红色框=陌生人' : '人脸检测已关闭',
-        type: 'info'
+        type: this.faceDetectionEnabled ? 'success' : 'warning'
       })
     },
     handleRefresh () {

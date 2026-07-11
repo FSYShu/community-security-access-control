@@ -345,11 +345,9 @@ export default {
           this.onRefresh()
         }
       } catch (err) {
-        const msg = (err && err.message) || '录入失败'
-        if (msg.includes('已被') && msg.includes('使用')) {
-          this.$message.warning(msg)
-        } else {
-          this.$message.error(msg)
+        const msg = (err && err.message) || ''
+        if (!msg.includes('已被') || !msg.includes('使用')) {
+          this.$message.error('录入失败')
         }
       } finally {
         this.addLoading = false
