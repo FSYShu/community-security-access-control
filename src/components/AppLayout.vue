@@ -76,8 +76,11 @@
 </template>
 
 <script>
+import navItemsMixin from '@/mixins/navItems'
+
 export default {
   name: 'AppLayout',
+  mixins: [navItemsMixin],
   props: {
     pageTitle: {
       type: String,
@@ -93,19 +96,7 @@ export default {
       currentTime: '',
       currentDate: '',
       timeTimer: null,
-      sidebarOpen: false,
-      navItems: [
-        { label: '安防总览', icon: 'el-icon-monitor', path: '/dashboard' },
-        { label: '人脸管理', icon: 'el-icon-user', path: '/face-management' },
-        { label: '门禁管理', icon: 'el-icon-lock', path: '/access-control' },
-        { label: '禁区检测', icon: 'el-icon-warning-outline', path: '/danger-zone' },
-        { label: '实时监控', icon: 'el-icon-view', path: '/video-monitor' },
-        { label: '历史回放', icon: 'el-icon-video-play', path: '/video-monitor/playback' },
-        { label: '告警中心', icon: 'el-icon-bell', path: '/alarm-center' },
-        { label: '安防日报', icon: 'el-icon-document', path: '/report' },
-        { label: '通行日志', icon: 'el-icon-notebook-2', path: '/property-admin/pass-logs' },
-        { label: '告警日志', icon: 'el-icon-tickets', path: '/property-admin/alarm-logs' }
-      ]
+      sidebarOpen: false
     }
   },
   computed: {
@@ -372,7 +363,8 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 28px;
+  padding: 0 28px;
+  height: 76px;
   background: var(--dark-bg-header);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -391,7 +383,7 @@ export default {
   height: 36px;
   border: none;
   background: rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--dark-text-secondary);
   font-size: 18px;
   cursor: pointer;
@@ -407,7 +399,8 @@ export default {
 }
 
 .header-right {
-  display: none;
+  visibility: hidden;
+  display: flex;
   align-items: center;
   gap: 16px;
 }
@@ -518,7 +511,7 @@ export default {
   }
 
   .header-right {
-    display: flex;
+    visibility: visible;
   }
 
   .main-area {
@@ -526,11 +519,7 @@ export default {
   }
 
   .main-header {
-    padding: 12px 16px;
-  }
-
-  .header-title {
-    font-size: 16px;
+    padding: 0 16px 0 20px;
   }
 
   .main-content {

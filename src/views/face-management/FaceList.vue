@@ -4,10 +4,12 @@
       <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
         <van-cell v-for="item in list" :key="item.id" :title="item.person_name" :label="typeMap[item.person_type] || item.person_type">
             <template #right-icon>
-              <van-tag :type="item.status === 'active' ? 'success' : 'danger'" style="margin-right:8px">
+              <span class="status-tag" :class="item.status === 'active' ? 'tag-active' : 'tag-inactive'">
                 {{ item.status === 'active' ? '启用' : '停用' }}
-              </van-tag>
-              <van-button type="danger" size="mini" plain @click="onDelete(item)">删除</van-button>
+              </span>
+              <button class="delete-btn" @click="onDelete(item)">
+                <i class="el-icon-delete"></i>
+              </button>
             </template>
           </van-cell>
       </van-list>
@@ -87,5 +89,42 @@ export default {
 .face-list {
   padding: 12px;
 }
-
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-right: 8px;
+  border: 1px solid;
+}
+.tag-active {
+  color: var(--dark-success-green);
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.08);
+}
+.tag-inactive {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+}
+.delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 6px;
+  color: var(--dark-text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
+}
 </style>
