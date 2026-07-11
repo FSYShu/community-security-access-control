@@ -213,7 +213,9 @@ def face_register():
             if not reg_descriptor or len(reg_descriptor) != 128:
                 continue
             distance = np.linalg.norm(new_descriptor_np - np.array(reg_descriptor))
-            if distance < 0.4:
+            logger.info('Face duplicate check vs {}({}): distance={:.4f}'.format(
+                reg.get('person_name', ''), reg.get('person_type', ''), distance))
+            if distance < 0.6:
                 duplicate_name = reg.get('person_name', '')
                 break
 
@@ -227,7 +229,8 @@ def face_register():
                     if len(ef_descriptor) != 128:
                         continue
                     distance = np.linalg.norm(new_descriptor_np - np.array(ef_descriptor))
-                    if distance < 0.4:
+                    logger.info('Face duplicate check vs {}(db): distance={:.4f}'.format(ef.person_name, distance))
+                    if distance < 0.6:
                         duplicate_name = ef.person_name
                         break
                 except (json.JSONDecodeError, ValueError):
