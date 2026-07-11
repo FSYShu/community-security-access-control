@@ -206,6 +206,36 @@ def face_register():
             with open(faces_file, 'r', encoding='utf-8') as f:
                 registered = json.load(f)
 
+        duplicate_name = None
+        new_descriptor_np = np.array(encoding)
+        for reg in registered:
+            reg_descriptor = reg.get('face_descriptor', [])
+            if not reg_descriptor or len(reg_descriptor) != 128:
+                continue
+            distance = np.linalg.norm(new_descriptor_np - np.array(reg_descriptor))
+            if distance < 0.4:
+                duplicate_name = reg.get('person_name', '')
+                break
+
+        if not duplicate_name:
+            existing_faces = FaceInfo.query.filter_by(status='active').all()
+            for ef in existing_faces:
+                if not ef.face_feature:
+                    continue
+                try:
+                    ef_descriptor = json.loads(ef.face_feature)
+                    if len(ef_descriptor) != 128:
+                        continue
+                    distance = np.linalg.norm(new_descriptor_np - np.array(ef_descriptor))
+                    if distance < 0.4:
+                        duplicate_name = ef.person_name
+                        break
+                except (json.JSONDecodeError, ValueError):
+                    continue
+
+        if duplicate_name:
+            return error_response(message='人脸已存在，已注册为「{}」'.format(duplicate_name), code=409)
+
         from datetime import datetime
         new_id = max([r.get('id', 0) for r in registered], default=0) + 1
         new_record = {
