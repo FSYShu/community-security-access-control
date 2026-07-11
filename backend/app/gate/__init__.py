@@ -6,7 +6,7 @@ import json
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from app import db
+from app import db, limiter
 from app.models.gate import Gate
 from app.models.gate_level import GateLevel
 from app.models.pass_record import PassRecord
@@ -20,6 +20,7 @@ gate_bp = Blueprint('gate', __name__)
 
 @gate_bp.route('/list', methods=['GET'])
 @jwt_required()
+@limiter.exempt
 def get_gate_list():
     """获取门禁终端列表"""
     page = request.args.get('page', 1, type=int)
