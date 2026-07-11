@@ -79,6 +79,7 @@ def register_blueprints(app):
     from app.stream import stream_bp
     from app.visitor_auth import visitor_auth_bp
     from app.audit import audit_bp
+    from app.dashboard import dashboard_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(face_bp, url_prefix='/api/v1/face')
@@ -92,6 +93,7 @@ def register_blueprints(app):
     app.register_blueprint(stream_bp, url_prefix='/api/v1/stream')
     app.register_blueprint(visitor_auth_bp, url_prefix='/api/v1/visitor-auth')
     app.register_blueprint(audit_bp, url_prefix='/api/v1/audit')
+    app.register_blueprint(dashboard_bp, url_prefix='/api/v1/dashboard')
 
 
 def register_error_handlers(app):

@@ -9,7 +9,7 @@ import logging
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
-from app import db
+from app import db, limiter
 from app.models.face import FaceInfo
 from utils.response import success_response, error_response
 from utils.permissions import admin_required, owner_self_required
@@ -23,6 +23,7 @@ face_bp = Blueprint('face', __name__)
 
 @face_bp.route('/list', methods=['GET'])
 @jwt_required()
+@limiter.exempt
 def get_face_list():
     """获取人脸信息列表"""
     current_user = get_jwt_identity()
