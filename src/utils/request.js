@@ -119,7 +119,7 @@ service.interceptors.response.use(
       404: '请求资源不存在',
       500: '服务器内部错误'
     }
-    const message = messageMap[status] || '网络异常(' + status + ')'
+    const message = (error.response && error.response.data && error.response.data.message) || messageMap[status] || '网络异常(' + status + ')'
     Toast.fail(message)
 
     if (status === 401) {
