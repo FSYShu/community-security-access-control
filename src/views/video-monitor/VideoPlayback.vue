@@ -108,7 +108,7 @@ export default {
   },
   watch: {
     groupedRecordings () {
-      var groups = {}
+      const groups = {}
       this.groupedRecordings.forEach(function (_, idx) {
         groups[idx] = true
       })

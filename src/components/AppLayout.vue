@@ -30,15 +30,24 @@
         </div>
       </nav>
 
+      <div class="sidebar-nav-logout" @click="handleLogout">
+        <div class="nav-icon-wrap nav-icon-logout">
+          <i class="el-icon-switch-button"></i>
+        </div>
+        <span class="nav-label nav-label-logout">退出登录</span>
+      </div>
+
       <div class="sidebar-footer">
         <div class="sidebar-footer-top">
-          <div class="sidebar-datetime">
-            <span class="sidebar-date">{{ currentDate }}</span>
-            <span class="sidebar-time">{{ currentTime }}</span>
-          </div>
-          <div class="sidebar-status">
-            <span class="status-dot"></span>
-            <span class="status-text">运行中</span>
+          <div class="sidebar-info">
+            <div class="sidebar-datetime">
+              <span class="sidebar-date">{{ currentDate }}</span>
+              <span class="sidebar-time">{{ currentTime }}</span>
+            </div>
+            <div class="sidebar-status">
+              <span class="status-dot"></span>
+              <span class="status-text">运行中</span>
+            </div>
           </div>
           <div class="logout-wrap">
             <button class="logout-btn" @click="handleLogout">
@@ -265,6 +274,30 @@ export default {
   gap: 2px;
 }
 
+.sidebar-nav-logout {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin: 8px 10px 20px;
+}
+
+.sidebar-nav-logout:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.nav-icon-logout {
+  color: #ef4444;
+}
+
+.nav-label-logout {
+  color: #ef4444;
+  font-size: 14px;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -313,15 +346,22 @@ export default {
 
 .sidebar-footer-top {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-start;
+  justify-content: space-between;
+}
+
+.sidebar-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .sidebar-datetime {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  margin-bottom: 6px;
+
 }
 
 .sidebar-date {
@@ -563,6 +603,10 @@ export default {
 
   .sidebar-footer {
     display: none;
+  }
+
+  .sidebar-nav-logout {
+    display: flex;
   }
 
   .header-menu-btn {
