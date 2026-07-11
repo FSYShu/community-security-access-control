@@ -51,10 +51,10 @@ export default {
           require_secondary_auth: this.form.require_secondary_auth
         }
         await updateGatePermission(this.gateId, data)
-        this.$toast.success('配置保存成功')
+        this.$message.success('配置保存成功')
         this.$router.back()
       } catch (e) {
-        this.$toast.fail('配置保存失败，请检查JSON格式')
+        this.$message.error('配置保存失败，请检查JSON格式')
       }
     }
   }

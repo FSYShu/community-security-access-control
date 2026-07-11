@@ -37,6 +37,7 @@
         ref="singleViewer"
         :gate-list="gateList"
         :face-detection-enabled="faceDetectionEnabled"
+        :initial-gate-id="initialGateId"
       />
     </div>
 
@@ -50,6 +51,7 @@
           :ref="'gridViewer' + index"
           :gate-list="gateList"
           :face-detection-enabled="faceDetectionEnabled"
+          :initial-gate-id="index === 1 ? initialGateId : ''"
         />
       </div>
     </div>
@@ -71,10 +73,12 @@ export default {
       layoutMode: 'single',
       gateList: [],
       faceDetectionEnabled: false,
-      refreshing: false
+      refreshing: false,
+      initialGateId: ''
     }
   },
   created () {
+    this.initialGateId = this.$route.query.gate_id || ''
     this.fetchGateList()
   },
   methods: {
@@ -91,10 +95,9 @@ export default {
     },
     toggleFaceDetection () {
       this.faceDetectionEnabled = !this.faceDetectionEnabled
-      this.$toast({
+      this.$message({
         message: this.faceDetectionEnabled ? '人脸检测已开启：绿色框=已注册人员，红色框=陌生人' : '人脸检测已关闭',
-        position: 'top',
-        duration: 2500
+        type: 'info'
       })
     },
     handleRefresh () {

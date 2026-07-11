@@ -3,7 +3,7 @@
  * 统一处理请求拦截、响应拦截、错误处理
  */
 import axios from 'axios'
-import { Toast } from 'vant'
+import { Message } from 'element-ui'
 import router from '@/router'
 
 let isRedirecting = false
@@ -84,7 +84,7 @@ service.interceptors.response.use(
   response => {
     const res = response.data
     if (res.code !== 0) {
-      Toast.fail(res.message || '请求失败')
+      Message({ message: res.message || '请求失败', type: 'error' })
       if (res.code === 401) {
         handleUnauthorized()
       }
@@ -94,7 +94,9 @@ service.interceptors.response.use(
   },
   error => {
     if (error.message === '登录已过期，请重新登录') {
-      Toast.fail(error.message)
+      if (!isRedirecting) {
+        Message({ message: error.message, type: 'warning' })
+      }
       return Promise.reject(error)
     }
     const status = error.response ? error.response.status : 0
@@ -109,7 +111,7 @@ service.interceptors.response.use(
           }, 2000)
         })
       }
-      Toast.fail('请求过于频繁，请稍后再试')
+      Message({ message: '请求过于频繁，请稍后再试', type: 'warning' })
       return Promise.reject(error)
     }
     const messageMap = {
@@ -120,7 +122,7 @@ service.interceptors.response.use(
       500: '服务器内部错误'
     }
     const message = (error.response && error.response.data && error.response.data.message) || messageMap[status] || '网络异常(' + status + ')'
-    Toast.fail(message)
+    Message({ message: message, type: 'error' })
 
     if (status === 401) {
       handleUnauthorized()

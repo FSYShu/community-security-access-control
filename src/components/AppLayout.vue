@@ -31,13 +31,21 @@
       </nav>
 
       <div class="sidebar-footer">
-        <div class="sidebar-datetime">
-          <span class="sidebar-date">{{ currentDate }}</span>
-          <span class="sidebar-time">{{ currentTime }}</span>
-        </div>
-        <div class="sidebar-status">
-          <span class="status-dot"></span>
-          <span class="status-text">运行中</span>
+        <div class="sidebar-footer-top">
+          <div class="sidebar-datetime">
+            <span class="sidebar-date">{{ currentDate }}</span>
+            <span class="sidebar-time">{{ currentTime }}</span>
+          </div>
+          <div class="sidebar-status">
+            <span class="status-dot"></span>
+            <span class="status-text">运行中</span>
+          </div>
+          <div class="logout-wrap">
+            <button class="logout-btn" @click="handleLogout">
+              <i class="el-icon-switch-button"></i>
+            </button>
+            <span class="logout-text" @click="handleLogout">退出登录</span>
+          </div>
         </div>
       </div>
     </aside>
@@ -138,6 +146,17 @@ export default {
       if (window.innerWidth <= 768) {
         this.sidebarOpen = false
       }
+    },
+    handleLogout () {
+      this.$confirm('确定要退出登录吗？', '退出确认', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        customClass: 'dark-dialog'
+      }).then(() => {
+        localStorage.removeItem('access_token')
+        this.$store.commit('user/CLEAR_USER')
+        this.$router.push('/login')
+      }).catch(() => {})
     }
   }
 }
@@ -292,11 +311,17 @@ export default {
   border-top: 1px solid var(--dark-border-light);
 }
 
+.sidebar-footer-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .sidebar-datetime {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .sidebar-date {
@@ -332,6 +357,40 @@ export default {
   color: var(--dark-text-secondary);
 }
 
+.logout-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  align-self: center;
+}
+
+.logout-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.logout-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.logout-text {
+  font-size: 12px;
+  color: #ef4444;
+  cursor: pointer;
+}
+
 .sidebar-overlay {
   display: none;
   position: fixed;
@@ -363,7 +422,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: 0 16px;
   height: 76px;
   background: var(--dark-bg-header);
   backdrop-filter: blur(24px);
@@ -478,7 +537,7 @@ export default {
 }
 
 .main-content {
-  padding: 24px 28px 40px;
+  padding: 16px 16px 40px;
   flex: 1;
   overflow: auto;
 }
@@ -519,7 +578,7 @@ export default {
   }
 
   .main-header {
-    padding: 0 16px 0 20px;
+    padding: 0 16px;
   }
 
   .main-content {

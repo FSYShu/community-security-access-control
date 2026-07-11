@@ -20,7 +20,7 @@
 
 <script>
 import { getFaceList, deleteFace } from '@/api/face'
-import { Dialog, Toast } from 'vant'
+import { Dialog } from 'vant'
 
 export default {
   name: 'FaceList',
@@ -75,10 +75,10 @@ export default {
     async doDelete (id) {
       try {
         await deleteFace(id)
-        Toast.success('删除成功')
+        this.$message.success('删除成功')
         this.onRefresh()
       } catch (err) {
-        Toast.fail('删除失败')
+        this.$message.error('删除失败')
       }
     }
   }

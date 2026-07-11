@@ -24,7 +24,7 @@
 
 <script>
 import { registerFace } from '@/api/face'
-import { Toast } from 'vant'
+
 
 export default {
   name: 'FaceRegister',
@@ -48,7 +48,7 @@ export default {
         this.stream = await navigator.mediaDevices.getUserMedia({ video: true })
         this.$refs.video.srcObject = this.stream
       } catch (err) {
-        Toast.fail('无法访问摄像头，请检查权限设置')
+        this.$message.warning('无法访问摄像头，请检查权限设置')
       }
     },
     stopCamera () {
@@ -59,13 +59,13 @@ export default {
     },
     async captureAndRegister () {
       if (!this.personName) {
-        Toast.fail('请输入姓名')
+        return this.$message.warning('请输入姓名')
         return
       }
       const video = this.$refs.video
       const canvas = this.$refs.canvas
       if (!video.videoWidth) {
-        Toast.fail('摄像头未就绪')
+        return this.$message.warning('摄像头未就绪')
         return
       }
       canvas.width = video.videoWidth
@@ -81,12 +81,12 @@ export default {
           person_type: this.personType
         })
         if (res.code === 0) {
-          Toast.success('录入成功')
+          this.$message.success('录入成功')
           this.personName = ''
         }
       } catch (err) {
         if (!err.message || err.message === '请求失败') {
-          Toast.fail('录入失败')
+          this.$message.error('录入失败')
         }
       } finally {
         this.loading = false

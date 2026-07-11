@@ -68,7 +68,7 @@ export default {
         this.stream = await navigator.mediaDevices.getUserMedia({ video: true })
         this.$refs.video.srcObject = this.stream
       } catch (err) {
-        this.$toast.fail('无法访问摄像头，请检查权限设置')
+        this.$message.warning('无法访问摄像头，请检查权限设置')
       }
     },
     stopCamera () {
@@ -81,7 +81,7 @@ export default {
       const video = this.$refs.video
       const canvas = this.$refs.canvas
       if (!video.videoWidth) {
-        this.$toast.fail('摄像头未就绪')
+        return this.$message.warning('摄像头未就绪')
         return
       }
       canvas.width = video.videoWidth
@@ -97,11 +97,11 @@ export default {
         if (res.code === 0) {
           this.result = res.data
         } else {
-          this.$toast.fail(res.message || '识别失败')
+          this.$message.error(res.message || '识别失败')
         }
       } catch (error) {
         console.error('Face test error:', error)
-        this.$toast.fail('识别请求失败')
+        this.$message.error('识别请求失败')
       } finally {
         this.testing = false
       }

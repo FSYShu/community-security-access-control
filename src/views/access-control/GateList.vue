@@ -46,17 +46,23 @@
     <div class="dark-card">
       <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
         <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
-          <van-cell v-for="item in gateList" :key="item.id" is-link @click="openEditDialog(item)">
+          <van-cell v-for="item in gateList" :key="item.id" is-link @click="goToMonitor(item)">
             <template #title>
-              <span class="type-tag" :class="levelTagClass(item.gate_level)">{{ item.level_name || item.gate_level }}</span>
-              <span class="cell-name">{{ item.gate_name }}</span>
+              <div class="cell-title-row">
+                <span class="cell-status">
+                  <span class="status-dot" :class="item.status === 'online' ? 'dot-online' : 'dot-offline'"></span>
+                  <span class="status-label">{{ item.status === 'online' ? '在线' : '离线' }}</span>
+                </span>
+                <span class="cell-name">{{ item.gate_name }}</span>
+                <span class="type-tag" :class="levelTagClass(item.gate_level)">{{ item.level_name || item.gate_level }}</span>
+              </div>
             </template>
 
             <template #right-icon>
-              <span class="cell-status">
-                <span class="status-dot" :class="item.status === 'online' ? 'dot-online' : 'dot-offline'"></span>
-                <span class="status-label">{{ item.status === 'online' ? '在线' : '离线' }}</span>
-              </span>
+              <button class="edit-btn" @click.stop="openEditDialog(item)">
+                <i class="el-icon-edit"></i>
+                <span>编辑</span>
+              </button>
               <button class="delete-btn" @click.stop="onDelete(item)">
                 <i class="el-icon-delete"></i>
                 <span>删除</span>
@@ -88,10 +94,7 @@
           </div>
         </div>
         <div class="form-item">
-          <label class="form-label">楼栋/单元</label>
-          <input v-model="form.building_unit" class="form-input" placeholder="单元门层级必填" />
-        </div>
-        <div class="form-item">
+
           <label class="form-label">状态</label>
           <div class="filter-select" :class="{ 'is-open': showFormStatusDropdown }">
             <div class="select-trigger" @click="showFormStatusDropdown = !showFormStatusDropdown; showFormLevelDropdown = false">
@@ -106,7 +109,7 @@
           </div>
         </div>
         <div class="form-item">
-          <label class="form-label">推流码</label>
+          <label class="form-label">推流码 <span class="form-required">*</span></label>
           <input v-model="form.push_key" class="form-input" placeholder="请输入推流码" />
         </div>
       </div>
@@ -226,6 +229,9 @@ export default {
       this.refreshing = false
     },
     onRefresh () { this.page = 1; this.finished = false; this.gateList = []; this.loading = true; this.loadData() },
+    goToMonitor (item) {
+      this.$router.push({ path: '/video-monitor', query: { gate_id: item.id } })
+    },
     levelTagClass (level) {
       const map = { community_gate: 'tag-community', unit_door: 'tag-unit', dangerous_area: 'tag-danger' }
       return map[level] || ''
@@ -273,12 +279,12 @@ export default {
         this.form.push_key = d.push_key || ''
         this.form.status = d.status || 'online'
       } catch (e) {
-        this.$toast.fail('加载终端信息失败')
+        this.$message.error('加载终端信息失败')
       }
       this.showDialog = true
     },
     async onSubmit () {
-      if (!this.form.gate_name || !this.form.gate_level) {
+      if (!this.form.gate_name || !this.form.gate_level || !this.form.push_key) {
         return this.$message.warning('请填写必填项')
       }
       this.submitLoading = true
@@ -509,6 +515,17 @@ export default {
   background: var(--dark-accent-light);
 }
 
+.cell-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+::v-deep .van-cell__title {
+  display: flex;
+  align-items: center;
+}
+
 .cell-status {
   display: inline-flex;
   align-items: center;
@@ -570,6 +587,29 @@ export default {
 .cell-name {
   font-size: 15px;
   color: var(--dark-text);
+}
+
+.edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 6px;
+  color: var(--dark-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  margin-left: 8px;
+}
+
+.edit-btn:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--dark-accent-light);
+  color: var(--dark-accent-light);
 }
 
 .delete-btn {

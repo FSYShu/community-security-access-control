@@ -63,6 +63,10 @@ export default {
     faceDetectionEnabled: {
       type: Boolean,
       default: false
+    },
+    initialGateId: {
+      type: String,
+      default: ''
     }
   },
   data () {
@@ -113,6 +117,9 @@ export default {
     }
   },
   mounted () {
+    if (this.initialGateId) {
+      this.selectedGate = this.initialGateId
+    }
     document.addEventListener('click', this.onDocumentClick)
   },
   beforeDestroy () {
