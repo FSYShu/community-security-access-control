@@ -190,6 +190,8 @@ export default {
     onRefresh () {
       this.page = 1
       this.finished = false
+      this.list = []
+      this.loading = true
       this.loadData()
     },
     onDelete (item) {
