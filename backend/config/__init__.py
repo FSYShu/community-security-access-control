@@ -33,18 +33,20 @@ class BaseConfig:
 class DevelopmentConfig(BaseConfig):
     """开发环境配置"""
     DEBUG = True
+    _db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DATABASE_URL',
-        'mysql+pymysql://root:password@localhost:3306/security_access_dev?charset=utf8mb4'
+        'sqlite:///' + os.path.join(_db_dir, 'dev.db')
     )
 
 
 class TestingConfig(BaseConfig):
     """测试环境配置"""
     TESTING = True
+    _db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'TEST_DATABASE_URL',
-        'mysql+pymysql://root:password@localhost:3306/security_access_test?charset=utf8mb4'
+        'sqlite:///' + os.path.join(_db_dir, 'test.db')
     )
     WTF_CSRF_ENABLED = False
 
@@ -52,5 +54,9 @@ class TestingConfig(BaseConfig):
 class ProductionConfig(BaseConfig):
     """生产环境配置"""
     DEBUG = False
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
+    _db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        'DATABASE_URL',
+        'sqlite:///' + os.path.join(_db_dir, 'prod.db')
+    )
     JWT_ACCESS_TOKEN_EXPIRES = 3600  # 1小时
