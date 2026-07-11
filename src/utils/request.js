@@ -98,6 +98,14 @@ service.interceptors.response.use(
       return Promise.reject(error)
     }
     const status = error.response ? error.response.status : 0
+    if (status === 429) {
+      const retryAfter = error.response.headers['retry-after'] || 2
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          resolve(service(error.config))
+        }, retryAfter * 1000)
+      })
+    }
     const messageMap = {
       400: '请求参数错误',
       401: '未授权，请重新登录',

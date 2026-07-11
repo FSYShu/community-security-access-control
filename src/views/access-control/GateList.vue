@@ -48,15 +48,22 @@
         <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
           <van-cell v-for="item in gateList" :key="item.id" is-link @click="openEditDialog(item)">
             <template #title>
-              <span>{{ item.gate_name }}</span>
-              <van-tag :type="levelTagType(item.gate_level)" style="margin-left: 8px">{{ item.level_name || item.gate_level }}</van-tag>
+              <span class="type-tag" :class="levelTagClass(item.gate_level)">{{ item.level_name || item.gate_level }}</span>
+              <span class="cell-name">{{ item.gate_name }}</span>
             </template>
             <template #label>
               <div>{{ item.location }}</div>
               <div v-if="item.building_unit">楼栋/单元: {{ item.building_unit }}</div>
             </template>
             <template #right-icon>
-              <van-tag :type="item.status === 'online' ? 'success' : 'danger'">{{ item.status === 'online' ? '在线' : '离线' }}</van-tag>
+              <span class="cell-status">
+                <span class="status-dot" :class="item.status === 'online' ? 'dot-online' : 'dot-offline'"></span>
+                <span class="status-label">{{ item.status === 'online' ? '在线' : '离线' }}</span>
+              </span>
+              <button class="delete-btn" @click.stop="onDelete(item)">
+                <i class="el-icon-delete"></i>
+                <span>删除</span>
+              </button>
             </template>
           </van-cell>
         </van-list>
@@ -66,12 +73,8 @@
     <el-dialog :visible.sync="showDialog" :title="dialogTitle" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetForm">
       <div class="form-grid">
         <div class="form-item">
-          <label class="form-label">终端名称 <span class="form-required">*</span></label>
-          <input v-model="form.gate_name" class="form-input" placeholder="请输入终端名称" />
-        </div>
-        <div class="form-item">
-          <label class="form-label">安装位置 <span class="form-required">*</span></label>
-          <input v-model="form.location" class="form-input" placeholder="请输入安装位置" />
+          <label class="form-label">名称与位置 <span class="form-required">*</span></label>
+          <input v-model="form.gate_name" class="form-input" placeholder="如：1号门（东门入口）" />
         </div>
         <div class="form-item">
           <label class="form-label">终端层级 <span class="form-required">*</span></label>
@@ -122,7 +125,7 @@
 </template>
 
 <script>
-import { getGateList, addGate, updateGate, getGateDetail } from '@/api/property'
+import { getGateList, addGate, updateGate, getGateDetail, deleteGate } from '@/api/property'
 
 export default {
   name: 'GateListPage',
@@ -226,9 +229,27 @@ export default {
       this.refreshing = false
     },
     onRefresh () { this.page = 1; this.finished = false; this.loadData() },
-    levelTagType (level) {
-      const map = { community_gate: 'primary', unit_door: 'success', dangerous_area: 'danger' }
-      return map[level] || 'default'
+    levelTagClass (level) {
+      const map = { community_gate: 'tag-community', unit_door: 'tag-unit', dangerous_area: 'tag-danger' }
+      return map[level] || ''
+    },
+    onDelete (item) {
+      this.$confirm('确定要删除「' + item.gate_name + '」终端吗？', '确认删除', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        customClass: 'dark-dialog'
+      }).then(() => {
+        this.doDelete(item.id)
+      }).catch(() => {})
+    },
+    async doDelete (id) {
+      try {
+        await deleteGate(id)
+        this.$message.success('删除成功')
+        this.onRefresh()
+      } catch (e) {
+        this.$message.error('删除失败')
+      }
     },
     resetForm () {
       this.form = { gate_name: '', location: '', gate_level: '', building_unit: '', push_key: '', status: 'online' }
@@ -260,14 +281,14 @@ export default {
       this.showDialog = true
     },
     async onSubmit () {
-      if (!this.form.gate_name || !this.form.location || !this.form.gate_level) {
+      if (!this.form.gate_name || !this.form.gate_level) {
         return this.$message.warning('请填写必填项')
       }
       this.submitLoading = true
       try {
         const data = {
           gate_name: this.form.gate_name,
-          location: this.form.location,
+          location: this.form.location || this.form.gate_name,
           gate_level: this.form.gate_level,
           building_unit: this.form.building_unit,
           push_key: this.form.push_key,
@@ -489,6 +510,92 @@ export default {
 
 .form-btn-primary:hover {
   background: var(--dark-accent-light);
+}
+
+.cell-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-online {
+  background: var(--dark-success);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+.dot-offline {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
+.status-label {
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+}
+
+.type-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-right: 8px;
+  border: 1px solid;
+}
+
+.tag-community {
+  color: var(--dark-accent-light);
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.tag-unit {
+  color: var(--dark-success-green);
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.tag-danger {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.cell-name {
+  font-size: 15px;
+  color: var(--dark-text);
+}
+
+.delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 6px;
+  color: var(--dark-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  margin-left: 8px;
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
 }
 </style>
 
