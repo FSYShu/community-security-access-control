@@ -49,16 +49,17 @@
         </div>
       </div>
 
-      <div class="stat-card" :class="stats.zoneStatus === '正常' ? 'stat-card-success' : 'stat-card-danger'">
+      <div class="stat-card" :class="zoneCardClass" @click="showZonePanel = true">
         <div class="stat-card-glow"></div>
         <div class="stat-card-inner">
-          <div class="stat-icon-wrap" :class="stats.zoneStatus === '正常' ? 'stat-icon-emerald' : 'stat-icon-rose'">
+          <div class="stat-icon-wrap" :class="zoneIconClass">
             <i class="el-icon-view" style="font-size:22px"></i>
           </div>
           <div class="stat-info">
             <span class="stat-value">{{ stats.zoneStatus }}</span>
             <span class="stat-label">禁区状态</span>
           </div>
+          <i class="el-icon-arrow-right stat-arrow" style="font-size:14px"></i>
         </div>
       </div>
     </section>
@@ -89,11 +90,41 @@
         </div>
       </div>
     </section>
+
+    <div v-if="showZonePanel" class="zone-overlay" @click.self="showZonePanel = false">
+      <div class="zone-panel">
+        <div class="zone-panel-header">
+          <span class="zone-panel-title">禁区状态</span>
+          <i class="el-icon-close zone-panel-close" @click="showZonePanel = false"></i>
+        </div>
+        <div class="zone-panel-body">
+          <div v-if="!stats.zoneList || !stats.zoneList.length" class="zone-empty">暂无禁区</div>
+          <div
+            v-for="zone in stats.zoneList"
+            :key="zone.id"
+            class="zone-status-item"
+          >
+            <div class="zone-status-info">
+              <span class="zone-status-name">{{ zone.zone_name }}</span>
+              <span class="zone-status-tag" :class="'tag-' + zone.status_text">{{ zone.status_text }}</span>
+            </div>
+            <button
+              class="zone-toggle-btn"
+              :class="zone.status === 'active' ? 'btn-disable' : 'btn-enable'"
+              @click="toggleZone(zone)"
+            >
+              {{ zone.status === 'active' ? '停用' : '启用' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </app-layout>
 </template>
 
 <script>
 import { getDashboardStats, getRecentAlarms } from '@/api/dashboard'
+import { updateDangerZone } from '@/api/dangerZone'
 
 export default {
   name: 'DashboardPage',
@@ -103,9 +134,23 @@ export default {
         passCount: 0,
         alarmCount: 0,
         onlineDevices: 0,
-        zoneStatus: '正常'
+        zoneStatus: '正常运行',
+        zoneList: []
       },
-      recentAlarms: []
+      recentAlarms: [],
+      showZonePanel: false
+    }
+  },
+  computed: {
+    zoneCardClass () {
+      if (this.stats.zoneStatus === '告警中') return 'stat-card-danger'
+      if (this.stats.zoneStatus === '已停用') return 'stat-card-muted'
+      return 'stat-card-success'
+    },
+    zoneIconClass () {
+      if (this.stats.zoneStatus === '告警中') return 'stat-icon-rose'
+      if (this.stats.zoneStatus === '已停用') return 'stat-icon-muted'
+      return 'stat-icon-emerald'
     }
   },
   mounted () {
@@ -119,9 +164,7 @@ export default {
         if (res.data) {
           this.stats = { ...this.stats, ...res.data }
         }
-      } catch (e) {
-        // 接口未就绪时使用默认值
-      }
+      } catch (e) {}
     },
     async loadRecentAlarms () {
       try {
@@ -129,8 +172,28 @@ export default {
         if (res.data) {
           this.recentAlarms = res.data.list || []
         }
-      } catch (e) {
-        // 接口未就绪时使用空列表
+      } catch (e) {}
+    },
+    async toggleZone (zone) {
+      const newStatus = zone.status === 'active' ? 'inactive' : 'active'
+      try {
+        await updateDangerZone(zone.id, { status: newStatus })
+        zone.status = newStatus
+        zone.status_text = newStatus === 'active' ? '正常运行' : '已停用'
+        this.refreshZoneSummary()
+      } catch (e) {}
+    },
+    refreshZoneSummary () {
+      const list = this.stats.zoneList || []
+      const hasAlarm = list.some(z => z.status_text === '告警中')
+      const hasActive = list.some(z => z.status_text === '正常运行')
+      const hasInactive = list.some(z => z.status_text === '已停用')
+      if (hasAlarm) {
+        this.stats.zoneStatus = '告警中'
+      } else if (hasInactive && !hasActive) {
+        this.stats.zoneStatus = '已停用'
+      } else {
+        this.stats.zoneStatus = '正常运行'
       }
     }
   }
@@ -196,6 +259,10 @@ export default {
   background: var(--dark-success);
 }
 
+.stat-card-muted .stat-card-glow {
+  background: #6B7280;
+}
+
 .stat-card-inner {
   position: relative;
   padding: 20px;
@@ -245,6 +312,11 @@ export default {
 .stat-icon-emerald {
   background: rgba(16, 185, 129, 0.15);
   color: var(--dark-success-light);
+}
+
+.stat-icon-muted {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9CA3AF;
 }
 
 .stat-info {
@@ -387,6 +459,136 @@ export default {
   padding: 32px 16px;
   color: var(--dark-text-dim);
   font-size: 13px;
+}
+
+.zone-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.zone-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 70vh;
+  background: var(--dark-card);
+  border-radius: 20px 20px 0 0;
+  border: 1px solid var(--dark-border);
+  border-bottom: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.zone-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--dark-border-light);
+}
+
+.zone-panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--dark-text);
+}
+
+.zone-panel-close {
+  font-size: 20px;
+  color: var(--dark-text-dim);
+  cursor: pointer;
+}
+
+.zone-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.zone-empty {
+  text-align: center;
+  padding: 32px;
+  color: var(--dark-text-dim);
+  font-size: 13px;
+}
+
+.zone-status-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--dark-border-light);
+}
+
+.zone-status-item:last-child {
+  border-bottom: none;
+}
+
+.zone-status-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.zone-status-name {
+  font-size: 14px;
+  color: var(--dark-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zone-status-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.tag-正常运行 {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--dark-success-light);
+}
+
+.tag-告警中 {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--dark-danger-light);
+}
+
+.tag-已停用 {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9CA3AF;
+}
+
+.zone-toggle-btn {
+  font-size: 12px;
+  padding: 4px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.btn-disable {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--dark-danger-light);
+}
+
+.btn-enable {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--dark-success-light);
+}
+
+.stat-card-muted {
+  border-color: rgba(107, 114, 128, 0.3);
 }
 
 @media (max-width: 1024px) {
