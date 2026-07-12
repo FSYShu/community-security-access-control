@@ -345,10 +345,7 @@ export default {
           this.onRefresh()
         }
       } catch (err) {
-        const msg = (err && err.message) || ''
-        if (!msg.includes('已被') || !msg.includes('使用')) {
-          this.$message.error('录入失败')
-        }
+        // 拦截器已弹出后端错误消息，此处不再重复提示
       } finally {
         this.addLoading = false
       }
@@ -389,7 +386,7 @@ export default {
           this.$message.error(res.message || '识别失败')
         }
       } catch (err) {
-        this.$message.error('识别请求失败')
+        // 拦截器已弹出后端错误消息，此处不再重复提示
       } finally {
         this.testLoading = false
       }
