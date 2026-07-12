@@ -56,25 +56,29 @@ def ensure_models_downloaded():
 
 class FaceRecognizer:
     _instance = None
+    _init_lock = threading.Lock()
 
     def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
+        with cls._init_lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if self._initialized:
-            return
-        ensure_models_downloaded()
-        dat_dir = DLIB_MODEL_DIR
-        predictor_path = os.path.join(dat_dir, 'shape_predictor_68_face_landmarks.dat')
-        recognition_model_path = os.path.join(dat_dir, 'dlib_face_recognition_resnet_model_v1.dat')
+        with self._init_lock:
+            if self._initialized:
+                return
+            ensure_models_downloaded()
+            dat_dir = DLIB_MODEL_DIR
+            predictor_path = os.path.join(dat_dir, 'shape_predictor_68_face_landmarks.dat')
+            recognition_model_path = os.path.join(dat_dir, 'dlib_face_recognition_resnet_model_v1.dat')
 
-        self.detector = dlib.get_frontal_face_detector()
-        self.sp = dlib.shape_predictor(predictor_path)
-        self.facerec = dlib.face_recognition_model_v1(recognition_model_path)
-        self._initialized = True
+            self.detector = dlib.get_frontal_face_detector()
+            self.sp = dlib.shape_predictor(predictor_path)
+            self.facerec = dlib.face_recognition_model_v1(recognition_model_path)
+            self._dlib_lock = threading.Lock()
+            self._initialized = True
 
     def _to_rgb(self, image):
         if isinstance(image, np.ndarray) and len(image.shape) == 3 and image.shape[2] == 3:
@@ -83,14 +87,16 @@ class FaceRecognizer:
 
     def detect_faces(self, image):
         rgb_image = self._to_rgb(image)
-        dets = self.detector(rgb_image, 1)
+        with self._dlib_lock:
+            dets = self.detector(rgb_image, 1)
         faces = []
         for d in dets:
             faces.append((d.left(), d.top(), d.right(), d.bottom()))
         return faces
 
     def detect_faces_rgb(self, rgb_image):
-        dets = self.detector(rgb_image, 1)
+        with self._dlib_lock:
+            dets = self.detector(rgb_image, 1)
         faces = []
         for d in dets:
             faces.append((d.left(), d.top(), d.right(), d.bottom()))
@@ -102,8 +108,9 @@ class FaceRecognizer:
             rect = dlib.rectangle(face_rect[0], face_rect[1], face_rect[2], face_rect[3])
         else:
             rect = face_rect
-        shape = self.sp(rgb_image, rect)
-        descriptor = self.facerec.compute_face_descriptor(rgb_image, shape)
+        with self._dlib_lock:
+            shape = self.sp(rgb_image, rect)
+            descriptor = self.facerec.compute_face_descriptor(rgb_image, shape)
         return np.array(descriptor)
 
     def compute_face_descriptor_rgb(self, rgb_image, face_rect):
@@ -111,8 +118,9 @@ class FaceRecognizer:
             rect = dlib.rectangle(face_rect[0], face_rect[1], face_rect[2], face_rect[3])
         else:
             rect = face_rect
-        shape = self.sp(rgb_image, rect)
-        descriptor = self.facerec.compute_face_descriptor(rgb_image, shape)
+        with self._dlib_lock:
+            shape = self.sp(rgb_image, rect)
+            descriptor = self.facerec.compute_face_descriptor(rgb_image, shape)
         return np.array(descriptor)
 
     def compare_faces(self, face_descriptor, registered_descriptors, tolerance=0.4):

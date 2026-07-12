@@ -7,6 +7,8 @@ import re
 import time
 import base64
 import threading
+from collections import deque
+
 from datetime import datetime
 
 import cv2
@@ -16,10 +18,13 @@ from flask import Blueprint, Response, jsonify, current_app, request as flask_re
 from flask_jwt_extended import jwt_required, get_jwt
 
 from app import limiter
+from app import db
+from app.models.gate import Gate
 from utils import error_response
 from utils.response import success_response
 from core.audit_logger import log_audit
 from core.rtmp_relay import start_rtmp_pull, read_jpeg_frame_from_pull, stop_rtmp_pull, get_push_latency_ms
+from core.shared_frame_store import update_frame as _update_shared_frame
 
 video_monitor_bp = Blueprint('video_monitor', __name__)
 
@@ -27,40 +32,10 @@ logger = logging.getLogger(__name__)
 
 
 def _try_connect_rtmp_ffmpeg(stream_url, fps=10, max_width=640, timeout=10):
-    result = {'entry': None, 'frame': None, 'error': None}
-    done = threading.Event()
-
-    def try_pull():
-        try:
-            entry = start_rtmp_pull(stream_url, fps=fps, max_width=max_width)
-            if entry is None:
-                result['error'] = 'FFmpeg拉流启动失败'
-                done.set()
-                return
-            jpeg = read_jpeg_frame_from_pull(entry)
-            if jpeg is None:
-                stop_rtmp_pull(stream_url)
-                result['error'] = '无法读取视频帧'
-                done.set()
-                return
-            result['entry'] = entry
-            result['frame'] = jpeg
-        except Exception as e:
-            result['error'] = str(e)
-        done.set()
-
-    t = threading.Thread(target=try_pull, daemon=True)
-    t.start()
-    if not done.wait(timeout=timeout):
-        logger.error('Timeout pulling RTMP stream via FFmpeg: {}'.format(stream_url))
-        stop_rtmp_pull(stream_url)
-        return None, None, 'RTMP连接超时'
-
-    if result['entry'] is None:
-        logger.error('Failed to pull RTMP stream via FFmpeg: {}'.format(stream_url))
-        return None, None, result.get('error', 'RTMP连接失败')
-
-    return result['entry'], result['frame'], None
+    entry = start_rtmp_pull(stream_url, fps=fps, max_width=max_width)
+    if entry is None:
+        return None
+    return entry
 
 
 def _extract_push_key_from_url(stream_url):
@@ -68,13 +43,18 @@ def _extract_push_key_from_url(stream_url):
     return parts[-1] if parts else ''
 
 
-def _overlay_latency_on_jpeg(jpeg_bytes, latency_ms):
+LATENCY_OVERLAY_INTERVAL = 0.5
+
+
+def _overlay_latency_on_jpeg(jpeg_bytes, latency_ms, cached=None):
     if latency_ms < 0:
-        return jpeg_bytes
+        return jpeg_bytes, None
+    if cached and cached.get('latency_ms') == latency_ms:
+        return cached.get('jpeg') or jpeg_bytes, cached
     arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
     frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if frame is None:
-        return jpeg_bytes
+        return jpeg_bytes, None
     if latency_ms > 2000:
         color = (0, 0, 255)
     elif latency_ms > 800:
@@ -90,68 +70,90 @@ def _overlay_latency_on_jpeg(jpeg_bytes, latency_ms):
     cv2.rectangle(frame, (8, h - th - 18), (8 + tw + 12, h - 6), (0, 0, 0), -1)
     cv2.putText(frame, text, (14, h - 14), font, scale, color, thickness, cv2.LINE_AA)
     ret, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
-    return buf.tobytes() if ret else jpeg_bytes
+    result = buf.tobytes() if ret else jpeg_bytes
+    new_cache = {'latency_ms': latency_ms, 'jpeg': result}
+    return result, new_cache
+
+
+BUFFER_DELAY_SECONDS = 5.0
+WARMUP_FRAME_RATIO = 0.5
 
 
 def generate_frames_ffmpeg(stream_url, fps=10, max_width=640):
-    entry, first_jpeg, err = _try_connect_rtmp_ffmpeg(stream_url, fps=fps, max_width=max_width)
+    entry = _try_connect_rtmp_ffmpeg(stream_url, fps=fps, max_width=max_width)
     if entry is None:
         return
 
     push_key = _extract_push_key_from_url(stream_url)
-    frame_interval = 1.0 / fps
-    frame_count = 0
-    last_yield = time.perf_counter()
 
-    try:
-        if first_jpeg:
-            latency_ms = get_push_latency_ms(push_key)
-            out_jpeg = _overlay_latency_on_jpeg(first_jpeg, latency_ms)
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + out_jpeg + b'\r\n')
-            last_yield = time.perf_counter()
+    buf = deque(maxlen=5)
+    buf_lock = threading.Lock()
+    buf_event = threading.Event()
+    alive = {'flag': True}
 
-        while True:
+    def reader():
+        while alive['flag']:
+            if entry['process'].poll() is not None:
+                alive['flag'] = False
+                buf_event.set()
+                break
             jpeg = read_jpeg_frame_from_pull(entry)
             if jpeg is None:
-                logger.warning('FFmpeg pull stream ended for: {}'.format(stream_url))
+                alive['flag'] = False
+                buf_event.set()
                 break
+            with buf_lock:
+                buf.append(jpeg)
+                _update_shared_frame(stream_url, jpeg)
+            buf_event.set()
 
-            frame_count += 1
-            if frame_count % 3 == 0:
-                continue
+    reader_thread = threading.Thread(target=reader, daemon=True)
+    reader_thread.start()
 
-            latency_ms = get_push_latency_ms(push_key)
-            out_jpeg = _overlay_latency_on_jpeg(jpeg, latency_ms)
+    try:
+        while alive['flag']:
+            with buf_lock:
+                frames = list(buf)
+                buf.clear()
+            if not frames:
+                buf_event.clear()
+                buf_event.wait(timeout=0.1)
+                with buf_lock:
+                    frames = list(buf)
+                    buf.clear()
+                if not frames:
+                    if not alive['flag']:
+                        break
+                    continue
+            buf_event.clear()
 
-            now = time.perf_counter()
-            elapsed = now - last_yield
-            if elapsed < frame_interval:
-                time.sleep(frame_interval - elapsed)
-
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + out_jpeg + b'\r\n')
-            last_yield = time.perf_counter()
+            for jpeg in frames:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
+    except GeneratorExit:
+        pass
     finally:
+        alive['flag'] = False
         stop_rtmp_pull(stream_url)
 
 
 def generate_cv2_frames_ffmpeg(stream_url, fps=10, max_width=640):
     from core.rtmp_relay import read_cv2_frame_from_pull
-    entry, _, err = _try_connect_rtmp_ffmpeg(stream_url, fps=fps, max_width=max_width)
+    entry = _try_connect_rtmp_ffmpeg(stream_url, fps=fps, max_width=max_width)
     if entry is None:
         return None
 
-    latest = {'frame': None, 'lock': threading.Lock(), 'alive': True}
+    slot = {'frame': None, 'alive': True}
 
     def reader():
-        while latest['alive']:
+        while slot['alive']:
+            if entry['process'].poll() is not None:
+                break
             ok, f = read_cv2_frame_from_pull(entry)
             if not ok or f is None:
                 time.sleep(0.01)
                 continue
-            with latest['lock']:
-                latest['frame'] = f
+            slot['frame'] = f
 
     reader_thread = threading.Thread(target=reader, daemon=True)
     reader_thread.start()
@@ -161,10 +163,9 @@ def generate_cv2_frames_ffmpeg(stream_url, fps=10, max_width=640):
             self.entry = entry
             self.stream_url = stream_url
         def read_latest(self):
-            with latest['lock']:
-                return latest['frame']
+            return slot['frame']
         def stop(self):
-            latest['alive'] = False
+            slot['alive'] = False
             stop_rtmp_pull(stream_url)
 
     return FrameSource()
@@ -193,8 +194,47 @@ def gate_push_frame():
     rtmp_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, push_key)
     from core.rtmp_relay import push_jpeg_frame
     push_jpeg_frame(push_key, jpeg_bytes, rtmp_url)
+    gate = Gate.query.filter_by(push_key=push_key).first()
+    if gate:
+        gate.last_heartbeat = datetime.utcnow().isoformat()
+        gate.status = 'online'
+        db.session.commit()
     return jsonify({'code': 0, 'message': 'ok'})
 
+
+@video_monitor_bp.route('/gate-latency/<push_key>', methods=['GET'])
+@limiter.exempt
+def gate_latency(push_key):
+    from core.rtmp_relay import get_push_latency_ms, get_pull_fps
+    latency = get_push_latency_ms(push_key)
+    config = current_app.config
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+    rtmp_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, push_key)
+    fps = get_pull_fps(rtmp_url)
+    return jsonify({'push_key': push_key, 'latency_ms': latency, 'fps': fps})
+
+
+@video_monitor_bp.route('/gate-warmup/<push_key>', methods=['POST'])
+def gate_warmup(push_key):
+    config = current_app.config
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+    rtmp_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, push_key)
+    fps = config.get('VIDEO_FPS', 20)
+    max_width = config.get('VIDEO_MAX_WIDTH', 640)
+    entry = start_rtmp_pull(rtmp_url, fps=fps, max_width=max_width)
+    if entry is None:
+        return jsonify({'code': -1, 'message': 'warmup failed'})
+    return jsonify({'code': 0, 'message': 'warmup started'})
+
+
+def _mjpeg_response(generator):
+    resp = Response(generator, mimetype='multipart/x-mixed-replace; boundary=frame')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['X-Accel-Buffering'] = 'no'
+    resp.headers['Connection'] = 'keep-alive'
+    return resp
 
 
 @video_monitor_bp.route('/video_feed/<stream_id>')
@@ -206,11 +246,10 @@ def video_feed(stream_id):
     rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
     stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, stream_id)
     max_width = config.get('VIDEO_MAX_WIDTH', 640)
-    fps = max(1, 15 - config.get('VIDEO_FRAME_SKIP', 5))
+    fps = config.get('VIDEO_FPS', 20)
     try:
-        return Response(
-            generate_frames_ffmpeg(stream_url, fps=fps, max_width=max_width),
-            mimetype='multipart/x-mixed-replace; boundary=frame'
+        return _mjpeg_response(
+            generate_frames_ffmpeg(stream_url, fps=fps, max_width=max_width)
         )
     except Exception as e:
         logger.error('Failed to stream video for ID {}: {}'.format(stream_id, str(e)))
@@ -230,11 +269,10 @@ def video_feed_by_gate(gate_id):
     rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
     rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
     stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
-    fps = max(1, 15 - config.get('VIDEO_FRAME_SKIP', 5))
+    fps = config.get('VIDEO_FPS', 20)
     try:
-        return Response(
-            generate_frames_ffmpeg(stream_url, fps=fps, max_width=max_width),
-            mimetype='multipart/x-mixed-replace; boundary=frame'
+        return _mjpeg_response(
+            generate_frames_ffmpeg(stream_url, fps=fps, max_width=max_width)
         )
     except Exception as e:
         logger.error('Failed to stream video for gate {}: {}'.format(gate_id, str(e)))
@@ -254,17 +292,49 @@ def video_feed_by_gate_with_detection(gate_id):
     rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
     rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
     stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
-    fps = max(1, 15 - config.get('VIDEO_FRAME_SKIP', 5))
+    fps = config.get('VIDEO_FPS', 20)
     detect_width = config.get('VIDEO_DETECT_WIDTH', 320)
     try:
         from .face_detection_stream import generate_frames_with_detection_ffmpeg
-        return Response(
-            generate_frames_with_detection_ffmpeg(stream_url, fps=fps, max_width=max_width, detect_width=detect_width),
-            mimetype='multipart/x-mixed-replace; boundary=frame'
+        return _mjpeg_response(
+            generate_frames_with_detection_ffmpeg(stream_url, fps=fps, max_width=max_width, detect_width=detect_width)
         )
     except Exception as e:
         logger.error('Failed to stream video with detection for gate {}: {}'.format(gate_id, str(e)))
         return jsonify({'error': 'Failed to process video stream with detection'}), 500
+
+
+@video_monitor_bp.route('/face-detection/<int:gate_id>/stream')
+@limiter.exempt
+def face_detection_sse(gate_id):
+    """人脸检测SSE事件流，推送检测框JSON数据（不修改视频帧）"""
+    from app.models.gate import Gate
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
+    config = current_app.config
+    max_width = config.get('VIDEO_MAX_WIDTH', 640)
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+    stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
+    fps = config.get('VIDEO_FPS', 20)
+    detect_width = config.get('VIDEO_DETECT_WIDTH', 320)
+    try:
+        from .face_detection_stream import generate_detection_sse
+        from flask import stream_with_context
+
+        def generate():
+            for event in generate_detection_sse(stream_url, fps=fps, max_width=max_width, detect_width=detect_width):
+                yield event
+
+        resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
+        resp.headers['Cache-Control'] = 'no-cache'
+        resp.headers['X-Accel-Buffering'] = 'no'
+        resp.headers['Connection'] = 'keep-alive'
+        return resp
+    except Exception as e:
+        logger.error('Failed to stream face detection for gate {}: {}'.format(gate_id, str(e)))
+        return jsonify({'error': 'Failed to process face detection stream'}), 500
 
 
 @video_monitor_bp.route('/list', methods=['GET'])
@@ -452,10 +522,9 @@ def _format_size(size_bytes):
 
 
 def _estimate_duration(file_size):
-    """根据文件大小估算FLV录像时长（假设2Mbps码率）"""
     if file_size <= 0:
         return '--:--'
-    bitrate = 2 * 1024 * 1024 / 8  # 2Mbps = 256KB/s
+    bitrate = 1000 * 1024 / 8
     seconds = int(file_size / bitrate)
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60

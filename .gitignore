@@ -37,6 +37,7 @@ backend/registered_faces.json
 # 数据目录
 backend/dat/
 backend/data/
+data/
 
 # Editor directories and files
 .idea

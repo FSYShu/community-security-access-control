@@ -144,8 +144,27 @@ def init_database(app):
             _seed_default_data()
         else:
             db.create_all()
+            _migrate_schema(db)
     else:
         db.create_all()
+        _migrate_schema(db)
+
+
+def _migrate_schema(database):
+    """自动迁移：为已有表添加缺失的列"""
+    with database.engine.connect() as conn:
+        try:
+            conn.execute(db.text('ALTER TABLE gates ADD COLUMN bound INTEGER DEFAULT 0'))
+            conn.commit()
+            logger.info('Migrated: added bound column to gates')
+        except Exception:
+            pass
+        try:
+            conn.execute(db.text("ALTER TABLE gates ADD COLUMN last_heartbeat TEXT DEFAULT ''"))
+            conn.commit()
+            logger.info('Migrated: added last_heartbeat column to gates')
+        except Exception:
+            pass
 
 
 def _seed_default_data():

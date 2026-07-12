@@ -75,18 +75,18 @@ def get_ffmpeg_cmd(rtmp_url):
         '-loglevel', 'warning',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
-        '-framerate', '5',
+        '-framerate', '20',
         '-fflags', '+genpts',
         '-i', 'pipe:0',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-tune', 'zerolatency',
-        '-b:v', '500k',
-        '-maxrate', '500k',
-        '-bufsize', '1000k',
+        '-b:v', '2000k',
+        '-maxrate', '3000k',
+        '-bufsize', '2000k',
         '-pix_fmt', 'yuv420p',
-        '-g', '15',
-        '-keyint_min', '15',
+        '-g', '20',
+        '-keyint_min', '10',
         '-f', 'flv',
         rtmp_url
     ]
@@ -238,15 +238,40 @@ _PULL_PROCESSES = {}
 _PULL_LOCK = threading.Lock()
 
 
-def start_rtmp_pull(rtmp_url, fps=10, max_width=640):
+def start_rtmp_pull(rtmp_url, fps=15, max_width=480):
+    with _PULL_LOCK:
+        existing = _PULL_PROCESSES.get(rtmp_url)
+        if existing and existing['process'].poll() is None:
+            existing['ref_count'] = existing.get('ref_count', 1) + 1
+            logger.info('Reusing existing FFmpeg pull for: {} (ref_count={})'.format(rtmp_url, existing['ref_count']))
+            return existing
+        old = _PULL_PROCESSES.pop(rtmp_url, None)
+    if old:
+        try:
+            old['process'].stdout.close()
+        except Exception:
+            pass
+        try:
+            old['process'].stderr.close()
+        except Exception:
+            pass
+        try:
+            old['process'].kill()
+            old['process'].wait(timeout=3)
+        except Exception:
+            pass
+        logger.info('Killed stale FFmpeg pull for: {}'.format(rtmp_url))
+        time.sleep(0.5)
+
     cmd = [
         _find_ffmpeg(),
         '-loglevel', 'warning',
+        '-fflags', '+genpts+nobuffer',
         '-rw_timeout', '5000000',
-        '-analyzeduration', '2000000',
+        '-analyzeduration', '500000',
         '-probesize', '500000',
         '-i', rtmp_url,
-        '-vf', 'fps={},scale={}:-1'.format(fps, max_width),
+        '-vf', 'scale={}:-1'.format(max_width),
         '-q:v', '5',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
@@ -278,7 +303,8 @@ def start_rtmp_pull(rtmp_url, fps=10, max_width=640):
     entry = {
         'process': proc,
         'url': rtmp_url,
-        'started': time.time()
+        'started': time.time(),
+        'ref_count': 1
     }
     with _PULL_LOCK:
         _PULL_PROCESSES[rtmp_url] = entry
@@ -286,30 +312,37 @@ def start_rtmp_pull(rtmp_url, fps=10, max_width=640):
     return entry
 
 
+_JPEG_SOI = b'\xff\xd8'
+_JPEG_EOI = b'\xff\xd9'
+_READ_CHUNK = 65536
+
+
 def read_jpeg_frame_from_pull(pull_entry):
     proc = pull_entry['process']
     stdout = proc.stdout
 
-    header = b''
+    scan = b''
     while True:
-        b = stdout.read(1)
-        if not b:
-            return None
-        header += b
-        if header.endswith(b'\xff\xd8'):
+        idx = scan.find(_JPEG_SOI)
+        if idx >= 0:
+            scan = scan[idx:]
             break
-        if len(header) > 65536:
-            header = header[-4:]
-
-    jpeg_data = b'\xff\xd8'
-    while True:
-        b = stdout.read(1)
-        if not b:
+        chunk = stdout.read(_READ_CHUNK)
+        if not chunk:
             return None
-        jpeg_data += b
-        if len(jpeg_data) >= 2 and jpeg_data[-2:] == b'\xff\xd9':
-            return jpeg_data
-        if len(jpeg_data) > 1048576:
+        scan = scan[-3:] + chunk
+
+    while True:
+        idx = scan.find(_JPEG_EOI)
+        if idx >= 0:
+            frame = scan[:idx + 2]
+            record_pull_frame(pull_entry['url'])
+            return frame
+        chunk = stdout.read(_READ_CHUNK)
+        if not chunk:
+            return None
+        scan += chunk
+        if len(scan) > 1048576:
             logger.warning('JPEG frame too large, discarding')
             return None
 
@@ -329,14 +362,29 @@ def read_cv2_frame_from_pull(pull_entry):
 
 def stop_rtmp_pull(rtmp_url):
     with _PULL_LOCK:
-        entry = _PULL_PROCESSES.pop(rtmp_url, None)
-    if entry:
-        try:
-            entry['process'].kill()
-            entry['process'].wait(timeout=5)
-        except Exception:
-            pass
-        logger.info('Stopped FFmpeg RTMP pull from: {}'.format(rtmp_url))
+        entry = _PULL_PROCESSES.get(rtmp_url)
+        if not entry:
+            return
+        entry['ref_count'] = entry.get('ref_count', 1) - 1
+        if entry['ref_count'] > 0:
+            logger.info('Decrementing FFmpeg pull ref for: {} (ref_count={})'.format(rtmp_url, entry['ref_count']))
+            return
+        _PULL_PROCESSES.pop(rtmp_url, None)
+    proc = entry['process']
+    try:
+        proc.stdout.close()
+    except Exception:
+        pass
+    try:
+        proc.stderr.close()
+    except Exception:
+        pass
+    try:
+        proc.kill()
+        proc.wait(timeout=3)
+    except Exception:
+        pass
+    logger.info('Stopped FFmpeg RTMP pull from: {}'.format(rtmp_url))
 
 
 def cleanup_pull_processes():
@@ -364,3 +412,38 @@ def get_push_latency_ms(push_key):
     if ts is None:
         return -1
     return int(time.time() * 1000) - ts
+
+
+_PULL_FRAME_COUNTERS = {}
+_PULL_FC_LOCK = threading.Lock()
+_PULL_FC_WINDOW = 3.0
+
+
+def record_pull_frame(rtmp_url):
+    now = time.time()
+    with _PULL_FC_LOCK:
+        if rtmp_url not in _PULL_FRAME_COUNTERS:
+            _PULL_FRAME_COUNTERS[rtmp_url] = []
+        timestamps = _PULL_FRAME_COUNTERS[rtmp_url]
+        timestamps.append(now)
+        cutoff = now - _PULL_FC_WINDOW
+        while timestamps and timestamps[0] < cutoff:
+            timestamps.pop(0)
+
+
+def get_pull_fps(rtmp_url):
+    now = time.time()
+    with _PULL_FC_LOCK:
+        timestamps = _PULL_FRAME_COUNTERS.get(rtmp_url)
+        if not timestamps:
+            return 0
+        cutoff = now - _PULL_FC_WINDOW
+        while timestamps and timestamps[0] < cutoff:
+            timestamps.pop(0)
+        if len(timestamps) < 2:
+            return 0
+        elapsed = timestamps[-1] - timestamps[0]
+        if elapsed <= 0:
+            return 0
+        fps = (len(timestamps) - 1) / elapsed
+    return round(fps, 1)

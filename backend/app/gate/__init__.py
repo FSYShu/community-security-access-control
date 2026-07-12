@@ -3,6 +3,7 @@
 提供门禁终端管理、权限配置等接口
 """
 import json
+from datetime import datetime, timedelta
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -17,12 +18,33 @@ from core.audit_logger import log_audit
 
 gate_bp = Blueprint('gate', __name__)
 
+HEARTBEAT_TIMEOUT_SECONDS = 30
+
+
+def _update_offline_status():
+    """将心跳超时的已绑定终端标记为离线"""
+    now = datetime.utcnow()
+    timeout = (now - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS)).isoformat()
+    gates = Gate.query.filter(
+        Gate.bound == 1,
+        Gate.status == 'online',
+        Gate.last_heartbeat != '',
+        Gate.last_heartbeat.isnot(None),
+        Gate.last_heartbeat < timeout
+    ).all()
+    for g in gates:
+        g.status = 'offline'
+    if gates:
+        db.session.commit()
+
 
 @gate_bp.route('/list', methods=['GET'])
 @jwt_required()
 @limiter.exempt
 def get_gate_list():
     """获取门禁终端列表"""
+    _update_offline_status()
+
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     gate_level = request.args.get('gate_level', '')
@@ -31,8 +53,10 @@ def get_gate_list():
     query = Gate.query
     if gate_level:
         query = query.filter_by(gate_level=gate_level)
-    if status:
-        query = query.filter_by(status=status)
+    if status == 'unbound':
+        query = query.filter_by(bound=0)
+    elif status:
+        query = query.filter_by(bound=1, status=status)
 
     query = query.order_by(Gate.created_at.desc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
@@ -60,6 +84,7 @@ def get_gate_list():
 
 
 @gate_bp.route('/with-stream', methods=['GET'])
+@limiter.exempt
 @jwt_required()
 def get_gates_with_stream():
     """获取绑定了视频流的门禁终端列表"""
@@ -93,11 +118,10 @@ def add_gate():
     """新增门禁终端"""
     data = request.get_json()
     gate_name = data.get('gate_name', '')
-    location = data.get('location', '')
     gate_level = data.get('gate_level', '')
 
-    if not gate_name or not location or not gate_level:
-        return error_response(message='终端名称、位置和层级不能为空', code=400)
+    if not gate_name or not gate_level:
+        return error_response(message='终端名称和层级不能为空', code=400)
 
     level = GateLevel.query.get(gate_level)
     if not level:
@@ -116,7 +140,7 @@ def add_gate():
 
     gate = Gate(
         gate_name=gate_name,
-        location=location,
+
         gate_level=gate_level,
         building_unit=data.get('building_unit', ''),
         camera_id=data.get('camera_id'),
@@ -146,8 +170,7 @@ def update_gate(gate_id):
     data = request.get_json()
     if 'gate_name' in data:
         gate.gate_name = data['gate_name']
-    if 'location' in data:
-        gate.location = data['location']
+
     if 'gate_level' in data:
         level = GateLevel.query.get(data['gate_level'])
         if not level:
@@ -225,3 +248,29 @@ def config_gate_permission(gate_id):
     db.session.commit()
     log_audit(operation_type='config_gate_permission', operation_content=f'配置门禁权限: {gate_id}')
     return success_response(data=gate.to_dict(), message='权限配置成功')
+
+
+@gate_bp.route('/<int:gate_id>/bind', methods=['POST'])
+@jwt_required()
+@with_write_lock
+def bind_gate(gate_id):
+    """门禁终端绑定"""
+    gate = Gate.query.get(gate_id)
+    if not gate:
+        return error_response(message='门禁终端不存在', code=404)
+    gate.bound = 1
+    db.session.commit()
+    return success_response(data=gate.to_dict(), message='绑定成功')
+
+
+@gate_bp.route('/<int:gate_id>/unbind', methods=['POST'])
+@jwt_required()
+@with_write_lock
+def unbind_gate(gate_id):
+    """门禁终端解绑"""
+    gate = Gate.query.get(gate_id)
+    if not gate:
+        return error_response(message='门禁终端不存在', code=404)
+    gate.bound = 0
+    db.session.commit()
+    return success_response(data=gate.to_dict(), message='解绑成功')
