@@ -237,7 +237,7 @@ def face_register():
                     continue
 
         if duplicate_name:
-            return error_response(message='人脸已存在，已注册为「{}」'.format(duplicate_name), code=409)
+            return error_response(message='该人脸已被{}使用'.format(duplicate_name), code=409)
 
         from datetime import datetime
         new_id = max([r.get('id', 0) for r in registered], default=0) + 1

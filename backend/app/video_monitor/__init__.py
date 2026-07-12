@@ -5,6 +5,8 @@
 import logging
 import re
 import time
+import base64
+import threading
 from datetime import datetime
 
 import cv2
@@ -12,6 +14,7 @@ import requests as http_requests
 from flask import Blueprint, Response, jsonify, current_app, request as flask_request
 from flask_jwt_extended import jwt_required, get_jwt
 
+from app import limiter
 from utils import error_response
 from utils.response import success_response
 from core.audit_logger import log_audit
@@ -20,10 +23,44 @@ video_monitor_bp = Blueprint('video_monitor', __name__)
 
 logger = logging.getLogger(__name__)
 
+_gate_push_frames = {}
+_gate_push_lock = threading.Lock()
+_GATE_FRAME_TTL = 10
 
-def generate_frames(stream_url, frame_skip=3, max_width=640):
+
+def _store_gate_frame(push_key, jpeg_bytes):
+    with _gate_push_lock:
+        _gate_push_frames[push_key] = {
+            'frame': jpeg_bytes,
+            'timestamp': time.time()
+        }
+
+
+def _get_gate_frame(push_key):
+    with _gate_push_lock:
+        entry = _gate_push_frames.get(push_key)
+        if not entry:
+            return None
+        if time.time() - entry['timestamp'] > _GATE_FRAME_TTL:
+            del _gate_push_frames[push_key]
+            return None
+        return entry['frame']
+
+
+def _has_gate_frames(push_key):
+    with _gate_push_lock:
+        entry = _gate_push_frames.get(push_key)
+        if not entry:
+            return False
+        if time.time() - entry['timestamp'] > _GATE_FRAME_TTL:
+            del _gate_push_frames[push_key]
+            return False
+        return True
+
+
+def _try_connect_rtmp(stream_url, timeout=8):
     import threading
-    cap_result = {'cap': None, 'opened': False}
+    cap_result = {'cap': None, 'opened': False, 'error': None}
     cap_error = threading.Event()
 
     def try_open():
@@ -31,38 +68,39 @@ def generate_frames(stream_url, frame_skip=3, max_width=640):
             cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
             cap_result['cap'] = cap
             cap_result['opened'] = cap.isOpened()
-        except Exception:
+        except Exception as e:
             cap_result['opened'] = False
+            cap_result['error'] = str(e)
         cap_error.set()
 
     t = threading.Thread(target=try_open, daemon=True)
     t.start()
-    if not cap_error.wait(timeout=8):
+    if not cap_error.wait(timeout=timeout):
         logger.error('Timeout opening RTMP stream: {}'.format(stream_url))
-        placeholder = _generate_placeholder('RTMP连接超时', (max_width, int(max_width * 9 / 16)))
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
-        return
+        return None, 'RTMP连接超时'
 
     if not cap_result['opened']:
         logger.error('Failed to open RTMP stream: {}'.format(stream_url))
-        placeholder = _generate_placeholder('RTMP连接失败', (max_width, int(max_width * 9 / 16)))
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
-        return
+        return None, 'RTMP连接失败'
 
     cap = cap_result['cap']
-
     success, frame = cap.read()
     if not success or frame is None:
         logger.warning('Failed to read first frame from stream: {}'.format(stream_url))
         cap.release()
-        placeholder = _generate_placeholder('无法读取视频帧', (max_width, int(max_width * 9 / 16)))
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
+        return None, '无法读取视频帧'
+
+    return cap, frame
+
+
+def generate_frames(stream_url, frame_skip=3, max_width=640, cap=None, first_frame=None):
+    import threading
+    if cap is None:
+        cap, first_frame = _try_connect_rtmp(stream_url)
+    if cap is None:
         return
 
-    latest = {'frame': frame, 'lock': threading.Lock(), 'alive': True}
+    latest = {'frame': first_frame, 'lock': threading.Lock(), 'alive': True}
 
     def reader():
         while latest['alive']:
@@ -104,18 +142,55 @@ def generate_frames(stream_url, frame_skip=3, max_width=640):
         cap.release()
 
 
+def generate_frames_from_push(push_key, max_width=640):
+    while True:
+        frame_bytes = _get_gate_frame(push_key)
+        if frame_bytes is None:
+            time.sleep(0.1)
+            continue
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(0.05)
+
+
+@video_monitor_bp.route('/gate-push-frame', methods=['POST'])
+@limiter.exempt
+def gate_push_frame():
+    data = flask_request.get_json(force=True, silent=True)
+    if not data or not data.get('push_key') or not data.get('frame'):
+        return jsonify({'error': '缺少push_key或frame参数'}), 400
+    push_key = data['push_key']
+    try:
+        jpeg_bytes = base64.b64decode(data['frame'])
+    except Exception:
+        return jsonify({'error': 'frame解码失败'}), 400
+    _store_gate_frame(push_key, jpeg_bytes)
+    config = current_app.config
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+    rtmp_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, push_key)
+    from core.rtmp_relay import push_jpeg_frame
+    push_jpeg_frame(push_key, jpeg_bytes, rtmp_url)
+    return jsonify({'code': 0, 'message': 'ok'})
+
+
+
 @video_monitor_bp.route('/video_feed/<stream_id>')
+@limiter.exempt
 def video_feed(stream_id):
     """获取MJPEG视频流（通过stream_id拼接RTMP地址）"""
     config = current_app.config
-    rtmp_host = config.get('RTMP_SERVER_HOST', '127.0.0.1')
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
     rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
     stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, stream_id)
     frame_skip = config.get('VIDEO_FRAME_SKIP', 5)
     max_width = config.get('VIDEO_MAX_WIDTH', 640)
     try:
+        cap, first_frame = _try_connect_rtmp(stream_url)
+        if cap is None:
+            return jsonify({'error': 'RTMP连接失败', 'code': 503}), 503
         return Response(
-            generate_frames(stream_url, frame_skip=frame_skip, max_width=max_width),
+            generate_frames(stream_url, frame_skip=frame_skip, max_width=max_width, cap=cap, first_frame=first_frame),
             mimetype='multipart/x-mixed-replace; boundary=frame'
         )
     except Exception as e:
@@ -124,21 +199,30 @@ def video_feed(stream_id):
 
 
 @video_monitor_bp.route('/video_feed/gate/<int:gate_id>')
+@limiter.exempt
 def video_feed_by_gate(gate_id):
-    """获取门禁终端的MJPEG视频流（使用门禁绑定的推流码）"""
+    """获取门禁终端的MJPEG视频流（优先使用门禁端推流帧，否则从RTMP拉取）"""
     from app.models.gate import Gate
     gate = Gate.query.get(gate_id)
     if not gate or not gate.push_key:
         return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
     config = current_app.config
-    rtmp_host = config.get('RTMP_SERVER_HOST', '127.0.0.1')
+    max_width = config.get('VIDEO_MAX_WIDTH', 640)
+    if _has_gate_frames(gate.push_key):
+        return Response(
+            generate_frames_from_push(gate.push_key, max_width=max_width),
+            mimetype='multipart/x-mixed-replace; boundary=frame'
+        )
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
     rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
     stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
     frame_skip = config.get('VIDEO_FRAME_SKIP', 5)
-    max_width = config.get('VIDEO_MAX_WIDTH', 640)
     try:
+        cap, first_frame = _try_connect_rtmp(stream_url)
+        if cap is None:
+            return jsonify({'error': 'RTMP连接失败', 'code': 503}), 503
         return Response(
-            generate_frames(stream_url, frame_skip=frame_skip, max_width=max_width),
+            generate_frames(stream_url, frame_skip=frame_skip, max_width=max_width, cap=cap, first_frame=first_frame),
             mimetype='multipart/x-mixed-replace; boundary=frame'
         )
     except Exception as e:
@@ -147,23 +231,33 @@ def video_feed_by_gate(gate_id):
 
 
 @video_monitor_bp.route('/video_feed/gate/<int:gate_id>/detect')
+@limiter.exempt
 def video_feed_by_gate_with_detection(gate_id):
-    """获取门禁终端带人脸检测标注的MJPEG视频流"""
+    """获取门禁终端带人脸检测标注的MJPEG视频流（优先使用门禁端推流帧，否则从RTMP拉取）"""
     from app.models.gate import Gate
     gate = Gate.query.get(gate_id)
     if not gate or not gate.push_key:
         return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
     config = current_app.config
-    rtmp_host = config.get('RTMP_SERVER_HOST', '127.0.0.1')
+    max_width = config.get('VIDEO_MAX_WIDTH', 640)
+    if _has_gate_frames(gate.push_key):
+        from .face_detection_stream import generate_frames_with_detection_from_push
+        return Response(
+            generate_frames_with_detection_from_push(gate.push_key, max_width=max_width),
+            mimetype='multipart/x-mixed-replace; boundary=frame'
+        )
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
     rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
     stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
     frame_skip = config.get('VIDEO_FRAME_SKIP', 5)
-    max_width = config.get('VIDEO_MAX_WIDTH', 640)
     detect_width = config.get('VIDEO_DETECT_WIDTH', 320)
     try:
+        cap, first_frame = _try_connect_rtmp(stream_url)
+        if cap is None:
+            return jsonify({'error': 'RTMP连接失败', 'code': 503}), 503
         from .face_detection_stream import generate_frames_with_detection_url
         return Response(
-            generate_frames_with_detection_url(stream_url, frame_skip=frame_skip, max_width=max_width, detect_width=detect_width),
+            generate_frames_with_detection_url(stream_url, frame_skip=frame_skip, max_width=max_width, detect_width=detect_width, cap=cap, first_frame=first_frame),
             mimetype='multipart/x-mixed-replace; boundary=frame'
         )
     except Exception as e:

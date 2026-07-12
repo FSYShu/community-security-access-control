@@ -23,51 +23,127 @@ def generate_frames_with_detection(stream_id):
     return _do_generate_frames_with_detection(stream_url, max_width)
 
 
-def generate_frames_with_detection_url(stream_url, frame_skip=5, max_width=640, detect_width=320):
-    return _do_generate_frames_with_detection(stream_url, max_width)
+def generate_frames_with_detection_url(stream_url, frame_skip=5, max_width=640, detect_width=320, cap=None, first_frame=None):
+    return _do_generate_frames_with_detection(stream_url, max_width, cap=cap, first_frame=first_frame)
 
 
-def _do_generate_frames_with_detection(stream_url, max_width=640):
-    cap_result = {'cap': None, 'opened': False}
-    cap_error = threading.Event()
+def generate_frames_with_detection_from_push(push_key, max_width=640):
+    from . import _get_gate_frame
+    try:
+        recognizer = FaceRecognizer()
+    except Exception as e:
+        logger.error('FaceRecognizer init failed: {}'.format(str(e)))
+        return
 
-    def try_open():
+    try:
+        registered_faces = load_registered_faces()
+    except Exception as e:
+        logger.error('load_registered_faces failed: {}'.format(str(e)))
+        registered_faces = []
+
+    detection_state = {
+        'boxes': [],
+        'lock': threading.Lock(),
+        'last_time': 0.0,
+    }
+
+    while True:
+        jpeg_bytes = _get_gate_frame(push_key)
+        if jpeg_bytes is None:
+            time.sleep(0.1)
+            continue
+
         try:
-            cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
-            cap_result['cap'] = cap
-            cap_result['opened'] = cap.isOpened()
+            nparr = np.frombuffer(jpeg_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if frame is None:
+                time.sleep(0.05)
+                continue
         except Exception:
-            cap_result['opened'] = False
-        cap_error.set()
+            time.sleep(0.05)
+            continue
 
-    t = threading.Thread(target=try_open, daemon=True)
-    t.start()
-    placeholder_size = (max_width, int(max_width * 9 / 16))
-    if not cap_error.wait(timeout=8):
-        from . import _generate_placeholder
-        placeholder = _generate_placeholder('RTMP连接超时', placeholder_size)
+        h, w = frame.shape[:2]
+        if w > max_width:
+            scale = max_width / w
+            frame = cv2.resize(frame, (max_width, int(h * scale)), interpolation=cv2.INTER_LINEAR)
+
+        now = time.time()
+        elapsed = now - detection_state['last_time']
+        if elapsed >= DETECT_INTERVAL:
+            try:
+                detect_scale = 1.0
+                if frame.shape[1] > DETECT_WIDTH:
+                    detect_scale = DETECT_WIDTH / frame.shape[1]
+                    detect_frame = cv2.resize(frame, (DETECT_WIDTH, int(frame.shape[0] * detect_scale)),
+                                              interpolation=cv2.INTER_NEAREST)
+                else:
+                    detect_frame = frame
+
+                rgb_image = np.ascontiguousarray(detect_frame[:, :, ::-1])
+                faces = recognizer.detect_faces_rgb(rgb_image)
+                boxes = []
+                for face_rect in faces:
+                    face_descriptor = recognizer.compute_face_descriptor_rgb(rgb_image, face_rect)
+                    matched_name, matched_id, distance = recognizer.compare_faces(
+                        face_descriptor, registered_faces, tolerance=0.4
+                    )
+                    if detect_scale != 1.0:
+                        x1, y1, x2, y2 = face_rect
+                        face_rect = (int(x1 / detect_scale), int(y1 / detect_scale),
+                                     int(x2 / detect_scale), int(y2 / detect_scale))
+                    boxes.append({
+                        'rect': face_rect,
+                        'name': matched_name,
+                        'is_stranger': matched_name == '陌生人',
+                    })
+                with detection_state['lock']:
+                    detection_state['boxes'] = boxes
+                    detection_state['last_time'] = time.time()
+            except Exception as e:
+                logger.error('Face detection error: {}'.format(str(e)))
+                with detection_state['lock']:
+                    detection_state['last_time'] = time.time()
+
+        with detection_state['lock']:
+            boxes = list(detection_state['boxes'])
+
+        for box in boxes:
+            x1, y1, x2, y2 = box['rect']
+            if box['is_stranger']:
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                cv2.putText(frame, '陌生人', (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            else:
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(frame, box['name'], (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        ret, buffer = cv2.imencode(
+            '.jpg', frame,
+            [int(cv2.IMWRITE_JPEG_QUALITY), 45]
+        )
+        if not ret:
+            time.sleep(0.05)
+            continue
+        frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
-        return
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(0.05)
 
-    if not cap_result['opened']:
-        from . import _generate_placeholder
-        placeholder = _generate_placeholder('RTMP连接失败', placeholder_size)
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
-        return
 
-    cap = cap_result['cap']
+def _do_generate_frames_with_detection(stream_url, max_width=640, cap=None, first_frame=None):
+    if cap is None:
+        from . import _try_connect_rtmp
+        cap, first_frame = _try_connect_rtmp(stream_url)
+    if cap is None:
+        return
 
     try:
         recognizer = FaceRecognizer()
     except Exception as e:
         logger.error('FaceRecognizer init failed: {}'.format(str(e)))
         cap.release()
-        from . import _generate_placeholder
-        placeholder = _generate_placeholder('人脸识别初始化失败', placeholder_size)
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + placeholder + b'\r\n')
         return
 
     try:
