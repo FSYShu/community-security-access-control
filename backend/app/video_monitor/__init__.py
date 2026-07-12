@@ -313,25 +313,6 @@ def face_detection_sse(gate_id):
     if not gate or not gate.push_key:
         return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
 
-@video_monitor_bp.route('/video_feed/gate/<int:gate_id>/danger-detect')
-@limiter.exempt
-def video_feed_by_gate_with_danger_detect(gate_id):
-    """获取门禁终端带禁区入侵检测标注的MJPEG视频流"""
-    from app.models.gate import Gate
-    from app.models.danger_zone import DangerZone
-    gate = Gate.query.get(gate_id)
-    if not gate or not gate.push_key:
-        return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
-
-    gate_id_str = str(gate_id)
-    zones = DangerZone.query.filter(
-        DangerZone.camera_ids.contains(gate_id_str),
-        DangerZone.status == 'active'
-    ).all()
-    if not zones:
-        return jsonify({'error': '该摄像头未关联活跃禁区'}), 404
-
-
     config = current_app.config
     max_width = config.get('VIDEO_MAX_WIDTH', 640)
     rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
@@ -356,6 +337,30 @@ def video_feed_by_gate_with_danger_detect(gate_id):
         logger.error('Failed to stream face detection for gate {}: {}'.format(gate_id, str(e)))
         return jsonify({'error': 'Failed to process face detection stream'}), 500
 
+
+@video_monitor_bp.route('/video_feed/gate/<int:gate_id>/danger-detect')
+@limiter.exempt
+def video_feed_by_gate_with_danger_detect(gate_id):
+    """获取门禁终端带禁区入侵检测标注的MJPEG视频流"""
+    from app.models.gate import Gate
+    from app.models.danger_zone import DangerZone
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
+
+    gate_id_str = str(gate_id)
+    zones = DangerZone.query.filter(
+        DangerZone.camera_ids.contains(gate_id_str),
+        DangerZone.status == 'active'
+    ).all()
+    if not zones:
+        return jsonify({'error': '该摄像头未关联活跃禁区'}), 404
+
+    config = current_app.config
+    max_width = config.get('VIDEO_MAX_WIDTH', 640)
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+    stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
     try:
         from .danger_detect_stream import generate_frames_with_danger_detect
         return Response(
