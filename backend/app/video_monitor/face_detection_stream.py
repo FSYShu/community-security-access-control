@@ -1,6 +1,8 @@
+import json
 import logging
 import threading
 import time
+
 
 import cv2
 import numpy as np
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 DETECT_INTERVAL = 2.0
 DETECT_WIDTH = 160
+BUFFER_DELAY_SECONDS = 5.0
 
 
 def _extract_push_key_from_url(stream_url):
@@ -73,11 +76,7 @@ def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, det
         logger.error('load_registered_faces failed: {}'.format(str(e)))
         registered_faces = []
 
-    latest = {
-        'frame': None,
-        'lock': threading.Lock(),
-        'alive': True,
-    }
+    slot = {'frame': None, 'alive': True}
 
     detection_state = {
         'boxes': [],
@@ -86,27 +85,27 @@ def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, det
     }
 
     def reader():
-        while latest['alive']:
+        while slot['alive']:
+            if entry['process'].poll() is not None:
+                break
             ok, f = read_cv2_frame_from_pull(entry)
             if not ok or f is None:
                 time.sleep(0.01)
                 continue
-            with latest['lock']:
-                latest['frame'] = f
+            slot['frame'] = f
 
     reader_thread = threading.Thread(target=reader, daemon=True)
     reader_thread.start()
 
     def detector():
-        while latest['alive']:
+        while slot['alive']:
             now = time.time()
             elapsed = now - detection_state['last_time']
             if elapsed < DETECT_INTERVAL:
                 time.sleep(DETECT_INTERVAL - elapsed)
                 continue
 
-            with latest['lock']:
-                frame = latest['frame']
+            frame = slot['frame']
             if frame is None:
                 time.sleep(0.1)
                 continue
@@ -153,13 +152,10 @@ def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, det
     detector_thread = threading.Thread(target=detector, daemon=True)
     detector_thread.start()
 
-    frame_interval = 1.0 / fps
-    last_yield = time.perf_counter()
 
     try:
-        while latest['alive']:
-            with latest['lock']:
-                frame = latest['frame']
+        while slot['alive']:
+            frame = slot['frame']
             if frame is None:
                 time.sleep(0.01)
                 continue
@@ -183,9 +179,6 @@ def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, det
                     cv2.putText(frame, box['name'], (x1, y1 - 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-            latency_ms = get_push_latency_ms(push_key)
-            frame = _overlay_latency_on_frame(frame, latency_ms)
-
             ret, buffer = cv2.imencode(
                 '.jpg', frame,
                 [int(cv2.IMWRITE_JPEG_QUALITY), 45]
@@ -195,14 +188,137 @@ def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, det
                 continue
             frame_bytes = buffer.tobytes()
 
-            now = time.perf_counter()
-            elapsed = now - last_yield
-            if elapsed < frame_interval:
-                time.sleep(frame_interval - elapsed)
-
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-            last_yield = time.perf_counter()
     finally:
-        latest['alive'] = False
+        slot['alive'] = False
         stop_rtmp_pull(stream_url)
+
+
+def generate_detection_sse(stream_url, fps=10, max_width=640, detect_width=320):
+    """生成人脸检测SSE事件流，优先从共享帧存储读取，否则启动独立RTMP拉流"""
+    from core.shared_frame_store import get_frame as _get_shared_frame
+
+    yield 'event: connected\ndata: {}\n\n'.format(json.dumps({}))
+
+    own_pull = False
+    entry = None
+    slot = {'alive': True}
+
+    for _ in range(10):
+        if _get_shared_frame(stream_url) is not None:
+            break
+        time.sleep(0.5)
+    else:
+        entry = start_rtmp_pull(stream_url, fps=fps, max_width=max_width)
+        if entry is not None:
+            own_pull = True
+
+    detection_state = {
+        'boxes': [],
+        'frame_width': 0,
+        'frame_height': 0,
+        'lock': threading.Lock(),
+        'last_time': 0.0,
+    }
+
+    def detector():
+        try:
+            recognizer = FaceRecognizer()
+        except Exception as e:
+            logger.error('FaceRecognizer init failed: {}'.format(str(e)))
+            with detection_state['lock']:
+                detection_state['last_time'] = time.time()
+            return
+        try:
+            registered_faces = load_registered_faces()
+        except Exception as e:
+            logger.error('load_registered_faces failed: {}'.format(str(e)))
+            registered_faces = []
+
+        while slot['alive']:
+            now = time.time()
+            elapsed = now - detection_state['last_time']
+            if elapsed < DETECT_INTERVAL:
+                time.sleep(DETECT_INTERVAL - elapsed)
+                continue
+
+            frame = None
+            if own_pull and entry is not None:
+                if entry['process'].poll() is None:
+                    ok, f = read_cv2_frame_from_pull(entry)
+                    if ok and f is not None:
+                        frame = f
+            else:
+                jpeg = _get_shared_frame(stream_url)
+                if jpeg is not None:
+                    arr = np.frombuffer(jpeg, dtype=np.uint8).copy()
+                    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                time.sleep(0.5)
+                continue
+
+            try:
+                h, w = frame.shape[:2]
+
+                detect_scale = 1.0
+                if w > detect_width:
+                    detect_scale = detect_width / w
+                    detect_frame = cv2.resize(frame, (detect_width, int(h * detect_scale)),
+                                              interpolation=cv2.INTER_NEAREST)
+                else:
+                    detect_frame = frame
+
+                rgb_image = np.ascontiguousarray(detect_frame[:, :, ::-1])
+                faces = recognizer.detect_faces_rgb(rgb_image)
+                boxes = []
+                for face_rect in faces:
+                    face_descriptor = recognizer.compute_face_descriptor_rgb(rgb_image, face_rect)
+                    matched_name, matched_id, distance = recognizer.compare_faces(
+                        face_descriptor, registered_faces, tolerance=0.4
+                    )
+                    if detect_scale != 1.0:
+                        x1, y1, x2, y2 = face_rect
+                        face_rect = (int(x1 / detect_scale), int(y1 / detect_scale),
+                                     int(x2 / detect_scale), int(y2 / detect_scale))
+                    boxes.append({
+                        'rect': list(face_rect),
+                        'name': matched_name,
+                        'is_stranger': matched_name == '陌生人',
+                    })
+                with detection_state['lock']:
+                    detection_state['boxes'] = boxes
+                    detection_state['frame_width'] = w
+                    detection_state['frame_height'] = h
+                    detection_state['last_time'] = time.time()
+            except Exception as e:
+                logger.error('Face detection error: {}'.format(str(e)))
+                with detection_state['lock']:
+                    detection_state['last_time'] = time.time()
+
+    detector_thread = threading.Thread(target=detector, daemon=True)
+    detector_thread.start()
+
+
+    try:
+        time.sleep(0.5)
+        while slot['alive']:
+            with detection_state['lock']:
+                boxes = list(detection_state['boxes'])
+                frame_w = detection_state['frame_width']
+                frame_h = detection_state['frame_height']
+
+            data = json.dumps({
+                'boxes': boxes,
+                'frame_width': frame_w,
+                'frame_height': frame_h,
+            })
+
+            yield 'event: detection\ndata: {}\n\n'.format(data)
+
+            time.sleep(1.0)
+    finally:
+        slot['alive'] = False
+        if own_pull and entry is not None:
+            stop_rtmp_pull(stream_url)
