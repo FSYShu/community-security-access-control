@@ -23,6 +23,7 @@ limiter = Limiter(
 )
 
 
+
 def create_app(config_name=None):
     """应用工厂函数"""
     app = Flask(__name__)
@@ -38,6 +39,7 @@ def create_app(config_name=None):
     jwt.init_app(app)
     CORS(app, supports_credentials=True)
     limiter.init_app(app)
+
 
     with app.app_context():
         from sqlalchemy import text
