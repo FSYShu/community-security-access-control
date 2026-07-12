@@ -13,7 +13,13 @@ module.exports = {
     proxyTable: {
       '/api': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        onProxyRes: function (proxyRes) {
+          if (proxyRes.headers['content-type'] && proxyRes.headers['content-type'].indexOf('multipart/x-mixed-replace') !== -1) {
+            proxyRes.headers['x-accel-buffering'] = 'no'
+            proxyRes.headers['cache-control'] = 'no-cache'
+          }
+        }
       }
     },
 

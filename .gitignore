@@ -38,6 +38,7 @@ backend/registered_faces.json
 backend/dat/
 backend/data/
 
+
 # 前端测试
 /test/unit/coverage/
 /test/e2e/reports/
