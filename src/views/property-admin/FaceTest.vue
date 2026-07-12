@@ -101,8 +101,7 @@ export default {
           this.$message.error(res.message || '识别失败')
         }
       } catch (error) {
-        console.error('Face test error:', error)
-        this.$message.error('识别请求失败')
+        // 拦截器已弹出后端错误消息，此处不再重复提示
       } finally {
         this.testing = false
       }

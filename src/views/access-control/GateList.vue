@@ -208,6 +208,8 @@ export default {
       this.onRefresh()
     },
     async loadData () {
+      if (this._loading) return
+      this._loading = true
       try {
         const levelMap = { 社区大门: 'community_gate', 单元门: 'unit_door', 危险防护区域: 'dangerous_area' }
         const statusMap = { 在线: 'online', 离线: 'offline', 维护中: 'maintenance' }
@@ -225,6 +227,7 @@ export default {
       } catch (e) {
         this.finished = true
       }
+      this._loading = false
       this.loading = false
       this.refreshing = false
     },
