@@ -19,7 +19,7 @@
           </div>
         </transition>
       </div>
-      <div class="status-indicator" :class="{ 'is-hidden': streamError }">
+      <div class="status-indicator">
         <span class="status-dot" :class="statusDotClass"></span>
         <span class="status-text">{{ statusLabel }}</span>
       </div>
@@ -51,7 +51,7 @@
 
 <script>
 const AUTO_RETRY_MAX = 10
-const AUTO_RETRY_INTERVAL = 5000
+const AUTO_RETRY_INTERVAL = 10000
 
 export default {
   name: 'VideoStreamViewer',
@@ -63,6 +63,10 @@ export default {
     faceDetectionEnabled: {
       type: Boolean,
       default: false
+    },
+    initialGateId: {
+      type: String,
+      default: ''
     }
   },
   data () {
@@ -81,10 +85,12 @@ export default {
   computed: {
     statusDotClass () {
       if (!this.selectedGate) return 'dot-gray'
+      if (this.streamError) return 'dot-red'
       return this.connected ? 'dot-green' : 'dot-yellow'
     },
     statusLabel () {
       if (!this.selectedGate) return '未连接'
+      if (this.streamError) return '连接失败'
       return this.connected ? '已连接' : '连接中...'
     },
     videoFeedUrl () {
@@ -113,6 +119,9 @@ export default {
     }
   },
   mounted () {
+    if (this.initialGateId) {
+      this.selectedGate = this.initialGateId
+    }
     document.addEventListener('click', this.onDocumentClick)
   },
   beforeDestroy () {
@@ -365,9 +374,7 @@ export default {
   width: 58px;
   justify-content: center;
 }
-.status-indicator.is-hidden {
-  visibility: hidden;
-}
+
 .status-dot {
   width: 6px;
   height: 6px;
@@ -379,6 +386,10 @@ export default {
 }
 .dot-yellow {
   background: var(--dark-orange);
+}
+.dot-red {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
 }
 .dot-gray {
   background: var(--dark-text-secondary);

@@ -3,7 +3,7 @@
     <section class="stats-grid">
       <div
         class="stat-card stat-card-wide stat-card-primary"
-        @click="$router.push('/face-management')"
+        @click="$router.push('/property-admin/pass-logs')"
       >
         <div class="stat-card-glow"></div>
         <div class="stat-card-inner">
@@ -35,7 +35,7 @@
         </div>
       </div>
 
-      <div class="stat-card stat-card-success">
+      <div class="stat-card stat-card-success" @click="$router.push('/access-control')">
         <div class="stat-card-glow"></div>
         <div class="stat-card-inner">
           <div class="stat-icon-wrap stat-icon-emerald">
@@ -45,6 +45,7 @@
             <span class="stat-value">{{ stats.onlineDevices }}</span>
             <span class="stat-label">在线设备</span>
           </div>
+          <i class="el-icon-arrow-right stat-arrow" style="font-size:14px"></i>
         </div>
       </div>
 

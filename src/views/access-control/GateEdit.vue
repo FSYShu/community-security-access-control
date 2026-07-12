@@ -70,7 +70,7 @@ export default {
         const statusItem = this.statusOptions.find(o => o.value === d.status)
         this.form.status_label = statusItem ? statusItem.text : d.status
       } catch (e) {
-        this.$toast.fail('加载终端信息失败')
+        this.$message.error('加载终端信息失败')
       }
     },
     onLevelConfirm (value, index) {
@@ -85,16 +85,16 @@ export default {
     },
     async onSubmit () {
       if (!this.form.gate_name || !this.form.location || !this.form.gate_level) {
-        return this.$toast.fail('请填写必填项')
+        return this.$message.warning('请填写必填项')
       }
       try {
         const data = { gate_name: this.form.gate_name, location: this.form.location, gate_level: this.form.gate_level, building_unit: this.form.building_unit, push_key: this.form.push_key, status: this.form.status }
         if (this.isEdit) await updateGate(this.gateId, data)
         else await addGate(data)
-        this.$toast.success('保存成功')
+        this.$message.success('保存成功')
         this.$router.back()
       } catch (e) {
-        this.$toast.fail('保存失败')
+        this.$message.error('保存失败')
       }
     }
   }

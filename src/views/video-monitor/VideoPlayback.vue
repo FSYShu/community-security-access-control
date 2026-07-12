@@ -1,6 +1,11 @@
 <template>
   <app-layout page-title="历史视频回放">
     <van-loading v-if="loading" class="page-loading" size="24px" vertical>加载中...</van-loading>
+    <div v-else-if="loadError" class="page-loading">
+      <i class="el-icon-warning-outline" style="font-size:40px;color:var(--dark-orange)"></i>
+      <p style="color:var(--dark-text-secondary);margin:12px 0 0">加载录像失败</p>
+      <button class="retry-btn" @click="fetchRecordings">重试</button>
+    </div>
     <van-empty v-else-if="recordings.length === 0" description="暂无历史录像" />
 
     <div v-else class="playback-layout">
@@ -10,11 +15,11 @@
           <div class="mode-tab" :class="{ 'is-active': groupMode === 'date' }" @click="groupMode = 'date'">按日期</div>
         </div>
         <div v-for="(group, idx) in groupedRecordings" :key="idx" class="record-group">
-          <div class="group-header">
-            <span class="group-name">{{ group.label }}</span>
+          <div class="group-header" @click="toggleGroup(idx)">
+            <span class="group-name"><i class="el-icon-arrow-right group-arrow" :class="{ 'is-expanded': expandedGroups[idx] }"></i>{{ group.label }}</span>
             <span class="group-count">{{ group.files.length }}段录像</span>
           </div>
-          <div class="card-grid">
+          <div class="card-grid" v-show="expandedGroups[idx]">
             <div
               v-for="file in group.files"
               :key="file.filename"
@@ -26,8 +31,8 @@
                 <i class="el-icon-video-camera"></i>
               </div>
               <div class="card-info">
-                <span class="card-time">{{ file.datetime }}</span>
-                <span class="card-meta">{{ file._gate_name }} | {{ file.duration_text }} | {{ file.file_size_text }}</span>
+                <span class="card-time">{{ file._gate_name }} {{ file.datetime }}</span>
+                <span class="card-meta">{{ file.duration_text }} | {{ file.file_size_text }}</span>
               </div>
             </div>
           </div>
@@ -68,11 +73,13 @@ export default {
   data () {
     return {
       loading: false,
+      loadError: false,
       recordings: [],
       groupMode: 'location',
       currentFile: null,
       flvPlayer: null,
-      playerError: ''
+      playerError: '',
+      expandedGroups: {}
     }
   },
   computed: {
@@ -99,6 +106,15 @@ export default {
   created () {
     this.fetchRecordings()
   },
+  watch: {
+    groupedRecordings () {
+      const groups = {}
+      this.groupedRecordings.forEach(function (_, idx) {
+        groups[idx] = true
+      })
+      this.expandedGroups = groups
+    }
+  },
   beforeDestroy () {
     this.stopPlayback()
   },
@@ -112,9 +128,13 @@ export default {
         }
       } catch (error) {
         console.error('Failed to fetch recordings:', error)
+        this.loadError = true
       } finally {
         this.loading = false
       }
+    },
+    toggleGroup (idx) {
+      this.$set(this.expandedGroups, idx, !this.expandedGroups[idx])
     },
     playRecording (file) {
       this.stopPlayback()
@@ -171,8 +191,10 @@ export default {
 <style scoped>
 .page-loading {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 40px 0;
+  height: calc(100vh - 200px);
 }
 
 .playback-layout {
@@ -246,12 +268,23 @@ export default {
   justify-content: space-between;
   margin-bottom: 10px;
   padding: 0 4px;
+  cursor: pointer;
 }
 
 .group-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--dark-text);
+}
+
+.group-arrow {
+  margin-right: 6px;
+  font-size: 12px;
+  transition: transform 0.2s;
+}
+
+.group-arrow.is-expanded {
+  transform: rotate(90deg);
 }
 
 .group-count {
@@ -263,6 +296,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow: hidden;
 }
 
 .video-card {
@@ -328,6 +362,23 @@ export default {
 .card-meta {
   font-size: 12px;
   color: var(--dark-text-secondary);
+}
+
+.retry-btn {
+  margin-top: 12px;
+  padding: 8px 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  color: var(--dark-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.retry-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--dark-text);
 }
 
 .playback-player {

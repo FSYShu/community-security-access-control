@@ -45,14 +45,14 @@ export default {
           try { this.alarmStats = JSON.parse(res.data.alarm_stats || '{}') } catch (e) { this.alarmStats = {} }
           try { this.abnormalEvents = JSON.parse(res.data.abnormal_events || '[]') } catch (e) { this.abnormalEvents = [] }
         }
-      } catch (e) { this.$toast.fail('加载失败') }
+      } catch (e) { this.$message.error('加载失败') }
     },
     async onRegenerate () {
       try {
         await regenerateReport(this.report.id)
-        this.$toast.success('重新生成成功')
+        this.$message.success('重新生成成功')
         this.loadDetail()
-      } catch (e) { this.$toast.fail('重新生成失败') }
+      } catch (e) { this.$message.error('重新生成失败') }
     }
   }
 }

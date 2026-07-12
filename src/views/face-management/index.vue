@@ -18,14 +18,16 @@
         <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
           <van-cell v-for="item in list" :key="item.id">
             <template #title>
-              <span class="type-tag" :class="item.person_type === 'owner' ? 'tag-owner' : 'tag-blacklist'">{{ typeMap[item.person_type] || item.person_type }}</span>
-              <span class="cell-name">{{ item.person_name }}</span>
+              <div class="cell-title-row">
+                <span class="cell-status">
+                  <span class="status-dot" :class="item.status === 'active' ? 'dot-active' : 'dot-inactive'"></span>
+                  <span class="status-label">{{ item.status === 'active' ? '启用' : '停用' }}</span>
+                </span>
+                <span class="cell-name">{{ item.person_name }}</span>
+                <span class="type-tag" :class="item.person_type === 'owner' ? 'tag-owner' : 'tag-blacklist'">{{ typeMap[item.person_type] || item.person_type }}</span>
+              </div>
             </template>
             <template #right-icon>
-              <span class="cell-status">
-                <span class="status-dot" :class="item.status === 'active' ? 'dot-active' : 'dot-inactive'"></span>
-                <span class="status-label">{{ item.status === 'active' ? '启用' : '停用' }}</span>
-              </span>
               <button class="delete-btn" @click="onDelete(item)">
                 <i class="el-icon-delete"></i>
                 <span>删除</span>
@@ -343,7 +345,10 @@ export default {
           this.onRefresh()
         }
       } catch (err) {
-        this.$message.error('录入失败')
+        const msg = (err && err.message) || ''
+        if (!msg.includes('已被') || !msg.includes('使用')) {
+          this.$message.error('录入失败')
+        }
       } finally {
         this.addLoading = false
       }
@@ -455,11 +460,22 @@ export default {
   color: var(--dark-text);
 }
 
+.cell-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+::v-deep .van-cell__title {
+  display: flex;
+  align-items: center;
+}
+
 .cell-status {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-right: 8px;
+
 }
 
 .status-dot {
@@ -492,7 +508,7 @@ export default {
   height: 22px;
   border-radius: 4px;
   font-size: 12px;
-  margin-right: 8px;
+  margin-left: 12px;
   border: 1px solid;
 }
 

@@ -1,0 +1,135 @@
+:root {
+  --gate-bg: #0f1117;
+  --gate-bg-card: #1a1d27;
+  --gate-border: #2a2d3a;
+  --gate-text: #e5e7eb;
+  --gate-text-secondary: #9ca3af;
+  --gate-text-muted: #6b7280;
+  --gate-accent: #6366f1;
+  --gate-accent-light: #818cf8;
+  --gate-success: #10b981;
+  --gate-danger: #ef4444;
+  --gate-warning: #f59e0b;
+  --gate-orange: #f97316;
+  --gate-radius: 12px;
+  --gate-radius-sm: 8px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--gate-bg);
+  color: var(--gate-text);
+  overflow-x: hidden;
+}
+
+a {
+  color: var(--gate-accent-light);
+  text-decoration: none;
+}
+
+.van-button--primary {
+  background: var(--gate-accent) !important;
+  border-color: var(--gate-accent) !important;
+}
+
+.van-cell {
+  background: transparent !important;
+  color: var(--gate-text) !important;
+}
+
+.van-field__control {
+  color: var(--gate-text) !important;
+}
+
+.van-field__label {
+  color: var(--gate-text-secondary) !important;
+}
+
+.gate-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.gate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--gate-bg-card);
+  border-bottom: 1px solid var(--gate-border);
+}
+
+.gate-header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gate-text);
+}
+
+.gate-content {
+  flex: 1;
+  padding: 16px;
+}
+
+.gate-card {
+  background: var(--gate-bg-card);
+  border-radius: var(--gate-radius);
+  border: 1px solid var(--gate-border);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.gate-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 24px;
+  border: none;
+  border-radius: var(--gate-radius-sm);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gate-btn:active {
+  transform: scale(0.98);
+}
+
+.gate-btn-primary {
+  background: var(--gate-accent);
+  color: #fff;
+}
+
+.gate-btn-success {
+  background: var(--gate-success);
+  color: #fff;
+}
+
+.gate-btn-danger {
+  background: var(--gate-danger);
+  color: #fff;
+}
+
+.gate-btn-outline {
+  background: transparent;
+  border: 1px solid var(--gate-border);
+  color: var(--gate-text-secondary);
+}
+
+@media (min-width: 1024px) {
+  .gate-content {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+}

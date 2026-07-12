@@ -434,3 +434,37 @@ img {
   background: #818CF8 !important;
   border-color: #818CF8 !important;
 }
+
+.el-message-box {
+  background: #0A0A0A !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 16px !important;
+}
+
+.el-message-box__title {
+  color: #EDEDEF !important;
+}
+
+.el-message-box__message {
+  color: #8A8F98 !important;
+}
+
+.el-message-box__headerbtn .el-message-box__close {
+  color: #8A8F98 !important;
+}
+
+.el-message-box__btns .el-button--default {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #EDEDEF !important;
+}
+
+.el-message-box__btns .el-button--primary {
+  background: #6366F1 !important;
+  border-color: #6366F1 !important;
+}
+
+.el-message-box__btns .el-button--primary:hover {
+  background: #818CF8 !important;
+  border-color: #818CF8 !important;
+}

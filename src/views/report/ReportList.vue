@@ -62,12 +62,12 @@ export default {
     },
     goDetail (item) { this.$router.push(`/report/detail/${item.id}`) },
     async onGenerate () {
-      if (!this.generateDate) return this.$toast.fail('请输入日期')
+      if (!this.generateDate) return this.$message.warning('请输入日期')
       try {
         await generateReport({ report_date: this.generateDate })
-        this.$toast.success('日报生成成功')
+        this.$message.success('日报生成成功')
         this.page = 1; this.finished = false; this.loadData()
-      } catch (e) { this.$toast.fail('生成失败') }
+      } catch (e) { this.$message.error('生成失败') }
     }
   }
 }
