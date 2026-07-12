@@ -6,6 +6,9 @@ import os
 import base64
 import json
 import logging
+import cv2
+import numpy as np
+from datetime import datetime
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
@@ -15,6 +18,7 @@ from utils.response import success_response, error_response
 from utils.permissions import admin_required, owner_self_required
 from core.db_lock import with_write_lock
 from core.audit_logger import log_audit
+from core.face_recognition import FaceRecognizer, load_registered_faces
 
 logger = logging.getLogger(__name__)
 
@@ -146,9 +150,9 @@ def delete_face(face_id):
 
 
 @face_bp.route('/pass', methods=['POST'])
-@jwt_required()
+@limiter.exempt
 def submit_face_pass():
-    """提交人脸识别通行请求"""
+    """提交人脸识别通行请求：识别人脸、校验权限、返回通行结果"""
     data = request.get_json()
     face_image_base64 = data.get('face_image', '')
     gate_id = data.get('gate_id', '')
@@ -156,7 +160,73 @@ def submit_face_pass():
     if not face_image_base64:
         return error_response(message='人脸图像不能为空', code=400)
 
-    return success_response(data={'result': 'processing', 'gate_id': gate_id}, message='通行请求已提交')
+    try:
+        jpeg_bytes = base64.b64decode(face_image_base64)
+    except Exception:
+        return error_response(message='人脸图像解码失败', code=400)
+
+    try:
+        nparr = np.frombuffer(jpeg_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return error_response(message='无效的人脸图像', code=400)
+    except Exception:
+        return error_response(message='人脸图像处理失败', code=400)
+
+    try:
+        recognizer = FaceRecognizer()
+    except Exception as e:
+        logger.error('FaceRecognizer init failed: {}'.format(str(e)))
+        return error_response(message='人脸识别服务不可用', code=500)
+
+    try:
+        registered_faces = load_registered_faces()
+    except Exception as e:
+        logger.error('load_registered_faces failed: {}'.format(str(e)))
+        registered_faces = []
+
+    rgb_image = np.ascontiguousarray(frame[:, :, ::-1])
+    faces = recognizer.detect_faces_rgb(rgb_image)
+    if not faces:
+        return error_response(message='未检测到人脸', code=400)
+
+    face_rect = faces[0]
+    face_descriptor = recognizer.compute_face_descriptor_rgb(rgb_image, face_rect)
+    matched_name, matched_id, distance = recognizer.compare_faces(face_descriptor, registered_faces, tolerance=0.4)
+
+    if matched_name == '陌生人':
+        return error_response(message='生人：未登记人员，禁止通行', code=403)
+
+    face_info = FaceInfo.query.get(matched_id) if matched_id > 0 else None
+    if not face_info:
+        return error_response(message='生人：未登记人员，禁止通行', code=403)
+
+    if face_info.status != 'active':
+        return error_response(message='该人员已停用', code=403)
+
+    if face_info.person_type == 'blacklist':
+        return error_response(message='黑名单：黑名单人员，禁止通行', code=403)
+
+    now = datetime.utcnow()
+    if face_info.auth_start_time and face_info.auth_end_time:
+        try:
+            start = datetime.fromisoformat(face_info.auth_start_time)
+            end = datetime.fromisoformat(face_info.auth_end_time)
+            if now < start or now > end:
+                return error_response(message='授权过期：访客授权已过期', code=403)
+        except (ValueError, TypeError):
+            pass
+
+    if gate_id and face_info.allowed_gates:
+        try:
+            allowed = json.loads(face_info.allowed_gates) if isinstance(face_info.allowed_gates, str) else face_info.allowed_gates
+            gate_id_str = str(gate_id)
+            if isinstance(allowed, list) and gate_id_str not in [str(g) for g in allowed]:
+                return error_response(message='权限不足：无此门禁通行权限', code=403)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return success_response(data={'result': 'passed', 'person_name': face_info.person_name, 'person_type': face_info.person_type, 'gate_id': gate_id}, message='通行成功')
 
 
 @face_bp.route('/records', methods=['GET'])
