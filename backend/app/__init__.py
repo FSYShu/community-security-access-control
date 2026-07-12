@@ -54,6 +54,10 @@ def create_app(config_name=None):
     with app.app_context():
         init_database(app)
 
+    if os.getenv('ENABLE_DANGER_ZONE_DETECTOR', '1') == '1':
+        from app.danger_zone.danger_zone_background import start_danger_zone_detector
+        start_danger_zone_detector(app)
+
     return app
 
 
@@ -145,6 +149,7 @@ def init_database(app):
         else:
             db.create_all()
             _migrate_schema(db)
+            _migrate_danger_zone_columns()
     else:
         db.create_all()
         _migrate_schema(db)
@@ -165,6 +170,25 @@ def _migrate_schema(database):
             logger.info('Migrated: added last_heartbeat column to gates')
         except Exception:
             pass
+
+
+def _migrate_danger_zone_columns():
+    """为已存在的danger_zones表添加新列"""
+    from sqlalchemy import text, inspect
+    try:
+        insp = inspect(db.engine)
+        if 'danger_zones' in insp.get_table_names():
+            existing = {col['name'] for col in insp.get_columns('danger_zones')}
+            if 'zone_polygon' not in existing:
+                db.session.execute(text('ALTER TABLE danger_zones ADD COLUMN zone_polygon TEXT'))
+                db.session.commit()
+                logger.info('Added zone_polygon column to danger_zones')
+            if 'alarm_level' not in existing:
+                db.session.execute(text("ALTER TABLE danger_zones ADD COLUMN alarm_level VARCHAR(20) DEFAULT 'high'"))
+                db.session.commit()
+                logger.info('Added alarm_level column to danger_zones')
+    except Exception as e:
+        logger.warning('Migration check failed (non-critical): {}'.format(str(e)))
 
 
 def _seed_default_data():

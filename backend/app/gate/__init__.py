@@ -154,6 +154,22 @@ def add_gate():
     )
     db.session.add(gate)
     db.session.commit()
+
+    if gate_level == 'dangerous_area':
+        from app.models.danger_zone import DangerZone
+        existing = DangerZone.query.filter_by(camera_ids=str(gate.id)).first()
+        if not existing:
+            zone = DangerZone(
+                zone_name=gate_name,
+                camera_ids=str(gate.id),
+                safety_distance=2.0,
+                stay_duration=30,
+                alarm_level='high',
+                status='active'
+            )
+            db.session.add(zone)
+            db.session.commit()
+
     log_audit(operation_type='add_gate', operation_content=f'新增门禁终端: {gate_name}')
     return success_response(data=gate.to_dict(), message='新增成功')
 
@@ -188,6 +204,22 @@ def update_gate(gate_id):
         gate.status = data['status']
 
     db.session.commit()
+
+    if gate.gate_level == 'dangerous_area':
+        from app.models.danger_zone import DangerZone
+        existing = DangerZone.query.filter_by(camera_ids=str(gate.id)).first()
+        if not existing:
+            zone = DangerZone(
+                zone_name=gate.gate_name,
+                camera_ids=str(gate.id),
+                safety_distance=2.0,
+                stay_duration=30,
+                alarm_level='high',
+                status='active'
+            )
+            db.session.add(zone)
+            db.session.commit()
+
     log_audit(operation_type='update_gate', operation_content=f'更新门禁终端: {gate_id}')
     return success_response(data=gate.to_dict(), message='更新成功')
 

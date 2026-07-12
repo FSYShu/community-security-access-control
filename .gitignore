@@ -39,7 +39,6 @@ backend/dat/
 backend/data/
 data/
 
-
 # 前端测试
 /test/unit/coverage/
 /test/e2e/reports/
@@ -48,6 +47,9 @@ data/
 
 # 构建缓存
 .merkle-snapshot.json
+
+# Patch files
+patches/
 
 # Editor directories and files
 .idea

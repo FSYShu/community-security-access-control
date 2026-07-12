@@ -1,7 +1,22 @@
 """
 数据库模型 - 告警事件
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_CST = timezone(timedelta(hours=8))
+
+
+def _to_cst_str(time_str):
+    if not time_str:
+        return time_str
+    try:
+        dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(_CST)
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except (ValueError, AttributeError):
+        return time_str
 from app import db
 
 
@@ -35,7 +50,7 @@ class AlarmEvent(db.Model):
             'video_path': self.video_path,
             'handle_status': self.handle_status,
             'handler_id': self.handler_id,
-            'handle_time': self.handle_time,
+            'handle_time': _to_cst_str(self.handle_time),
             'handle_remark': self.handle_remark,
-            'alarm_time': self.alarm_time
+            'alarm_time': _to_cst_str(self.alarm_time)
         }
