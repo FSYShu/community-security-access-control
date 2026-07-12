@@ -74,23 +74,46 @@ export default {
       gateList: [],
       faceDetectionEnabled: false,
       refreshing: false,
-      initialGateId: ''
+      initialGateId: '',
+      pollTimer: null
     }
   },
   created () {
     this.initialGateId = this.$route.query.gate_id || ''
     this.fetchGateList()
+    const self = this
+    this.pollTimer = setInterval(function () {
+      self.fetchGateList()
+    }, 15000)
+  },
+  beforeDestroy () {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer)
+      this.pollTimer = null
+    }
+    this.cleanupViewers()
   },
   methods: {
+    cleanupViewers () {
+      if (this.layoutMode === 'single' && this.$refs.singleViewer) {
+        this.$refs.singleViewer.cleanup()
+      } else {
+        for (let i = 1; i <= 6; i++) {
+          const ref = this.$refs['gridViewer' + i]
+          if (ref && ref[0]) {
+            ref[0].cleanup()
+          }
+        }
+      }
+    },
     async fetchGateList () {
       try {
         const res = await getGatesWithStream()
         if (res.code === 0 && res.data) {
-          this.gateList = res.data || []
+          this.gateList = Array.isArray(res.data) ? res.data : []
         }
       } catch (error) {
-        console.error('Failed to fetch gate list:', error)
-        this.gateList = []
+        // silent fail for polling
       }
     },
     toggleFaceDetection () {

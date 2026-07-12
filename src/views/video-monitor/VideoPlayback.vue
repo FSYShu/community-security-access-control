@@ -124,7 +124,21 @@ export default {
       try {
         const res = await getRecordings()
         if (res.code === 0 && res.data) {
-          this.recordings = res.data || []
+          const self = this
+          this.recordings = (res.data || []).map(function (g) {
+            return Object.assign({}, g, {
+              files: g.files.map(function (f) {
+                if (!f.duration_text) {
+                  const est = self._estimate_duration(f.file_size)
+                  f.duration_text = est ? est + '分钟' : '未知'
+                }
+                if (!f.file_size_text) {
+                  f.file_size_text = f.file_size ? (f.file_size / 1024 / 1024).toFixed(1) + 'MB' : '未知'
+                }
+                return f
+              })
+            })
+          })
         }
       } catch (error) {
         console.error('Failed to fetch recordings:', error)
@@ -160,8 +174,11 @@ export default {
         hasVideo: true
       }, {
         enableWorker: false,
-        enableStashBuffer: false,
-        autoCleanupSourceBuffer: true
+        enableStashBuffer: true,
+        stashInitialSize: 1024,
+        autoCleanupSourceBuffer: true,
+        autoCleanupMaxBackDuration: 30,
+        autoCleanupMinBackDuration: 10
       })
       this.flvPlayer.attachMediaElement(videoElement)
       this.flvPlayer.on(flvjs.Events.ERROR, function (errorType, errorDetail) {
@@ -183,6 +200,12 @@ export default {
         }
         this.flvPlayer = null
       }
+    },
+    _estimate_duration (fileSize) {
+      if (!fileSize) return null
+      const bitrate = 1000 * 1024 / 8
+      const seconds = fileSize / bitrate
+      return Math.round(seconds / 60)
     }
   }
 }
@@ -210,7 +233,7 @@ export default {
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;
-  max-height: calc(60px * 10 + 80px);
+
 }
 
 .playback-list::-webkit-scrollbar {

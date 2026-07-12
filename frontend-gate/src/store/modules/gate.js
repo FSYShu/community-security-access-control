@@ -1,7 +1,7 @@
 var STORAGE_KEY = 'gate_bound_info'
 
 function loadFromStorage () {
-  var result = { gateId: '', gateName: '', pushKey: '', gateLevel: '', location: '' }
+  var result = { gateId: '', gateName: '', pushKey: '', gateLevel: '' }
   try {
     var data = localStorage.getItem(STORAGE_KEY)
     if (data) {
@@ -10,7 +10,6 @@ function loadFromStorage () {
       result.gateName = parsed.gateName || ''
       result.pushKey = parsed.pushKey || ''
       result.gateLevel = parsed.gateLevel || ''
-      result.location = parsed.location || ''
     }
   } catch (e) {
     // ignore
@@ -24,13 +23,11 @@ var mutations = {
     state.gateName = gateInfo.gate_name || ''
     state.pushKey = gateInfo.push_key || ''
     state.gateLevel = gateInfo.gate_level || ''
-    state.location = gateInfo.location || ''
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       gateId: state.gateId,
       gateName: state.gateName,
       pushKey: state.pushKey,
-      gateLevel: state.gateLevel,
-      location: state.location
+      gateLevel: state.gateLevel
     }))
   },
   CLEAR_GATE (state) {
@@ -38,7 +35,6 @@ var mutations = {
     state.gateName = ''
     state.pushKey = ''
     state.gateLevel = ''
-    state.location = ''
     localStorage.removeItem(STORAGE_KEY)
   }
 }
@@ -48,8 +44,7 @@ var getters = {
   gateId: function (state) { return state.gateId },
   gateName: function (state) { return state.gateName },
   pushKey: function (state) { return state.pushKey },
-  gateLevel: function (state) { return state.gateLevel },
-  location: function (state) { return state.location }
+  gateLevel: function (state) { return state.gateLevel }
 }
 
 export default {

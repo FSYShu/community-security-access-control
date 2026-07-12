@@ -37,7 +37,7 @@ const service = axios.create({
 
 service.interceptors.request.use(
   function (config) {
-    var token = localStorage.getItem('gate_token')
+    const token = localStorage.getItem('gate_token')
     if (token) {
       if (isTokenExpired(token)) {
         handleUnauthorized()
@@ -54,9 +54,12 @@ service.interceptors.request.use(
 
 service.interceptors.response.use(
   function (response) {
-    var res = response.data
+    const res = response.data
+    const silent = response.config && response.config._silent
     if (res.code !== 0) {
-      Toast.fail(res.message || '请求失败')
+      if (!silent) {
+        Toast.fail(res.message || '请求失败')
+      }
       if (res.code === 401) {
         handleUnauthorized()
       }
@@ -65,20 +68,25 @@ service.interceptors.response.use(
     return res
   },
   function (error) {
+    const silent = error.config && error.config._silent
     if (error.message === '登录已过期，请重新登录') {
-      Toast.fail(error.message)
+      if (!silent) {
+        Toast.fail(error.message)
+      }
       return Promise.reject(error)
     }
-    var status = error.response ? error.response.status : 0
-    var messageMap = {
+    const status = error.response ? error.response.status : 0
+    const messageMap = {
       400: '请求参数错误',
       401: '未授权，请重新登录',
       403: '拒绝访问',
       404: '请求资源不存在',
       500: '服务器内部错误'
     }
-    var message = (error.response && error.response.data && error.response.data.message) || messageMap[status] || '网络异常'
-    Toast.fail(message)
+    const message = (error.response && error.response.data && error.response.data.message) || messageMap[status] || '网络异常'
+    if (!silent) {
+      Toast.fail(message)
+    }
     if (status === 401) {
       handleUnauthorized()
     }
