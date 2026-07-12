@@ -51,7 +51,7 @@
 
 <script>
 const AUTO_RETRY_MAX = 10
-const AUTO_RETRY_INTERVAL = 5000
+const AUTO_RETRY_INTERVAL = 10000
 
 export default {
   name: 'VideoStreamViewer',
