@@ -1,4 +1,4 @@
-var STREAM_INTERVAL = 200
+var STREAM_INTERVAL = 100
 var UPLOAD_URL = '/api/v1/video-monitor/gate-push-frame'
 
 function GateStreamPusher (videoElement, pushKey) {

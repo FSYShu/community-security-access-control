@@ -3,7 +3,7 @@
     <div class="result-icon">
       <van-icon :name="passed ? 'checked' : 'cross'" size="64" />
     </div>
-    <div class="result-title">{{ passed ? '通行成功' : '通行拒绝' }}</div>
+    <div class="result-title">{{ passed ? '认证通过' : '认证失败' }}</div>
     <div v-if="!passed && reason" class="result-reason">{{ reason }}</div>
     <div v-if="passed && personName" class="result-name">{{ personName }}</div>
   </div>

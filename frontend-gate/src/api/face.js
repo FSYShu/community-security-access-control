@@ -1,7 +1,13 @@
 import request from '@/utils/request'
 
 export function submitFacePass (data) {
-  return request({ url: '/face/pass', method: 'post', data, timeout: 30000 })
+  var silent = data && data._silent
+  var config = { url: '/face/pass', method: 'post', data: data, timeout: 30000 }
+  if (silent) {
+    delete data._silent
+    config._silent = true
+  }
+  return request(config)
 }
 
 export function getFaceList (params) {
@@ -18,4 +24,12 @@ export function deleteFace (id) {
 
 export function registerFace (data) {
   return request({ url: '/face/face-register', method: 'post', data, timeout: 60000 })
+}
+
+export function getFacePassRecords (params) {
+  return request({ url: '/face/pass/records', method: 'get', params })
+}
+
+export function getFacePassStats (params) {
+  return request({ url: '/face/pass/stats', method: 'get', params })
 }

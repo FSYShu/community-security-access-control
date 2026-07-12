@@ -22,19 +22,27 @@
       <div class="status-indicator">
         <span class="status-dot" :class="statusDotClass"></span>
         <span class="status-text">{{ statusLabel }}</span>
+        <span v-if="latencyMs !== null" class="latency-tag" :class="latencyClass">{{ latencyText }}</span>
       </div>
     </div>
     <div class="stream-container">
       <div class="stream-wrapper">
         <img
           v-if="showStream && selectedGate"
+          ref="streamImage"
           :src="videoFeedUrl"
           alt="视频流"
           class="stream-image"
           @load="onStreamLoad"
           @error="onStreamError"
         />
+        <canvas
+          v-if="showStream && selectedGate && faceDetectionEnabled"
+          ref="overlayCanvas"
+          class="overlay-canvas"
+        ></canvas>
       </div>
+
       <div v-if="!selectedGate" class="stream-error-overlay">
         <i class="el-icon-video-camera" style="font-size:40px;color:var(--dark-text-muted)"></i>
         <p class="error-text" style="color:var(--dark-text-muted)">请选择门禁终端</p>
@@ -79,43 +87,84 @@ export default {
       autoRetrying: false,
       retryCount: 0,
       retryTimer: null,
-      urlVersion: 0
+      urlVersion: 0,
+      latencyMs: null,
+      detectionEventSource: null,
+      latestBoxes: [],
+      detectionFrameWidth: 0,
+      detectionFrameHeight: 0,
+      boxExpireTimer: null,
+      latencyTimer: null,
+      sseErrorCount: 0,
+      sseConnectTimer: null
     }
   },
   computed: {
+    selectedGateData () {
+      if (!this.selectedGate) return null
+      return this.gateList.find(g => String(g.id) === this.selectedGate) || null
+    },
     statusDotClass () {
       if (!this.selectedGate) return 'dot-gray'
+      if (this.selectedGateData && this.selectedGateData.display_status === 'offline') return 'dot-red'
       if (this.streamError) return 'dot-red'
+      if (this.connected && this.latencyMs < 0) return 'dot-yellow'
       return this.connected ? 'dot-green' : 'dot-yellow'
     },
     statusLabel () {
       if (!this.selectedGate) return '未连接'
+      if (this.selectedGateData && this.selectedGateData.display_status === 'offline') return '离线'
       if (this.streamError) return '连接失败'
+      if (this.connected && this.latencyMs < 0) return '无信号'
       return this.connected ? '已连接' : '连接中...'
     },
     videoFeedUrl () {
       if (!this.selectedGate) return ''
-      const base = this.faceDetectionEnabled
-        ? '/api/v1/video-monitor/video_feed/gate/' + this.selectedGate + '/detect'
-        : '/api/v1/video-monitor/video_feed/gate/' + this.selectedGate
-      return base + '?t=' + this.urlVersion
+      return '/api/v1/video-monitor/video_feed/gate/' + this.selectedGate + '?t=' + this.urlVersion
     },
     statusText () {
       if (this.autoRetrying) return '视频流连接失败'
       return '视频流连接断开'
     },
     selectedGateName () {
-      if (!this.selectedGate) return ''
-      const gate = this.gateList.find(g => String(g.id) === this.selectedGate)
-      return gate ? gate.gate_name : ''
+      if (!this.selectedGateData) return ''
+      return this.selectedGateData.gate_name || ''
+    },
+    latencyText () {
+      if (this.latencyMs === null) return ''
+      return this.latencyMs + 'ms'
+    },
+    latencyClass () {
+      if (this.latencyMs === null) return ''
+      if (this.latencyMs < 500) return 'latency-good'
+      if (this.latencyMs < 2000) return 'latency-warn'
+      return 'latency-bad'
     }
   },
   watch: {
     selectedGate () {
       this.resetConnection()
+      this.stopDetectionSSE()
+      this.latestBoxes = []
+      if (this.selectedGate && this.faceDetectionEnabled) {
+        this.startDetectionSSE()
+      }
+      this.fetchLatency()
+      const self = this
+      setTimeout(function () {
+        if (self.selectedGate && self.faceDetectionEnabled && !self.detectionEventSource) {
+          self.startDetectionSSE()
+        }
+      }, 1500)
     },
-    faceDetectionEnabled () {
-      this.resetConnection()
+    faceDetectionEnabled (val) {
+      if (val && this.selectedGate) {
+        this.startDetectionSSE()
+      } else {
+        this.stopDetectionSSE()
+        this.latestBoxes = []
+        this.clearOverlay()
+      }
     }
   },
   mounted () {
@@ -123,10 +172,24 @@ export default {
       this.selectedGate = this.initialGateId
     }
     document.addEventListener('click', this.onDocumentClick)
+    window.addEventListener('resize', this.onWindowResize)
+    this.warmupStream()
+    this.fetchLatency()
+    const self = this
+    this.latencyTimer = setInterval(function () {
+      self.fetchLatency()
+    }, 10000)
+    setTimeout(function () {
+      if (self.selectedGate && self.faceDetectionEnabled && !self.detectionEventSource) {
+        self.startDetectionSSE()
+      }
+    }, 2000)
   },
+
   beforeDestroy () {
-    this.clearRetryTimer()
+    this.cleanup()
     document.removeEventListener('click', this.onDocumentClick)
+    window.removeEventListener('resize', this.onWindowResize)
   },
   methods: {
     toggleDropdown () {
@@ -147,6 +210,7 @@ export default {
       this.autoRetrying = false
       this.retryCount = 0
       this.clearRetryTimer()
+      this.stopDetectionSSE()
       this.urlVersion = Date.now()
       this.showStream = false
       const self = this
@@ -172,10 +236,14 @@ export default {
       this.autoRetrying = false
       this.retryCount = 0
       this.clearRetryTimer()
+      if (this.faceDetectionEnabled && this.selectedGate) {
+        this.startDetectionSSE()
+      }
     },
     onStreamError () {
       this.connected = false
       this.streamError = true
+      this.stopDetectionSSE()
       this.startAutoRetry()
     },
     startAutoRetry () {
@@ -201,6 +269,241 @@ export default {
         clearTimeout(this.retryTimer)
         this.retryTimer = null
       }
+    },
+    startDetectionSSE () {
+      if (this.detectionEventSource) return
+      if (!this.selectedGate || !this.faceDetectionEnabled) return
+      const self = this
+      const url = '/api/v1/video-monitor/face-detection/' + this.selectedGate + '/stream'
+      console.log('[FaceDetection] connecting SSE:', url)
+      this.detectionEventSource = new EventSource(url)
+      this.sseConnectTimer = setTimeout(function () {
+        if (self.detectionEventSource && self.sseErrorCount === 0) {
+          console.error('[FaceDetection] SSE connection timeout (10s), backend may not be running')
+          self.$message({ message: '人脸检测服务连接超时，请检查后端服务是否启动', type: 'error' })
+          self.stopDetectionSSE()
+        }
+      }, 10000)
+      this.detectionEventSource.addEventListener('detection', function (e) {
+        try {
+          const data = JSON.parse(e.data)
+          const boxes = data.boxes || []
+          console.log('[FaceDetection] detection event, boxes:', boxes.length, 'frame:', data.frame_width, 'x', data.frame_height)
+          if (data.frame_width) self.detectionFrameWidth = data.frame_width
+          if (data.frame_height) self.detectionFrameHeight = data.frame_height
+          if (boxes.length > 0) {
+            self.latestBoxes = boxes
+            self.drawFaceBoxes()
+            self.resetBoxExpire()
+            if (!self.$refs.overlayCanvas || !self.$refs.overlayCanvas.getBoundingClientRect().width) {
+              setTimeout(function () { self.drawFaceBoxes() }, 500)
+            }
+          }
+        } catch (err) {
+          console.error('[FaceDetection] parse error:', err)
+        }
+      })
+      this.detectionEventSource.addEventListener('error', function (e) {
+        try {
+          const msg = e.data ? JSON.parse(e.data) : {}
+          console.error('[FaceDetection] backend error:', msg.error || 'unknown')
+        } catch (err) {}
+      })
+      this.detectionEventSource.onopen = function () {
+        console.log('[FaceDetection] SSE connected')
+        self.sseErrorCount = 0
+        if (self.sseConnectTimer) {
+          clearTimeout(self.sseConnectTimer)
+          self.sseConnectTimer = null
+        }
+      }
+      this.detectionEventSource.onerror = function () {
+        self.sseErrorCount++
+        console.error('[FaceDetection] SSE error, retry in 3s')
+        if (self.sseConnectTimer) {
+          clearTimeout(self.sseConnectTimer)
+          self.sseConnectTimer = null
+        }
+        if (self.sseErrorCount === 3) {
+          self.$message({ message: '人脸检测连接失败，正在重试...', type: 'warning' })
+        }
+        self.stopDetectionSSE()
+        setTimeout(function () {
+          if (self.faceDetectionEnabled && self.selectedGate) {
+            self.startDetectionSSE()
+          }
+        }, 3000)
+      }
+    },
+    stopDetectionSSE () {
+      if (this.sseConnectTimer) {
+        clearTimeout(this.sseConnectTimer)
+        this.sseConnectTimer = null
+      }
+      if (this.detectionEventSource) {
+        this.detectionEventSource.close()
+        this.detectionEventSource = null
+      }
+      this.latestBoxes = []
+      this.detectionFrameWidth = 0
+      this.detectionFrameHeight = 0
+      this.clearBoxExpire()
+      this.clearOverlay()
+    },
+    drawFaceBoxes (retryCount) {
+      if (retryCount === undefined) retryCount = 0
+      const canvas = this.$refs.overlayCanvas
+      const img = this.$refs.streamImage
+      if (!canvas) {
+        if (retryCount < 10) {
+          const self = this
+          requestAnimationFrame(function () { self.drawFaceBoxes(retryCount + 1) })
+        }
+        return
+      }
+      const rect = canvas.getBoundingClientRect()
+      const containerWidth = rect.width || canvas.clientWidth
+      const containerHeight = rect.height || canvas.clientHeight
+      if (!containerWidth || !containerHeight) {
+        if (retryCount < 10) {
+          const self = this
+          requestAnimationFrame(function () { self.drawFaceBoxes(retryCount + 1) })
+        }
+        return
+      }
+      const boxes = this.latestBoxes
+      if (!boxes || boxes.length === 0) return
+      const naturalWidth = img && img.naturalWidth ? img.naturalWidth : this.detectionFrameWidth || 640
+      const naturalHeight = img && img.naturalHeight ? img.naturalHeight : this.detectionFrameHeight || 480
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = containerWidth * dpr
+      canvas.height = containerHeight * dpr
+      const ctx = canvas.getContext('2d')
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.clearRect(0, 0, containerWidth, containerHeight)
+      const scaleX = containerWidth / naturalWidth
+      const scaleY = containerHeight / naturalHeight
+      const displayScale = Math.min(scaleX, scaleY)
+      const displayWidth = naturalWidth * displayScale
+      const displayHeight = naturalHeight * displayScale
+      const offsetX = (containerWidth - displayWidth) / 2
+      const offsetY = (containerHeight - displayHeight) / 2
+      const frameWidth = this.detectionFrameWidth || naturalWidth
+      const frameHeight = this.detectionFrameHeight || naturalHeight
+      const frameScaleX = displayWidth / frameWidth
+      const frameScaleY = displayHeight / frameHeight
+      for (let i = 0; i < boxes.length; i++) {
+        const box = boxes[i]
+        const x1 = box.rect[0]
+        const y1 = box.rect[1]
+        const x2 = box.rect[2]
+        const y2 = box.rect[3]
+        const drawX = x1 * frameScaleX + offsetX
+        const drawY = y1 * frameScaleY + offsetY
+        const drawW = (x2 - x1) * frameScaleX
+        const drawH = (y2 - y1) * frameScaleY
+        const color = box.is_stranger ? '#ef4444' : '#10b981'
+        ctx.strokeStyle = color
+        ctx.lineWidth = 2
+        ctx.shadowColor = color
+        ctx.shadowBlur = 6
+        this.drawRoundRect(ctx, drawX, drawY, drawW, drawH, 3)
+        ctx.stroke()
+        ctx.shadowBlur = 0
+        const label = box.is_stranger ? '陌生人' : box.name
+        ctx.font = 'bold 13px "PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif'
+        const textMetrics = ctx.measureText(label)
+        const textHeight = 14
+        const padX = 6
+        const padY = 3
+        const labelH = textHeight + padY * 2
+        const labelW = textMetrics.width + padX * 2
+        const labelX = drawX
+        let labelY = drawY - labelH - 2
+        if (labelY < 0) labelY = drawY + 2
+        ctx.fillStyle = box.is_stranger ? 'rgba(239,68,68,0.9)' : 'rgba(16,185,129,0.9)'
+        this.drawRoundRect(ctx, labelX, labelY, labelW, labelH, 3)
+        ctx.fill()
+        ctx.fillStyle = '#ffffff'
+        ctx.textBaseline = 'top'
+        ctx.fillText(label, labelX + padX, labelY + padY)
+      }
+    },
+    drawRoundRect (ctx, x, y, w, h, r) {
+      ctx.beginPath()
+      ctx.moveTo(x + r, y)
+      ctx.lineTo(x + w - r, y)
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+      ctx.lineTo(x + w, y + h - r)
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+      ctx.lineTo(x + r, y + h)
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+      ctx.lineTo(x, y + r)
+      ctx.quadraticCurveTo(x, y, x + r, y)
+      ctx.closePath()
+    },
+    clearOverlay () {
+      const canvas = this.$refs.overlayCanvas
+      if (!canvas) return
+      const ctx = canvas.getContext('2d')
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    },
+    resetBoxExpire () {
+      this.clearBoxExpire()
+      const self = this
+      this.boxExpireTimer = setTimeout(function () {
+        self.latestBoxes = []
+        self.clearOverlay()
+      }, 5000)
+    },
+    clearBoxExpire () {
+      if (this.boxExpireTimer) {
+        clearTimeout(this.boxExpireTimer)
+        this.boxExpireTimer = null
+      }
+    },
+    cleanup () {
+      this.showStream = false
+      this.clearRetryTimer()
+      this.stopDetectionSSE()
+      this.clearBoxExpire()
+      if (this.latencyTimer) {
+        clearInterval(this.latencyTimer)
+        this.latencyTimer = null
+      }
+      const img = this.$refs.streamImage
+      if (img) {
+        img.src = ''
+        img.onload = null
+        img.onerror = null
+      }
+    },
+    onWindowResize () {
+      if (this.faceDetectionEnabled && this.latestBoxes.length > 0) {
+        this.drawFaceBoxes()
+      }
+    },
+    async fetchLatency () {
+      if (!this.selectedGate) {
+        this.latencyMs = null
+        return
+      }
+      try {
+        const res = await fetch('/api/v1/video-monitor/gate-latency?gate_id=' + this.selectedGate)
+        const data = await res.json()
+        if (data.code === 0 && data.data && data.data.latency_ms !== undefined) {
+          this.latencyMs = data.data.latency_ms
+          if (data.data.fps) this.currentFps = data.data.fps
+          if (data.data.latency_ms >= 0 && !this.connected) this.connected = true
+          if (data.data.latency_ms < 0 && this.connected) this.connected = false
+        }
+      } catch (e) {
+        // ignore
+      }
+    },
+    warmupStream () {
+      if (!this.selectedGate) return
+      fetch('/api/v1/video-monitor/gate-warmup?gate_id=' + this.selectedGate).catch(function () {})
     }
   }
 }
@@ -394,4 +697,33 @@ export default {
 .dot-gray {
   background: var(--dark-text-secondary);
 }
+.overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+.latency-tag {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 2px;
+  font-weight: 500;
+}
+.latency-good {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+.latency-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+.latency-bad {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
 </style>

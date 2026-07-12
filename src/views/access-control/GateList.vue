@@ -50,8 +50,8 @@
             <template #title>
               <div class="cell-title-row">
                 <span class="cell-status">
-                  <span class="status-dot" :class="item.status === 'online' ? 'dot-online' : 'dot-offline'"></span>
-                  <span class="status-label">{{ item.status === 'online' ? '在线' : '离线' }}</span>
+                  <span class="status-dot" :class="statusDotClass(item)"></span>
+                  <span class="status-label">{{ displayStatusText(item) }}</span>
                 </span>
                 <span class="cell-name">{{ item.gate_name }}</span>
                 <span class="type-tag" :class="levelTagClass(item.gate_level)">{{ item.level_name || item.gate_level }}</span>
@@ -76,34 +76,19 @@
     <el-dialog :visible.sync="showDialog" :title="dialogTitle" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetForm">
       <div class="form-grid">
         <div class="form-item">
-          <label class="form-label">名称与位置 <span class="form-required">*</span></label>
-          <input v-model="form.gate_name" class="form-input" placeholder="如：1号门（东门入口）" />
+          <label class="form-label">终端名称 <span class="form-required">*</span></label>
+          <input v-model="form.gate_name" class="form-input" placeholder="请输入终端名称" />
         </div>
         <div class="form-item">
           <label class="form-label">终端层级 <span class="form-required">*</span></label>
           <div class="filter-select" :class="{ 'is-open': showFormLevelDropdown }">
-            <div class="select-trigger" @click="showFormLevelDropdown = !showFormLevelDropdown; showFormStatusDropdown = false">
+            <div class="select-trigger" @click="showFormLevelDropdown = !showFormLevelDropdown">
               <span class="select-value">{{ formLevelLabel || '请选择终端层级' }}</span>
               <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showFormLevelDropdown }"></i>
             </div>
             <transition name="dropdown">
               <div v-if="showFormLevelDropdown" class="select-dropdown">
                 <div v-for="opt in formLevelOptions" :key="opt.value" class="select-option" :class="{ 'is-active': form.gate_level === opt.value }" @click="form.gate_level = opt.value; showFormLevelDropdown = false">{{ opt.text }}</div>
-              </div>
-            </transition>
-          </div>
-        </div>
-        <div class="form-item">
-
-          <label class="form-label">状态</label>
-          <div class="filter-select" :class="{ 'is-open': showFormStatusDropdown }">
-            <div class="select-trigger" @click="showFormStatusDropdown = !showFormStatusDropdown; showFormLevelDropdown = false">
-              <span class="select-value">{{ formStatusLabel || '请选择状态' }}</span>
-              <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showFormStatusDropdown }"></i>
-            </div>
-            <transition name="dropdown">
-              <div v-if="showFormStatusDropdown" class="select-dropdown">
-                <div v-for="opt in formStatusOptions" :key="opt.value" class="select-option" :class="{ 'is-active': form.status === opt.value }" @click="form.status = opt.value; showFormStatusDropdown = false">{{ opt.text }}</div>
               </div>
             </transition>
           </div>
@@ -141,24 +126,19 @@ export default {
       showLevelDropdown: false,
       showStatusDropdown: false,
       levelOptions: ['全部', '社区大门', '单元门', '危险防护区域'],
-      statusOptions: ['全部', '在线', '离线', '维护中'],
+      statusOptions: ['全部', '未绑定', '在线', '离线', '维护中'],
       showDialog: false,
       isEdit: false,
       editId: null,
       submitLoading: false,
       showFormLevelDropdown: false,
-      showFormStatusDropdown: false,
-      form: { gate_name: '', location: '', gate_level: '', building_unit: '', push_key: '', status: 'online' },
+      form: { gate_name: '', gate_level: '', building_unit: '', push_key: '' },
       formLevelOptions: [
         { text: '社区大门', value: 'community_gate' },
         { text: '单元门', value: 'unit_door' },
         { text: '危险防护区域', value: 'dangerous_area' }
       ],
-      formStatusOptions: [
-        { text: '在线', value: 'online' },
-        { text: '离线', value: 'offline' },
-        { text: '维护中', value: 'maintenance' }
-      ]
+      pollTimer: null
     }
   },
   computed: {
@@ -168,17 +148,18 @@ export default {
     formLevelLabel () {
       const opt = this.formLevelOptions.find(o => o.value === this.form.gate_level)
       return opt ? opt.text : ''
-    },
-    formStatusLabel () {
-      const opt = this.formStatusOptions.find(o => o.value === this.form.status)
-      return opt ? opt.text : ''
     }
   },
   mounted () {
     document.addEventListener('click', this.closeDropdowns)
+    this.pollTimer = setInterval(this.silentRefresh, 15000)
   },
   beforeDestroy () {
     document.removeEventListener('click', this.closeDropdowns)
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer)
+      this.pollTimer = null
+    }
   },
   methods: {
     closeDropdowns (e) {
@@ -186,7 +167,6 @@ export default {
         this.showLevelDropdown = false
         this.showStatusDropdown = false
         this.showFormLevelDropdown = false
-        this.showFormStatusDropdown = false
       }
     },
     toggleLevelDropdown () {
@@ -212,7 +192,7 @@ export default {
       this._loading = true
       try {
         const levelMap = { 社区大门: 'community_gate', 单元门: 'unit_door', 危险防护区域: 'dangerous_area' }
-        const statusMap = { 在线: 'online', 离线: 'offline', 维护中: 'maintenance' }
+        const statusMap = { 未绑定: 'unbound', 在线: 'online', 离线: 'offline', 维护中: 'maintenance' }
         const params = { page: this.page, per_page: 20 }
         if (this.filterLevel && this.filterLevel !== '全部') params.gate_level = levelMap[this.filterLevel]
         if (this.filterStatus && this.filterStatus !== '全部') params.status = statusMap[this.filterStatus]
@@ -232,12 +212,28 @@ export default {
       this.refreshing = false
     },
     onRefresh () { this.page = 1; this.finished = false; this.gateList = []; this.loading = true; this.loadData() },
+    silentRefresh () {
+      this.page = 1
+      this.finished = false
+      this.loading = false
+      this.refreshing = false
+      this.loadData()
+    },
     goToMonitor (item) {
       this.$router.push({ path: '/video-monitor', query: { gate_id: item.id } })
     },
     levelTagClass (level) {
       const map = { community_gate: 'tag-community', unit_door: 'tag-unit', dangerous_area: 'tag-danger' }
       return map[level] || ''
+    },
+    displayStatusText (item) {
+      if (!item.bound) return '未绑定'
+      const map = { online: '在线', offline: '离线', maintenance: '维护中' }
+      return map[item.status] || item.status
+    },
+    statusDotClass (item) {
+      if (!item.bound) return 'dot-unbound'
+      return item.status === 'online' ? 'dot-online' : 'dot-offline'
     },
     onDelete (item) {
       this.$confirm('确定要删除「' + item.gate_name + '」终端吗？', '确认删除', {
@@ -258,11 +254,10 @@ export default {
       }
     },
     resetForm () {
-      this.form = { gate_name: '', location: '', gate_level: '', building_unit: '', push_key: '', status: 'online' }
+      this.form = { gate_name: '', gate_level: '', building_unit: '', push_key: '' }
       this.isEdit = false
       this.editId = null
       this.showFormLevelDropdown = false
-      this.showFormStatusDropdown = false
     },
     openAddDialog () {
       this.resetForm()
@@ -276,11 +271,9 @@ export default {
         const res = await getGateDetail(item.id)
         const d = res.data
         this.form.gate_name = d.gate_name || ''
-        this.form.location = d.location || ''
         this.form.gate_level = d.gate_level || ''
         this.form.building_unit = d.building_unit || ''
         this.form.push_key = d.push_key || ''
-        this.form.status = d.status || 'online'
       } catch (e) {
         this.$message.error('加载终端信息失败')
       }
@@ -294,11 +287,9 @@ export default {
       try {
         const data = {
           gate_name: this.form.gate_name,
-          location: this.form.location || this.form.gate_name,
           gate_level: this.form.gate_level,
           building_unit: this.form.building_unit,
-          push_key: this.form.push_key,
-          status: this.form.status
+          push_key: this.form.push_key
         }
         if (this.isEdit) {
           await updateGate(this.editId, data)
@@ -550,6 +541,11 @@ export default {
 .dot-offline {
   background: #ef4444;
   box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
+.dot-unbound {
+  background: #9ca3af;
+  box-shadow: 0 0 6px rgba(156, 163, 175, 0.3);
 }
 
 .status-label {
