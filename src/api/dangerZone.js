@@ -12,6 +12,14 @@ export function getDangerZoneList (params) {
   })
 }
 
+/** 获取禁区详情 */
+export function getDangerZoneDetail (id) {
+  return request({
+    url: `/danger-zone/${id}`,
+    method: 'get'
+  })
+}
+
 /** 新增禁区 */
 export function addDangerZone (data) {
   return request({
@@ -35,5 +43,13 @@ export function deleteDangerZone (id) {
   return request({
     url: `/danger-zone/${id}`,
     method: 'delete'
+  })
+}
+
+/** 获取可用摄像头列表 */
+export function getAvailableCameras () {
+  return request({
+    url: '/danger-zone/cameras',
+    method: 'get'
   })
 }

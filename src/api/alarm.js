@@ -38,3 +38,11 @@ export function exportAlarmLog (params) {
     responseType: 'blob'
   })
 }
+
+/** 获取告警统计 */
+export function getAlarmStats () {
+  return request({
+    url: '/alarm/stats',
+    method: 'get'
+  })
+}
