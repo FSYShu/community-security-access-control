@@ -44,7 +44,8 @@ GateStreamPusher.prototype.captureAndSend = function () {
   xhr.timeout = 3000
   xhr.send(JSON.stringify({
     push_key: this.pushKey,
-    frame: base64
+    frame: base64,
+    ts: Date.now()
   }))
 }
 
