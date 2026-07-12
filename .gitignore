@@ -39,6 +39,12 @@ backend/dat/
 backend/data/
 data/
 
+# 构建缓存
+.merkle-snapshot.json
+
+# Patch files
+patches/
+
 # Editor directories and files
 .idea
 .vscode
