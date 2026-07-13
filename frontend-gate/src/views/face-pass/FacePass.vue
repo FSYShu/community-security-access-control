@@ -2,10 +2,10 @@
   <div class="gate-page face-pass-page">
     <div class="gate-header">
       <span class="gate-header-title">刷脸通行</span>
-      <van-icon name="cross" size="20" color="#9ca3af" @click="$router.push('/idle')" />
+      <i class="el-icon-close" style="font-size:20px;color:#9ca3af" @click="$router.push('/idle')"></i>
     </div>
     <div class="gate-content">
-      <face-camera ref="camera" :push-key="pushKey" @error="onCameraError" />
+      <face-camera ref="camera" :push-key="pushKey" :device-id="cameraDeviceId" @error="onCameraError" />
 
       <div v-if="!result" class="pass-action">
         <button class="gate-btn gate-btn-primary" :disabled="!cameraReady || loading" @click="doFacePass">
@@ -50,7 +50,8 @@ export default {
     }
   },
   computed: {
-    pushKey () { return this.$store.getters['gate/pushKey'] }
+    pushKey () { return this.$store.getters['gate/pushKey'] },
+    cameraDeviceId () { return this.$store.getters['gate/cameraDeviceId'] }
   },
   mounted () {
     this.gateId = this.$store.getters['gate/gateId'] || this.$route.query.gate_id || ''

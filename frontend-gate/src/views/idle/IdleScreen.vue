@@ -10,12 +10,12 @@
           <button v-if="isBound" class="gate-badge" @click="$router.push('/settings')">
             <span class="badge-dot" :class="{ 'dot-pulse': streaming }"></span>
             <span class="badge-text">{{ gateName }}{{ streaming ? ' · 推流中' : '' }}</span>
-            <van-icon name="setting-o" size="14" class="badge-settings-icon" />
+            <i class="el-icon-setting badge-settings-icon" style="font-size:14px"></i>
           </button>
           <button v-else class="gate-badge badge-unbound" @click="$router.push('/settings')">
-            <van-icon name="warning-o" size="14" />
+            <i class="el-icon-warning-outline" style="font-size:14px"></i>
             <span class="badge-text">未绑定终端，点击设置</span>
-            <van-icon name="setting-o" size="14" class="badge-settings-icon" />
+            <i class="el-icon-setting badge-settings-icon" style="font-size:14px"></i>
           </button>
         </div>
       </div>
@@ -28,7 +28,7 @@
     <transition name="face-result">
       <div v-if="faceResult" class="face-result-overlay">
         <div class="face-result-card" :class="faceResult.passed ? 'result-success' : 'result-fail'">
-          <van-icon :name="faceResult.passed ? 'checked' : 'cross'" size="56" />
+          <i :class="faceResult.passed ? 'el-icon-circle-check' : 'el-icon-close'" style="font-size:56px"></i>
           <div class="face-result-title">{{ faceResult.passed ? '认证通过' : '认证失败' }}</div>
           <div v-if="!faceResult.passed && faceResult.reason" class="face-result-reason">{{ faceResult.reason }}</div>
           <div v-if="faceResult.passed && faceResult.personName" class="face-result-name">{{ faceResult.personName }}</div>
@@ -41,7 +41,7 @@
         <div class="visitor-popup">
           <div class="visitor-popup-header">
             <span class="visitor-popup-title">访客临时通行申请</span>
-            <van-icon name="cross" size="20" color="#9ca3af" @click="showVisitorPopup = false" />
+            <i class="el-icon-close" style="font-size:20px;color:#9ca3af" @click="showVisitorPopup = false"></i>
           </div>
           <div class="visitor-popup-body">
             <div class="v-form-grid">
@@ -51,7 +51,7 @@
                   <img :src="'data:image/jpeg;base64,' + visitorFaceBase64" class="v-face-preview-img" />
                 </div>
                 <button class="v-capture-btn" @click="captureVisitorFace">
-                  <van-icon name="photograph" /> {{ visitorFaceCaptured ? '重新采集' : '拍照采集' }}
+                  <i class="el-icon-camera"></i> {{ visitorFaceCaptured ? '重新采集' : '拍照采集' }}
                 </button>
               </div>
               <div class="v-form-item">
@@ -60,7 +60,7 @@
                   <div class="v-address-select" :class="{ 'is-open': showBuildingDrop }">
                     <div class="v-select-trigger" @click="toggleDrop('building')">
                       <span :class="visitorForm.building ? '' : 'v-placeholder'">{{ visitorForm.building || '楼栋' }}</span>
-                      <i class="van-icon van-icon-arrow-down v-select-arrow" :class="{ 'is-reverse': showBuildingDrop }"></i>
+                      <i class="el-icon-arrow-down v-select-arrow" :class="{ 'is-reverse': showBuildingDrop }"></i>
                     </div>
                     <transition name="dropdown">
                       <div v-if="showBuildingDrop" class="v-select-dropdown">
@@ -71,7 +71,7 @@
                   <div class="v-address-select" :class="{ 'is-open': showUnitDrop }">
                     <div class="v-select-trigger" @click="toggleDrop('unit')">
                       <span :class="visitorForm.unit ? '' : 'v-placeholder'">{{ visitorForm.unit || '单元' }}</span>
-                      <i class="van-icon van-icon-arrow-down v-select-arrow" :class="{ 'is-reverse': showUnitDrop }"></i>
+                      <i class="el-icon-arrow-down v-select-arrow" :class="{ 'is-reverse': showUnitDrop }"></i>
                     </div>
                     <transition name="dropdown">
                       <div v-if="showUnitDrop" class="v-select-dropdown">
@@ -82,7 +82,7 @@
                   <div class="v-address-select" :class="{ 'is-open': showRoomDrop }">
                     <div class="v-select-trigger" @click="toggleDrop('room')">
                       <span :class="visitorForm.room ? '' : 'v-placeholder'">{{ visitorForm.room || '门牌号' }}</span>
-                      <i class="van-icon van-icon-arrow-down v-select-arrow" :class="{ 'is-reverse': showRoomDrop }"></i>
+                      <i class="el-icon-arrow-down v-select-arrow" :class="{ 'is-reverse': showRoomDrop }"></i>
                     </div>
                     <transition name="dropdown">
                       <div v-if="showRoomDrop" class="v-select-dropdown">
@@ -113,12 +113,12 @@
       >
         <van-loading v-if="faceLoading" size="20" color="#fff" />
         <template v-else>
-          <van-icon name="scan" size="24" />
+          <i class="el-icon-camera" style="font-size:24px"></i>
           <span>刷脸通行</span>
         </template>
       </button>
       <button class="gate-btn gate-btn-outline idle-btn" @click="openVisitorApply">
-        <van-icon name="friends-o" size="24" />
+        <i class="el-icon-user" style="font-size:24px"></i>
         <span>访客申请</span>
       </button>
     </div>
@@ -225,12 +225,25 @@ export default {
     if (!this.isBound) {
       this.showUnboundDialog = true
     }
+    window.addEventListener('beforeunload', this._onPageHide)
+    window.addEventListener('pagehide', this._onPageHide)
   },
   beforeDestroy () {
     this.stopAll()
     this.clearResultTimer()
+    window.removeEventListener('beforeunload', this._onPageHide)
+    window.removeEventListener('pagehide', this._onPageHide)
   },
   methods: {
+    _onPageHide () {
+      this.stopAll()
+      if (this.pushKey) {
+        navigator.sendBeacon(
+          '/api/v1/video-monitor/gate-stop-push',
+          JSON.stringify({ push_key: this.pushKey })
+        )
+      }
+    },
     goToSettings () {
       this.showUnboundDialog = false
       this.$router.push('/settings')

@@ -1,7 +1,7 @@
 <template>
   <div class="gate-page settings-page">
     <div class="gate-header">
-      <van-icon name="arrow-left" size="20" color="#9ca3af" @click="$router.push('/idle')" />
+      <i class="el-icon-arrow-left" style="font-size:20px;color:#9ca3af" @click="$router.push('/idle')"></i>
       <span class="gate-header-title">门禁终端设置</span>
       <span style="width:20px;"></span>
     </div>
@@ -11,7 +11,7 @@
         <div class="custom-select" :class="{ 'is-open': showDropdown }">
           <div class="custom-select-trigger" @click="toggleDropdown">
             <span class="custom-select-value">{{ selectedLabel || '请选择门禁终端' }}</span>
-            <van-icon name="arrow-down" class="custom-select-arrow" :class="{ 'is-reverse': showDropdown }" />
+            <i class="el-icon-arrow-down custom-select-arrow" :class="{ 'is-reverse': showDropdown }"></i>
           </div>
           <transition name="dropdown-slide">
             <div v-if="showDropdown" class="custom-select-dropdown">
@@ -52,7 +52,7 @@
           <button class="gate-btn gate-btn-danger" style="margin-top:12px;" @click="unbindGate">解除绑定</button>
         </div>
         <div v-else class="unbound-hint">
-          <van-icon name="info-o" size="24" color="#f59e0b" />
+          <i class="el-icon-info" style="font-size:24px;color:#f59e0b"></i>
           <p>尚未绑定门禁终端，请选择要绑定的终端</p>
         </div>
       </div>
@@ -65,6 +65,36 @@
             <span class="setting-row-desc">开启后将实时检测并识别人脸</span>
           </div>
           <van-switch v-model="faceRecognitionEnabled" size="20px" disabled />
+        </div>
+        <div class="setting-divider"></div>
+        <div class="setting-row-label" style="margin-bottom:8px;">摄像头选择</div>
+        <div class="custom-select" :class="{ 'is-open': showCameraDropdown }">
+          <div class="custom-select-trigger" @click="toggleCameraDropdown">
+            <span class="custom-select-value">{{ currentCameraLabel || '请选择摄像头' }}</span>
+            <i class="el-icon-arrow-down custom-select-arrow" :class="{ 'is-reverse': showCameraDropdown }"></i>
+          </div>
+          <transition name="dropdown-slide">
+            <div v-if="showCameraDropdown" class="custom-select-dropdown">
+              <div
+                v-for="cam in cameraList"
+                :key="cam.deviceId"
+                class="custom-select-option"
+                :class="{ 'is-active': cam.deviceId === selectedCameraId }"
+                @click="onCameraSelect(cam)"
+              >
+                <div class="option-main">
+                  <i class="el-icon-camera" style="font-size:16px;color:var(--gate-text-muted)"></i>
+                  <span class="option-name">{{ cam.label || '未命名摄像头' }}</span>
+                </div>
+                <i v-if="cam.deviceId === selectedCameraId" class="el-icon-circle-check" style="font-size:14px;color:var(--gate-accent, #818cf8)"></i>
+              </div>
+              <div v-if="cameraList.length === 0" class="custom-select-empty">未检测到摄像头</div>
+            </div>
+          </transition>
+        </div>
+        <div v-if="previewStream" class="camera-preview-wrap">
+          <video ref="previewVideo" class="camera-preview" autoplay playsinline muted></video>
+          <div class="camera-preview-badge">预览</div>
         </div>
       </div>
     </div>
@@ -82,7 +112,11 @@ export default {
       showDropdown: false,
       selectedGateId: '',
       faceRecognitionEnabled: false,
-      levelMap: { community_gate: '社区大门', unit_door: '单元门', dangerous_area: '危险防护区域' }
+      levelMap: { community_gate: '社区大门', unit_door: '单元门', dangerous_area: '危险防护区域' },
+      showCameraDropdown: false,
+      cameraList: [],
+      selectedCameraId: '',
+      previewStream: null
     }
   },
   computed: {
@@ -91,6 +125,7 @@ export default {
     gateName () { return this.$store.getters['gate/gateName'] },
     pushKey () { return this.$store.getters['gate/pushKey'] },
     gateLevel () { return this.$store.getters['gate/gateLevel'] },
+    currentCameraLabel () { return this.$store.getters['gate/cameraLabel'] },
     selectedLabel () {
       if (!this.selectedGateId) return ''
       var item = this.list.find(function (g) { return String(g.id) === this.selectedGateId }.bind(this))
@@ -113,21 +148,30 @@ export default {
   },
   created () {
     this.selectedGateId = this.$store.getters['gate/gateId'] || ''
+    this.selectedCameraId = this.$store.getters['gate/cameraDeviceId'] || ''
     this.loadGateList()
+    this.refreshCameras()
     document.addEventListener('click', this.onDocumentClick)
   },
   beforeDestroy () {
     this.$store.commit('user/CLEAR_USER')
     document.removeEventListener('click', this.onDocumentClick)
+    this.stopPreview()
   },
   methods: {
     onDocumentClick (e) {
       if (!e.target.closest('.custom-select')) {
         this.showDropdown = false
+        this.showCameraDropdown = false
       }
     },
     toggleDropdown () {
       this.showDropdown = !this.showDropdown
+      this.showCameraDropdown = false
+    },
+    toggleCameraDropdown () {
+      this.showCameraDropdown = !this.showCameraDropdown
+      this.showDropdown = false
     },
     async loadGateList () {
       try {
@@ -166,6 +210,57 @@ export default {
         this.$toast.success('已解除绑定')
       } catch (e) {
         this.$toast.fail('解绑失败')
+      }
+    },
+    async refreshCameras () {
+      try {
+        var stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        stream.getTracks().forEach(function (t) { t.stop() })
+        var devices = await navigator.mediaDevices.enumerateDevices()
+        this.cameraList = devices.filter(function (d) { return d.kind === 'videoinput' })
+      } catch (e) {
+        this.cameraList = []
+      }
+    },
+    onCameraSelect (cam) {
+      this.selectedCameraId = cam.deviceId
+      this.$store.commit('gate/SET_CAMERA', { deviceId: cam.deviceId, label: cam.label || '未命名摄像头' })
+      this.showCameraDropdown = false
+      this.$toast.success('已切换摄像头')
+      this.startPreview(cam.deviceId)
+    },
+    async startPreview (deviceId) {
+      this.stopPreview()
+      try {
+        var constraints = { video: { width: { ideal: 320 }, height: { ideal: 240 } } }
+        if (deviceId) {
+          constraints.video.deviceId = { exact: deviceId }
+        }
+        this.previewStream = await navigator.mediaDevices.getUserMedia(constraints)
+        var self = this
+        this.$nextTick(function () {
+          if (self.$refs.previewVideo) {
+            self.$refs.previewVideo.srcObject = self.previewStream
+          }
+        })
+      } catch (e) {
+        this.previewStream = null
+      }
+    },
+    stopPreview () {
+      if (this.previewStream) {
+        this.previewStream.getTracks().forEach(function (t) { t.stop() })
+        this.previewStream = null
+      }
+    }
+  },
+  watch: {
+    selectedCameraId: {
+      immediate: true,
+      handler (val) {
+        if (val) {
+          this.startPreview(val)
+        }
       }
     }
   }
@@ -338,5 +433,37 @@ export default {
 .setting-row-desc {
   font-size: 12px;
   color: var(--gate-text-muted);
+}
+.setting-divider {
+  height: 1px;
+  background: var(--gate-border);
+  margin: 4px 0;
+}
+.custom-select-option.is-active {
+  background: rgba(129, 140, 248, 0.1);
+}
+.camera-preview-wrap {
+  position: relative;
+  margin-top: 12px;
+  border-radius: var(--gate-radius-sm, 8px);
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 4 / 3;
+}
+.camera-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.camera-preview-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
 }
 </style>

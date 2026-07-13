@@ -5,6 +5,7 @@ import store from './store'
 
 import Vant from 'vant'
 import 'vant/lib/index.css'
+import 'element-ui/lib/theme-chalk/icon.css'
 import './styles/gate-theme.css'
 
 Vue.use(Vant)
