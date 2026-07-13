@@ -207,6 +207,8 @@ export default {
     isBound (val) {
       if (val) {
         this.showUnboundDialog = false
+      } else {
+        this.stopAll()
       }
     }
   },
