@@ -13,9 +13,11 @@ from core.rtmp_relay import start_rtmp_pull, read_cv2_frame_from_pull, stop_rtmp
 
 logger = logging.getLogger(__name__)
 
-DETECT_INTERVAL = 2.0
-DETECT_WIDTH = 160
+DETECT_INTERVAL = 1.0
+DETECT_WIDTH = 320
 BUFFER_DELAY_SECONDS = 5.0
+DESCRIPTOR_CACHE_TTL = 3.0
+DESCRIPTOR_CACHE_MAX_SIZE = 50
 
 
 def _extract_push_key_from_url(stream_url):
@@ -49,14 +51,14 @@ def generate_frames_with_detection(stream_id):
     rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
     stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, stream_id)
     max_width = config.get('VIDEO_MAX_WIDTH', 640)
-    return generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=max_width)
+    return generate_frames_with_detection_ffmpeg(stream_url, fps=20, max_width=max_width)
 
 
 def generate_frames_with_detection_url(stream_url, frame_skip=5, max_width=640, detect_width=320, cap=None, first_frame=None):
-    return generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=max_width, detect_width=detect_width)
+    return generate_frames_with_detection_ffmpeg(stream_url, fps=20, max_width=max_width, detect_width=detect_width)
 
 
-def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, detect_width=320):
+def generate_frames_with_detection_ffmpeg(stream_url, fps=20, max_width=640, detect_width=320):
     entry = start_rtmp_pull(stream_url, fps=fps, max_width=max_width)
     if entry is None:
         return
@@ -82,6 +84,8 @@ def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, det
         'boxes': [],
         'lock': threading.Lock(),
         'last_time': 0.0,
+        'descriptor_cache': {},
+        'cache_lock': threading.Lock(),
     }
 
     def reader():
@@ -127,13 +131,55 @@ def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, det
                 rgb_image = np.ascontiguousarray(detect_frame[:, :, ::-1])
                 faces = recognizer.detect_faces_rgb(rgb_image)
                 boxes = []
+                now = time.time()
+                
+                with detection_state['cache_lock']:
+                    cache_keys_to_remove = []
+                    for key, cache_entry in detection_state['descriptor_cache'].items():
+                        if now - cache_entry['timestamp'] > DESCRIPTOR_CACHE_TTL:
+                            cache_keys_to_remove.append(key)
+                    for key in cache_keys_to_remove:
+                        del detection_state['descriptor_cache'][key]
+                
                 for face_rect in faces:
-                    face_descriptor = recognizer.compute_face_descriptor_rgb(rgb_image, face_rect)
-                    matched_name, matched_id, distance = recognizer.compare_faces(
-                        face_descriptor, registered_faces, tolerance=0.4
-                    )
+                    x1, y1, x2, y2 = face_rect
+                    center_x = (x1 + x2) // 2
+                    center_y = (y1 + y2) // 2
+                    cache_key = (center_x // 20, center_y // 20)
+                    
+                    matched_name = None
+                    matched_id = None
+                    use_cache = False
+                    
+                    with detection_state['cache_lock']:
+                        if cache_key in detection_state['descriptor_cache']:
+                            cache_entry = detection_state['descriptor_cache'][cache_key]
+                            if now - cache_entry['timestamp'] <= DESCRIPTOR_CACHE_TTL:
+                                matched_name = cache_entry['name']
+                                matched_id = cache_entry['id']
+                                use_cache = True
+                    
+                    if not use_cache:
+                        face_descriptor = recognizer.compute_face_descriptor_rgb(rgb_image, face_rect)
+                        matched_name, matched_id, distance = recognizer.compare_faces(
+                            face_descriptor, registered_faces, tolerance=0.4
+                        )
+                        
+                        with detection_state['cache_lock']:
+                            if len(detection_state['descriptor_cache']) >= DESCRIPTOR_CACHE_MAX_SIZE:
+                                oldest_key = min(
+                                    detection_state['descriptor_cache'].keys(),
+                                    key=lambda k: detection_state['descriptor_cache'][k]['timestamp']
+                                )
+                                del detection_state['descriptor_cache'][oldest_key]
+                            
+                            detection_state['descriptor_cache'][cache_key] = {
+                                'name': matched_name,
+                                'id': matched_id,
+                                'timestamp': now,
+                            }
+                    
                     if detect_scale != 1.0:
-                        x1, y1, x2, y2 = face_rect
                         face_rect = (int(x1 / detect_scale), int(y1 / detect_scale),
                                      int(x2 / detect_scale), int(y2 / detect_scale))
                     boxes.append({
@@ -195,7 +241,7 @@ def generate_frames_with_detection_ffmpeg(stream_url, fps=10, max_width=640, det
         stop_rtmp_pull(stream_url)
 
 
-def generate_detection_sse(stream_url, fps=10, max_width=640, detect_width=320):
+def generate_detection_sse(stream_url, fps=20, max_width=640, detect_width=320):
     """生成人脸检测SSE事件流，优先从共享帧存储读取，否则启动独立RTMP拉流"""
     from core.shared_frame_store import get_frame as _get_shared_frame
 
@@ -205,7 +251,7 @@ def generate_detection_sse(stream_url, fps=10, max_width=640, detect_width=320):
     entry = None
     slot = {'alive': True}
 
-    for _ in range(10):
+    for _ in range(6):
         if _get_shared_frame(stream_url) is not None:
             break
         time.sleep(0.5)
@@ -220,6 +266,8 @@ def generate_detection_sse(stream_url, fps=10, max_width=640, detect_width=320):
         'frame_height': 0,
         'lock': threading.Lock(),
         'last_time': 0.0,
+        'descriptor_cache': {},
+        'cache_lock': threading.Lock(),
     }
 
     def detector():
@@ -273,13 +321,55 @@ def generate_detection_sse(stream_url, fps=10, max_width=640, detect_width=320):
                 rgb_image = np.ascontiguousarray(detect_frame[:, :, ::-1])
                 faces = recognizer.detect_faces_rgb(rgb_image)
                 boxes = []
+                now = time.time()
+                
+                with detection_state['cache_lock']:
+                    cache_keys_to_remove = []
+                    for key, cache_entry in detection_state['descriptor_cache'].items():
+                        if now - cache_entry['timestamp'] > DESCRIPTOR_CACHE_TTL:
+                            cache_keys_to_remove.append(key)
+                    for key in cache_keys_to_remove:
+                        del detection_state['descriptor_cache'][key]
+                
                 for face_rect in faces:
-                    face_descriptor = recognizer.compute_face_descriptor_rgb(rgb_image, face_rect)
-                    matched_name, matched_id, distance = recognizer.compare_faces(
-                        face_descriptor, registered_faces, tolerance=0.4
-                    )
+                    x1, y1, x2, y2 = face_rect
+                    center_x = (x1 + x2) // 2
+                    center_y = (y1 + y2) // 2
+                    cache_key = (center_x // 20, center_y // 20)
+                    
+                    matched_name = None
+                    matched_id = None
+                    use_cache = False
+                    
+                    with detection_state['cache_lock']:
+                        if cache_key in detection_state['descriptor_cache']:
+                            cache_entry = detection_state['descriptor_cache'][cache_key]
+                            if now - cache_entry['timestamp'] <= DESCRIPTOR_CACHE_TTL:
+                                matched_name = cache_entry['name']
+                                matched_id = cache_entry['id']
+                                use_cache = True
+                    
+                    if not use_cache:
+                        face_descriptor = recognizer.compute_face_descriptor_rgb(rgb_image, face_rect)
+                        matched_name, matched_id, distance = recognizer.compare_faces(
+                            face_descriptor, registered_faces, tolerance=0.4
+                        )
+                        
+                        with detection_state['cache_lock']:
+                            if len(detection_state['descriptor_cache']) >= DESCRIPTOR_CACHE_MAX_SIZE:
+                                oldest_key = min(
+                                    detection_state['descriptor_cache'].keys(),
+                                    key=lambda k: detection_state['descriptor_cache'][k]['timestamp']
+                                )
+                                del detection_state['descriptor_cache'][oldest_key]
+                            
+                            detection_state['descriptor_cache'][cache_key] = {
+                                'name': matched_name,
+                                'id': matched_id,
+                                'timestamp': now,
+                            }
+                    
                     if detect_scale != 1.0:
-                        x1, y1, x2, y2 = face_rect
                         face_rect = (int(x1 / detect_scale), int(y1 / detect_scale),
                                      int(x2 / detect_scale), int(y2 / detect_scale))
                     boxes.append({

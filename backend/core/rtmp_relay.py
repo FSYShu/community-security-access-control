@@ -75,18 +75,23 @@ def get_ffmpeg_cmd(rtmp_url):
         '-loglevel', 'warning',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
-        '-framerate', '20',
-        '-fflags', '+genpts',
+        '-framerate', '30',
+        '-fflags', '+genpts+fastseek+discardcorrupt',
         '-i', 'pipe:0',
         '-c:v', 'libx264',
-        '-preset', 'ultrafast',
+        '-preset', 'faster',
         '-tune', 'zerolatency',
-        '-b:v', '2000k',
-        '-maxrate', '3000k',
-        '-bufsize', '2000k',
+        '-b:v', '3000k',
+        '-maxrate', '4000k',
+        '-bufsize', '4000k',
         '-pix_fmt', 'yuv420p',
-        '-g', '20',
-        '-keyint_min', '10',
+        '-g', '30',
+        '-keyint_min', '15',
+        '-threads', '6',
+        '-thread_type', 'slice',
+        '-x264-params', 'nal-hrd=cbr:force-cfr=1',
+        '-movflags', '+faststart',
+        '-flush_packets', '1',
         '-f', 'flv',
         rtmp_url
     ]
@@ -238,7 +243,7 @@ _PULL_PROCESSES = {}
 _PULL_LOCK = threading.Lock()
 
 
-def start_rtmp_pull(rtmp_url, fps=15, max_width=480):
+def start_rtmp_pull(rtmp_url, fps=25, max_width=640):
     with _PULL_LOCK:
         existing = _PULL_PROCESSES.get(rtmp_url)
         if existing and existing['process'].poll() is None:
@@ -261,22 +266,23 @@ def start_rtmp_pull(rtmp_url, fps=15, max_width=480):
         except Exception:
             pass
         logger.info('Killed stale FFmpeg pull for: {}'.format(rtmp_url))
-        time.sleep(0.5)
+        time.sleep(0.05)
 
     cmd = [
         _find_ffmpeg(),
         '-loglevel', 'warning',
-        '-fflags', '+genpts+nobuffer',
-        '-rw_timeout', '15000000',
-        '-analyzeduration', '10000000',
-        '-probesize', '5000000',
+        '-fflags', '+genpts+nobuffer+fastseek+discardcorrupt',
+        '-rw_timeout', '5000000',
+        '-analyzeduration', '500000',
+        '-probesize', '300000',
         '-i', rtmp_url,
         '-map', '0:v:0',
         '-an',
         '-vf', 'scale={}:-1'.format(max_width),
-        '-q:v', '5',
+        '-q:v', '2',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
+        '-threads', '4',
         'pipe:1'
     ]
     try:
@@ -316,7 +322,7 @@ def start_rtmp_pull(rtmp_url, fps=15, max_width=480):
 
 _JPEG_SOI = b'\xff\xd8'
 _JPEG_EOI = b'\xff\xd9'
-_READ_CHUNK = 65536
+_READ_CHUNK = 131072
 
 
 def read_jpeg_frame_from_pull(pull_entry):
@@ -389,6 +395,34 @@ def stop_rtmp_pull(rtmp_url):
     logger.info('Stopped FFmpeg RTMP pull from: {}'.format(rtmp_url))
 
 
+def get_pull_process_info(rtmp_url):
+    """获取拉流进程信息，用于监控和调试"""
+    with _PULL_LOCK:
+        entry = _PULL_PROCESSES.get(rtmp_url)
+        if not entry:
+            return None
+        return {
+            'url': rtmp_url,
+            'ref_count': entry.get('ref_count', 1),
+            'started': entry.get('started'),
+            'alive': entry['process'].poll() is None
+        }
+
+
+def get_all_pull_processes():
+    """获取所有拉流进程信息"""
+    result = []
+    with _PULL_LOCK:
+        for url, entry in _PULL_PROCESSES.items():
+            result.append({
+                'url': url,
+                'ref_count': entry.get('ref_count', 1),
+                'started': entry.get('started'),
+                'alive': entry['process'].poll() is None
+            })
+    return result
+
+
 def cleanup_pull_processes():
     with _PULL_LOCK:
         stale = []
@@ -418,7 +452,7 @@ def get_push_latency_ms(push_key):
 
 _PULL_FRAME_COUNTERS = {}
 _PULL_FC_LOCK = threading.Lock()
-_PULL_FC_WINDOW = 3.0
+_PULL_FC_WINDOW = 2.0
 
 
 def record_pull_frame(rtmp_url):
@@ -449,3 +483,37 @@ def get_pull_fps(rtmp_url):
             return 0
         fps = (len(timestamps) - 1) / elapsed
     return round(fps, 1)
+
+
+def cleanup_frame_counters():
+    """清理过期的帧计数器，防止内存泄漏"""
+    now = time.time()
+    cleaned = 0
+    with _PULL_FC_LOCK:
+        stale_urls = []
+        for url, timestamps in _PULL_FRAME_COUNTERS.items():
+            cutoff = now - _PULL_FC_WINDOW
+            while timestamps and timestamps[0] < cutoff:
+                timestamps.pop(0)
+            if not timestamps:
+                stale_urls.append(url)
+        for url in stale_urls:
+            del _PULL_FRAME_COUNTERS[url]
+            cleaned += 1
+    return cleaned
+
+
+def cleanup_push_timestamps():
+    """清理过期的推流时间戳，防止内存泄漏"""
+    now = time.time()
+    max_age = 60.0
+    cleaned = 0
+    with _PUSH_TS_LOCK:
+        stale_keys = []
+        for key, ts in _PUSH_TIMESTAMPS.items():
+            if now * 1000 - ts > max_age * 1000:
+                stale_keys.append(key)
+        for key in stale_keys:
+            del _PUSH_TIMESTAMPS[key]
+            cleaned += 1
+    return cleaned

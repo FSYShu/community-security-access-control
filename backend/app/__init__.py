@@ -62,6 +62,9 @@ def create_app(config_name=None):
     from app.device_tamper_monitor import start_device_tamper_monitor
     start_device_tamper_monitor(app)
 
+    from core.cleanup_task import start_cleanup_task
+    start_cleanup_task(app)
+
     return app
 
 
@@ -180,6 +183,30 @@ def _migrate_schema(database):
                 conn.execute(db.text('ALTER TABLE gates DROP COLUMN location'))
                 conn.commit()
                 logger.info('Migrated: dropped location column from gates')
+        except Exception:
+            pass
+        try:
+            conn.execute(db.text('ALTER TABLE gates ADD COLUMN calib_near_dist REAL'))
+            conn.commit()
+            logger.info('Migrated: added calib_near_dist column to gates')
+        except Exception:
+            pass
+        try:
+            conn.execute(db.text('ALTER TABLE gates ADD COLUMN calib_near_ratio REAL'))
+            conn.commit()
+            logger.info('Migrated: added calib_near_ratio column to gates')
+        except Exception:
+            pass
+        try:
+            conn.execute(db.text('ALTER TABLE gates ADD COLUMN calib_far_dist REAL'))
+            conn.commit()
+            logger.info('Migrated: added calib_far_dist column to gates')
+        except Exception:
+            pass
+        try:
+            conn.execute(db.text('ALTER TABLE gates ADD COLUMN calib_far_ratio REAL'))
+            conn.commit()
+            logger.info('Migrated: added calib_far_ratio column to gates')
         except Exception:
             pass
 

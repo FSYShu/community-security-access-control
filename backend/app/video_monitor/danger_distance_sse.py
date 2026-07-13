@@ -47,14 +47,14 @@ def _estimate_face_distance(face_rect, frame_height, calib_near_dist=None, calib
     return round(distance, 2)
 
 
-def generate_danger_distance_sse(stream_url, zones, fps=10, max_width=640, detect_width=320, calib_near_dist=None, calib_near_ratio=None, calib_far_dist=None, calib_far_ratio=None):
+def generate_danger_distance_sse(stream_url, zones, fps=20, max_width=640, detect_width=320, calib_near_dist=None, calib_near_ratio=None, calib_far_dist=None, calib_far_ratio=None):
     yield 'event: connected\ndata: {}\n\n'.format(json.dumps({}))
 
     own_pull = False
     entry = None
     slot = {'alive': True}
 
-    for _ in range(10):
+    for _ in range(6):
         if _get_shared_frame(stream_url) is not None:
             break
         time.sleep(0.5)
