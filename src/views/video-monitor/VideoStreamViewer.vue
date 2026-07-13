@@ -492,12 +492,13 @@ export default {
       }
     },
     async fetchLatency () {
-      if (!this.selectedGate) {
+      const pushKey = this.selectedGateData && this.selectedGateData.push_key
+      if (!this.selectedGate || !pushKey) {
         this.latencyMs = null
         return
       }
       try {
-        const res = await fetch('/api/v1/video-monitor/gate-latency?gate_id=' + this.selectedGate)
+        const res = await fetch('/api/v1/video-monitor/gate-latency/' + encodeURIComponent(pushKey))
         const data = await res.json()
         if (data.code === 0 && data.data && data.data.latency_ms !== undefined) {
           this.latencyMs = data.data.latency_ms
