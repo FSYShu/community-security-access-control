@@ -37,7 +37,7 @@ backend/registered_faces.json
 # 数据目录
 backend/dat/
 backend/data/
-
+data/
 
 # 前端测试
 /test/unit/coverage/
@@ -47,6 +47,9 @@ backend/data/
 
 # 构建缓存
 .merkle-snapshot.json
+
+# Patch files
+patches/
 
 # Editor directories and files
 .idea

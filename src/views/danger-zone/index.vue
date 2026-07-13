@@ -3,10 +3,10 @@
     <div class="danger-zone-page">
       <div class="dz-header">
         <div class="dz-title">禁区管理</div>
-        <button class="action-btn add-btn" @click="openAddDialog">
-          <i class="el-icon-plus"></i>
-          <span>新增禁区</span>
-        </button>
+        <div class="empty-hint">
+          <i class="el-icon-info"></i>
+          <span>禁区由门禁管理中"危险防护区域"类型的终端自动创建</span>
+        </div>
       </div>
 
       <div class="dz-content">
@@ -16,84 +16,74 @@
               <div class="zone-card-header">
                 <div class="zone-info">
                   <span class="zone-name">{{ zone.zone_name }}</span>
-                  <span class="zone-status" :class="zone.status === 'active' ? 'status-active' : 'status-inactive'">
-                    {{ zone.status === 'active' ? '启用' : '停用' }}
-                  </span>
                   <span class="zone-level" :class="'level-' + zone.alarm_level">
-                    {{ levelMap[zone.alarm_level] || zone.alarm_level }}
+                    {{ levelMap[zone.alarm_level] || zone.alarm_level }}告警级别
                   </span>
                 </div>
                 <div class="zone-actions">
-                  <button class="action-sm edit-btn" @click="openEditDialog(zone)">
+                  <button class="edit-btn" @click="openEditDialog(zone)">
                     <i class="el-icon-edit"></i>
+                    <span>编辑</span>
                   </button>
-                  <button class="action-sm del-btn" @click="onDeleteZone(zone)">
-                    <i class="el-icon-delete"></i>
+                  <button class="toggle-btn" :class="zone.status === 'active' ? 'toggle-disable' : 'toggle-enable'" @click="toggleZoneStatus(zone)">
+                    {{ zone.status === 'active' ? '停用' : '启用' }}
                   </button>
                 </div>
               </div>
               <div class="zone-card-body">
-                <div class="zone-detail-row">
+                <span class="detail-item">
                   <span class="detail-label">关联摄像头</span>
                   <span class="detail-value">{{ zone.camera_names || zone.camera_ids }}</span>
-                </div>
-                <div class="zone-detail-row">
-                  <span class="detail-label">安全距离</span>
+                </span>
+                <span class="detail-item">
+                  <span class="detail-label">安全距离(近大远小)</span>
                   <span class="detail-value">{{ zone.safety_distance }}米</span>
-                </div>
-                <div class="zone-detail-row">
+                </span>
+                <span class="detail-item">
                   <span class="detail-label">滞留告警</span>
                   <span class="detail-value">{{ zone.stay_duration }}秒</span>
-                </div>
+                </span>
               </div>
             </div>
           </van-list>
-          <div v-if="!loading && zoneList.length === 0" class="empty-state">
-            <i class="el-icon-warning-outline empty-icon"></i>
-            <p>暂无禁区，请在门禁管理中添加"危险防护区域"类型的门禁终端</p>
-          </div>
         </van-pull-refresh>
       </div>
 
-      <el-dialog :visible.sync="showFormDialog" :title="formMode === 'add' ? '新增禁区' : '编辑禁区'" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetForm">
+      <el-dialog :visible.sync="showFormDialog" title="编辑禁区" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetForm">
         <div class="form-grid">
           <div class="form-item">
-            <label class="form-label">禁区名称 <span class="required">*</span></label>
-            <el-input v-model="formData.zone_name" placeholder="请输入禁区名称" size="small" />
+            <label class="form-label">禁区名称 <span class="form-required">*</span></label>
+            <input v-model="formData.zone_name" class="form-input" placeholder="请输入禁区名称" />
           </div>
           <div class="form-item">
-            <label class="form-label">关联摄像头 <span class="required">*</span></label>
-            <el-select v-model="formData.camera_ids" placeholder="请选择摄像头" size="small" multiple>
-              <el-option v-for="cam in cameraList" :key="cam.gate_id" :label="cam.gate_name" :value="cam.gate_id" />
-            </el-select>
+            <label class="form-label">安全距离(米) <span class="form-required">*</span></label>
+            <input v-model.number="formData.safety_distance" class="form-input" type="number" step="0.5" min="0.5" max="50" />
+            <span class="form-hint">基于近大远小原理，人体在画面中越大距离越近</span>
           </div>
           <div class="form-item">
-            <label class="form-label">安全距离(米) <span class="required">*</span></label>
-            <el-input-number v-model="formData.safety_distance" :min="0.5" :max="50" :step="0.5" size="small" />
-          </div>
-          <div class="form-item">
-            <label class="form-label">滞留告警时长(秒) <span class="required">*</span></label>
-            <el-input-number v-model="formData.stay_duration" :min="1" :max="300" :step="5" size="small" />
+            <label class="form-label">滞留告警时长(秒) <span class="form-required">*</span></label>
+            <input v-model.number="formData.stay_duration" class="form-input" type="number" step="5" min="1" max="300" />
           </div>
           <div class="form-item">
             <label class="form-label">告警级别</label>
-            <el-select v-model="formData.alarm_level" size="small">
-              <el-option label="低" value="low" />
-              <el-option label="中" value="medium" />
-              <el-option label="高" value="high" />
-            </el-select>
-          </div>
-          <div class="form-item">
-            <label class="form-label">状态</label>
-            <el-select v-model="formData.status" size="small">
-              <el-option label="启用" value="active" />
-              <el-option label="停用" value="inactive" />
-            </el-select>
+            <div class="filter-select" :class="{ 'is-open': showLevelDropdown }">
+              <div class="select-trigger" @click="showLevelDropdown = !showLevelDropdown">
+                <span class="select-value">{{ levelMap[formData.alarm_level] || '请选择' }}</span>
+                <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showLevelDropdown }"></i>
+              </div>
+              <transition name="dropdown">
+                <div v-if="showLevelDropdown" class="select-dropdown">
+                  <div class="select-option" :class="{ 'is-active': formData.alarm_level === 'low' }" @click="formData.alarm_level = 'low'; showLevelDropdown = false">低</div>
+                  <div class="select-option" :class="{ 'is-active': formData.alarm_level === 'medium' }" @click="formData.alarm_level = 'medium'; showLevelDropdown = false">中</div>
+                  <div class="select-option" :class="{ 'is-active': formData.alarm_level === 'high' }" @click="formData.alarm_level = 'high'; showLevelDropdown = false">高</div>
+                </div>
+              </transition>
+            </div>
           </div>
         </div>
-        <div slot="footer">
-          <el-button size="small" @click="showFormDialog = false">取消</el-button>
-          <el-button size="small" type="primary" @click="submitForm">确定</el-button>
+        <div class="form-footer">
+          <button class="form-btn form-btn-cancel" @click="showFormDialog = false">取消</button>
+          <button class="form-btn form-btn-primary" @click="submitForm">确认</button>
         </div>
       </el-dialog>
     </div>
@@ -101,7 +91,7 @@
 </template>
 
 <script>
-import { getDangerZoneList, addDangerZone, updateDangerZone, deleteDangerZone, getAvailableCameras } from '@/api/dangerZone'
+import { getDangerZoneList, updateDangerZone } from '@/api/dangerZone'
 
 export default {
   name: 'DangerZonePage',
@@ -111,33 +101,28 @@ export default {
       loading: false,
       finished: false,
       refreshing: false,
-      cameraList: [],
       showFormDialog: false,
-      formMode: 'add',
       editingZone: null,
+      showLevelDropdown: false,
       formData: {
         zone_name: '',
-        camera_ids: [],
         safety_distance: 2.0,
         stay_duration: 30,
-        alarm_level: 'high',
-        status: 'active'
+        alarm_level: 'high'
       },
       levelMap: { low: '低', medium: '中', high: '高' }
     }
   },
-  created () {
-    this.fetchCameras()
+  mounted () {
+    document.addEventListener('click', this.closeDropdowns)
+  },
+  beforeDestroy () {
+    document.removeEventListener('click', this.closeDropdowns)
   },
   methods: {
-    async fetchCameras () {
-      try {
-        const res = await getAvailableCameras()
-        if (res.code === 0 && res.data) {
-          this.cameraList = res.data || []
-        }
-      } catch (e) {
-        console.error('Failed to fetch cameras:', e)
+    closeDropdowns (e) {
+      if (!e.target.closest('.filter-select')) {
+        this.showLevelDropdown = false
       }
     },
     async loadZones () {
@@ -161,31 +146,15 @@ export default {
         this.refreshing = false
       }.bind(this))
     },
-    openAddDialog () {
-      this.formMode = 'add'
-      this.editingZone = null
-      this.formData = {
-        zone_name: '',
-        camera_ids: [],
-        safety_distance: 2.0,
-        stay_duration: 30,
-        alarm_level: 'high',
-        status: 'active'
-      }
-      this.showFormDialog = true
-    },
     openEditDialog (zone) {
-      this.formMode = 'edit'
       this.editingZone = zone
-      const cameraIds = zone.camera_ids ? zone.camera_ids.split(',').map(function (s) { return parseInt(s.trim()) }).filter(function (n) { return !isNaN(n) }) : []
       this.formData = {
         zone_name: zone.zone_name,
-        camera_ids: cameraIds,
         safety_distance: zone.safety_distance,
         stay_duration: zone.stay_duration,
-        alarm_level: zone.alarm_level || 'high',
-        status: zone.status
+        alarm_level: zone.alarm_level || 'high'
       }
+      this.showLevelDropdown = false
       this.showFormDialog = true
     },
     async submitForm () {
@@ -193,27 +162,16 @@ export default {
         this.$message.warning('请输入禁区名称')
         return
       }
-      if (!this.formData.camera_ids || this.formData.camera_ids.length === 0) {
-        this.$message.warning('请选择至少一个摄像头')
-        return
-      }
       const submitData = {
         zone_name: this.formData.zone_name,
-        camera_ids: this.formData.camera_ids.join(','),
         safety_distance: this.formData.safety_distance,
         stay_duration: this.formData.stay_duration,
-        alarm_level: this.formData.alarm_level,
-        status: this.formData.status
+        alarm_level: this.formData.alarm_level
       }
       try {
-        let res
-        if (this.formMode === 'add') {
-          res = await addDangerZone(submitData)
-        } else {
-          res = await updateDangerZone(this.editingZone.id, submitData)
-        }
+        const res = await updateDangerZone(this.editingZone.id, submitData)
         if (res.code === 0) {
-          this.$message.success(this.formMode === 'add' ? '新增成功' : '更新成功')
+          this.$message.success('更新成功')
           this.showFormDialog = false
           this.onRefresh()
         }
@@ -223,23 +181,18 @@ export default {
     },
     resetForm () {
       this.editingZone = null
+      this.showLevelDropdown = false
     },
-    async onDeleteZone (zone) {
+    async toggleZoneStatus (zone) {
+      const newStatus = zone.status === 'active' ? 'inactive' : 'active'
       try {
-        await this.$confirm('确定删除禁区"' + zone.zone_name + '"？', '确认删除', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        })
-        const res = await deleteDangerZone(zone.id)
+        const res = await updateDangerZone(zone.id, { status: newStatus })
         if (res.code === 0) {
-          this.$message.success('删除成功')
+          this.$message.success(newStatus === 'active' ? '已启用' : '已停用')
           this.onRefresh()
         }
       } catch (e) {
-        if (e !== 'cancel') {
-          console.error('Delete failed:', e)
-        }
+        console.error('Toggle failed:', e)
       }
     }
   }
@@ -259,36 +212,29 @@ export default {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  gap: 12px;
 }
 
 .dz-title {
   font-size: 16px;
   font-weight: 600;
   color: var(--dark-text);
+  white-space: nowrap;
+  line-height: 20px;
 }
 
-.action-btn {
+.empty-hint {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 7px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-  border: 1px solid var(--dark-border-field);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--dark-text-secondary);
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dark-text-muted);
+  line-height: 20px;
 }
 
-.add-btn {
-  border-color: var(--dark-accent);
-  color: var(--dark-accent-light);
-  background: rgba(99, 102, 241, 0.08);
-}
-
-.add-btn:hover {
-  background: rgba(99, 102, 241, 0.15);
+.empty-hint i {
+  font-size: 14px;
+  vertical-align: middle;
 }
 
 .dz-content {
@@ -320,23 +266,6 @@ export default {
   color: var(--dark-text);
 }
 
-.zone-status {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 500;
-}
-
-.status-active {
-  background: rgba(16, 185, 129, 0.12);
-  color: var(--dark-success);
-}
-
-.status-inactive {
-  background: rgba(139, 139, 139, 0.12);
-  color: var(--dark-text-muted);
-}
-
 .zone-level {
   font-size: 11px;
   padding: 2px 8px;
@@ -365,64 +294,81 @@ export default {
   gap: 6px;
 }
 
-.action-sm {
-  display: flex;
+.edit-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  border: 1px solid var(--dark-border-field);
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  height: 28px;
   background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 6px;
   color: var(--dark-text-secondary);
-  transition: background 0.2s;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .edit-btn:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--dark-accent-light);
   color: var(--dark-accent-light);
-  border-color: var(--dark-accent);
 }
 
-.del-btn:hover {
-  color: var(--dark-danger);
-  border-color: var(--dark-danger);
+.toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.toggle-disable {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.toggle-disable:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.toggle-enable {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--dark-success);
+}
+
+.toggle-enable:hover {
+  background: rgba(16, 185, 129, 0.15);
 }
 
 .zone-card-body {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.zone-detail-row {
-  display: flex;
+.detail-item {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   font-size: 13px;
 }
 
 .detail-label {
   color: var(--dark-text-secondary);
-  min-width: 80px;
 }
 
 .detail-value {
   color: var(--dark-text);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: var(--dark-text-muted);
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
 }
 
 .form-grid {
@@ -443,7 +389,174 @@ export default {
   font-weight: 500;
 }
 
-.required {
+.form-required {
   color: var(--dark-danger);
+}
+
+.form-input {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--dark-text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-input::placeholder {
+  color: var(--dark-text-muted);
+}
+
+.form-input:focus {
+  border-color: var(--dark-accent-light);
+}
+
+.form-hint {
+  font-size: 11px;
+  color: var(--dark-text-muted);
+  line-height: 1.4;
+}
+
+.filter-select {
+  position: relative;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.filter-select.is-open .select-trigger {
+  border-color: var(--dark-accent);
+}
+
+.select-value {
+  font-size: 13px;
+  color: var(--dark-text);
+  white-space: nowrap;
+}
+
+.select-arrow {
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+  transition: transform 0.2s;
+  margin-left: 6px;
+}
+
+.select-arrow.is-reverse {
+  transform: rotate(180deg);
+}
+
+.select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--dark-bg-secondary);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  padding: 4px 0;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.select-option {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.select-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dark-text);
+}
+
+.select-option.is-active {
+  color: var(--dark-accent-light);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.dropdown-enter,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.form-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.form-btn-cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dark-text);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.form-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.form-btn-primary {
+  background: var(--dark-accent);
+  color: #fff;
+}
+
+.form-btn-primary:hover {
+  background: var(--dark-accent-light);
+}
+</style>
+
+<style>
+.dark-dialog {
+  background: #0A0A0A !important;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
+
+.dark-dialog .el-dialog__header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 16px 20px;
+}
+
+.dark-dialog .el-dialog__title {
+  color: #EDEDEF;
+  font-weight: 600;
+}
+
+.dark-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: #8A8F98;
+}
+
+.dark-dialog .el-dialog__body {
+  padding: 20px;
 }
 </style>

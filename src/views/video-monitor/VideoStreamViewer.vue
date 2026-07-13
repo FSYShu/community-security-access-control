@@ -24,6 +24,10 @@
         <span class="status-text">{{ statusLabel }}</span>
         <span v-if="latencyMs !== null" class="latency-tag" :class="latencyClass">{{ latencyText }}</span>
       </div>
+      <button v-if="dangerDistanceEnabled && selectedGate" class="calib-btn" @click="openCalibDialog">
+        <i class="el-icon-aim"></i>
+        <span>校准</span>
+      </button>
     </div>
     <div class="stream-container">
       <div class="stream-wrapper">
@@ -37,7 +41,7 @@
           @error="onStreamError"
         />
         <canvas
-          v-if="showStream && selectedGate && faceDetectionEnabled"
+          v-if="showStream && selectedGate && (faceDetectionEnabled || dangerDistanceEnabled)"
           ref="overlayCanvas"
           class="overlay-canvas"
         ></canvas>
@@ -54,6 +58,31 @@
         <button class="retry-button" @click="manualRefresh">立即重试</button>
       </div>
     </div>
+    <el-dialog :visible.sync="showCalibDialog" title="距离校准（两点法）" width="380px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="calibDistance = 1.0">
+      <div class="calib-content">
+        <p class="calib-hint">分别在近处和远处各校准一次，两点校准更准确。先站在近处（如1米），再站在远处（如3米）。</p>
+        <div class="calib-form">
+          <label class="calib-label">校准点</label>
+          <div class="calib-point-select">
+            <button class="calib-point-btn" :class="{ 'is-active': calibPoint === 'near' }" @click="calibPoint = 'near'">近点</button>
+            <button class="calib-point-btn" :class="{ 'is-active': calibPoint === 'far' }" @click="calibPoint = 'far'">远点</button>
+          </div>
+        </div>
+        <div class="calib-form">
+          <label class="calib-label">实际距离(米)</label>
+          <input v-model.number="calibDistance" class="calib-input" type="number" step="0.1" min="0.5" max="20" />
+        </div>
+        <div v-if="calibNearDist || calibFarDist" class="calib-status">
+          <span v-if="calibNearDist" class="calib-status-item calib-near">近点: {{ calibNearDist }}m (比例{{ calibNearRatio }})</span>
+          <span v-if="calibFarDist" class="calib-status-item calib-far">远点: {{ calibFarDist }}m (比例{{ calibFarRatio }})</span>
+        </div>
+        <p v-if="calibResult" class="calib-result" :class="calibSuccess ? 'calib-success' : 'calib-error'">{{ calibResult }}</p>
+      </div>
+      <div class="form-footer">
+        <button class="form-btn form-btn-cancel" @click="showCalibDialog = false">关闭</button>
+        <button class="form-btn form-btn-primary" :disabled="calibLoading" @click="doCalibrate">{{ calibLoading ? '校准中...' : '校准此点' }}</button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -69,6 +98,10 @@ export default {
       default: () => []
     },
     faceDetectionEnabled: {
+      type: Boolean,
+      default: false
+    },
+    dangerDistanceEnabled: {
       type: Boolean,
       default: false
     },
@@ -96,7 +129,25 @@ export default {
       boxExpireTimer: null,
       latencyTimer: null,
       sseErrorCount: 0,
-      sseConnectTimer: null
+      sseConnectTimer: null,
+      dangerDistanceEventSource: null,
+      latestDangerPersons: [],
+      dangerFrameWidth: 0,
+      dangerFrameHeight: 0,
+      dangerSafetyDistance: 2.0,
+      dangerBoxExpireTimer: null,
+      dangerSseErrorCount: 0,
+      dangerSseConnectTimer: null,
+      showCalibDialog: false,
+      calibDistance: 1.0,
+      calibPoint: 'near',
+      calibLoading: false,
+      calibResult: '',
+      calibSuccess: false,
+      calibNearDist: null,
+      calibNearRatio: null,
+      calibFarDist: null,
+      calibFarRatio: null
     }
   },
   computed: {
@@ -145,15 +196,23 @@ export default {
     selectedGate () {
       this.resetConnection()
       this.stopDetectionSSE()
+      this.stopDangerDistanceSSE()
       this.latestBoxes = []
+      this.latestDangerPersons = []
       if (this.selectedGate && this.faceDetectionEnabled) {
         this.startDetectionSSE()
+      }
+      if (this.selectedGate && this.dangerDistanceEnabled) {
+        this.startDangerDistanceSSE()
       }
       this.fetchLatency()
       const self = this
       setTimeout(function () {
         if (self.selectedGate && self.faceDetectionEnabled && !self.detectionEventSource) {
           self.startDetectionSSE()
+        }
+        if (self.selectedGate && self.dangerDistanceEnabled && !self.dangerDistanceEventSource) {
+          self.startDangerDistanceSSE()
         }
       }, 1500)
     },
@@ -163,6 +222,15 @@ export default {
       } else {
         this.stopDetectionSSE()
         this.latestBoxes = []
+        this.clearOverlay()
+      }
+    },
+    dangerDistanceEnabled (val) {
+      if (val && this.selectedGate) {
+        this.startDangerDistanceSSE()
+      } else {
+        this.stopDangerDistanceSSE()
+        this.latestDangerPersons = []
         this.clearOverlay()
       }
     }
@@ -182,6 +250,9 @@ export default {
     setTimeout(function () {
       if (self.selectedGate && self.faceDetectionEnabled && !self.detectionEventSource) {
         self.startDetectionSSE()
+      }
+      if (self.selectedGate && self.dangerDistanceEnabled && !self.dangerDistanceEventSource) {
+        self.startDangerDistanceSSE()
       }
     }, 2000)
   },
@@ -211,6 +282,7 @@ export default {
       this.retryCount = 0
       this.clearRetryTimer()
       this.stopDetectionSSE()
+      this.stopDangerDistanceSSE()
       this.urlVersion = Date.now()
       this.showStream = false
       const self = this
@@ -239,11 +311,15 @@ export default {
       if (this.faceDetectionEnabled && this.selectedGate) {
         this.startDetectionSSE()
       }
+      if (this.dangerDistanceEnabled && this.selectedGate) {
+        this.startDangerDistanceSSE()
+      }
     },
     onStreamError () {
       this.connected = false
       this.streamError = true
       this.stopDetectionSSE()
+      this.stopDangerDistanceSSE()
       this.startAutoRetry()
     },
     startAutoRetry () {
@@ -274,7 +350,9 @@ export default {
       if (this.detectionEventSource) return
       if (!this.selectedGate || !this.faceDetectionEnabled) return
       const self = this
-      const url = '/api/v1/video-monitor/face-detection/' + this.selectedGate + '/stream'
+      const ssePort = window.location.port === '8080' ? '5000' : window.location.port
+      const sseBase = window.location.protocol + '//' + window.location.hostname + ':' + ssePort
+      const url = sseBase + '/api/v1/video-monitor/face-detection/' + this.selectedGate + '/stream'
       console.log('[FaceDetection] connecting SSE:', url)
       this.detectionEventSource = new EventSource(url)
       this.sseConnectTimer = setTimeout(function () {
@@ -348,6 +426,89 @@ export default {
       this.detectionFrameWidth = 0
       this.detectionFrameHeight = 0
       this.clearBoxExpire()
+      this.clearOverlay()
+    },
+    startDangerDistanceSSE () {
+      if (this.dangerDistanceEventSource) return
+      if (!this.selectedGate || !this.dangerDistanceEnabled) return
+      const self = this
+      const ssePort = window.location.port === '8080' ? '5000' : window.location.port
+      const sseBase = window.location.protocol + '//' + window.location.hostname + ':' + ssePort
+      const url = sseBase + '/api/v1/video-monitor/danger-distance/' + this.selectedGate + '/stream'
+      console.log('[DangerDistance] connecting SSE:', url)
+      this.dangerDistanceEventSource = new EventSource(url)
+      this.dangerSseConnectTimer = setTimeout(function () {
+        if (self.dangerDistanceEventSource && self.dangerSseErrorCount === 0) {
+          console.error('[DangerDistance] SSE connection timeout (10s), backend may not be running')
+          self.$message({ message: '距离检测服务连接超时，请检查后端服务是否启动', type: 'error' })
+          self.stopDangerDistanceSSE()
+        }
+      }, 10000)
+      this.dangerDistanceEventSource.addEventListener('detection', function (e) {
+        try {
+          const data = JSON.parse(e.data)
+          const persons = data.persons || []
+          console.log('[DangerDistance] detection event, persons:', persons.length, 'safety:', data.safety_distance)
+          if (data.frame_width) self.dangerFrameWidth = data.frame_width
+          if (data.frame_height) self.dangerFrameHeight = data.frame_height
+          if (data.safety_distance) self.dangerSafetyDistance = data.safety_distance
+          if (persons.length > 0) {
+            self.latestDangerPersons = persons
+            self.drawDangerDistance()
+            self.resetDangerBoxExpire()
+            if (!self.$refs.overlayCanvas || !self.$refs.overlayCanvas.getBoundingClientRect().width) {
+              setTimeout(function () { self.drawDangerDistance() }, 500)
+            }
+          }
+        } catch (err) {
+          console.error('[DangerDistance] parse error:', err)
+        }
+      })
+      this.dangerDistanceEventSource.addEventListener('error', function (e) {
+        try {
+          const msg = e.data ? JSON.parse(e.data) : {}
+          console.error('[DangerDistance] backend error:', msg.error || 'unknown')
+        } catch (err) {}
+      })
+      this.dangerDistanceEventSource.onopen = function () {
+        console.log('[DangerDistance] SSE connected')
+        self.dangerSseErrorCount = 0
+        if (self.dangerSseConnectTimer) {
+          clearTimeout(self.dangerSseConnectTimer)
+          self.dangerSseConnectTimer = null
+        }
+      }
+      this.dangerDistanceEventSource.onerror = function () {
+        self.dangerSseErrorCount++
+        console.error('[DangerDistance] SSE error, retry in 3s')
+        if (self.dangerSseConnectTimer) {
+          clearTimeout(self.dangerSseConnectTimer)
+          self.dangerSseConnectTimer = null
+        }
+        if (self.dangerSseErrorCount === 3) {
+          self.$message({ message: '距离检测连接失败，正在重试...', type: 'warning' })
+        }
+        self.stopDangerDistanceSSE()
+        setTimeout(function () {
+          if (self.dangerDistanceEnabled && self.selectedGate) {
+            self.startDangerDistanceSSE()
+          }
+        }, 3000)
+      }
+    },
+    stopDangerDistanceSSE () {
+      if (this.dangerSseConnectTimer) {
+        clearTimeout(this.dangerSseConnectTimer)
+        this.dangerSseConnectTimer = null
+      }
+      if (this.dangerDistanceEventSource) {
+        this.dangerDistanceEventSource.close()
+        this.dangerDistanceEventSource = null
+      }
+      this.latestDangerPersons = []
+      this.dangerFrameWidth = 0
+      this.dangerFrameHeight = 0
+      this.clearDangerBoxExpire()
       this.clearOverlay()
     },
     drawFaceBoxes (retryCount) {
@@ -462,11 +623,122 @@ export default {
         this.boxExpireTimer = null
       }
     },
+    drawDangerDistance (retryCount) {
+      if (retryCount === undefined) retryCount = 0
+      const canvas = this.$refs.overlayCanvas
+      const img = this.$refs.streamImage
+      if (!canvas) {
+        if (retryCount < 10) {
+          const self = this
+          requestAnimationFrame(function () { self.drawDangerDistance(retryCount + 1) })
+        }
+        return
+      }
+      const rect = canvas.getBoundingClientRect()
+      const containerWidth = rect.width || canvas.clientWidth
+      const containerHeight = rect.height || canvas.clientHeight
+      if (!containerWidth || !containerHeight) {
+        if (retryCount < 10) {
+          const self = this
+          requestAnimationFrame(function () { self.drawDangerDistance(retryCount + 1) })
+        }
+        return
+      }
+      const persons = this.latestDangerPersons
+      if (!persons || persons.length === 0) return
+      const naturalWidth = img && img.naturalWidth ? img.naturalWidth : this.dangerFrameWidth || 640
+      const naturalHeight = img && img.naturalHeight ? img.naturalHeight : this.dangerFrameHeight || 480
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = containerWidth * dpr
+      canvas.height = containerHeight * dpr
+      const ctx = canvas.getContext('2d')
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.clearRect(0, 0, containerWidth, containerHeight)
+      const scaleX = containerWidth / naturalWidth
+      const scaleY = containerHeight / naturalHeight
+      const displayScale = Math.min(scaleX, scaleY)
+      const displayWidth = naturalWidth * displayScale
+      const displayHeight = naturalHeight * displayScale
+      const offsetX = (containerWidth - displayWidth) / 2
+      const offsetY = (containerHeight - displayHeight) / 2
+      const frameWidth = this.dangerFrameWidth || naturalWidth
+      const frameHeight = this.dangerFrameHeight || naturalHeight
+      const frameScaleX = displayWidth / frameWidth
+      const frameScaleY = displayHeight / frameHeight
+      for (let i = 0; i < persons.length; i++) {
+        const p = persons[i]
+        const x1 = p.rect[0]
+        const y1 = p.rect[1]
+        const x2 = p.rect[2]
+        const y2 = p.rect[3]
+        const drawX = x1 * frameScaleX + offsetX
+        const drawY = y1 * frameScaleY + offsetY
+        const drawW = (x2 - x1) * frameScaleX
+        const drawH = (y2 - y1) * frameScaleY
+        const color = p.is_close ? '#ef4444' : '#f59e0b'
+        ctx.strokeStyle = color
+        ctx.lineWidth = 2
+        ctx.shadowColor = color
+        ctx.shadowBlur = 6
+        this.drawRoundRect(ctx, drawX, drawY, drawW, drawH, 3)
+        ctx.stroke()
+        ctx.shadowBlur = 0
+        const distText = p.distance < 9999 ? p.distance.toFixed(1) + 'm' : '--'
+        const label = p.is_close ? '入侵 ' + distText : distText
+        ctx.font = 'bold 13px "PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif'
+        const textMetrics = ctx.measureText(label)
+        const textHeight = 14
+        const padX = 6
+        const padY = 3
+        const labelH = textHeight + padY * 2
+        const labelW = textMetrics.width + padX * 2
+        const labelX = drawX
+        let labelY = drawY - labelH - 2
+        if (labelY < 0) labelY = drawY + 2
+        ctx.fillStyle = p.is_close ? 'rgba(239,68,68,0.9)' : 'rgba(245,158,11,0.9)'
+        this.drawRoundRect(ctx, labelX, labelY, labelW, labelH, 3)
+        ctx.fill()
+        ctx.fillStyle = '#ffffff'
+        ctx.textBaseline = 'top'
+        ctx.fillText(label, labelX + padX, labelY + padY)
+      }
+      const safetyLabel = '安全距离: ' + this.dangerSafetyDistance.toFixed(1) + 'm'
+      ctx.font = 'bold 12px "PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif'
+      const sMetrics = ctx.measureText(safetyLabel)
+      const sPadX = 8
+      const sPadY = 4
+      const sLabelW = sMetrics.width + sPadX * 2
+      const sLabelH = 14 + sPadY * 2
+      const sLabelX = offsetX + 8
+      const sLabelY = offsetY + 8
+      ctx.fillStyle = 'rgba(0,0,0,0.7)'
+      this.drawRoundRect(ctx, sLabelX, sLabelY, sLabelW, sLabelH, 4)
+      ctx.fill()
+      ctx.fillStyle = '#f59e0b'
+      ctx.textBaseline = 'top'
+      ctx.fillText(safetyLabel, sLabelX + sPadX, sLabelY + sPadY)
+    },
+    resetDangerBoxExpire () {
+      this.clearDangerBoxExpire()
+      const self = this
+      this.dangerBoxExpireTimer = setTimeout(function () {
+        self.latestDangerPersons = []
+        self.clearOverlay()
+      }, 5000)
+    },
+    clearDangerBoxExpire () {
+      if (this.dangerBoxExpireTimer) {
+        clearTimeout(this.dangerBoxExpireTimer)
+        this.dangerBoxExpireTimer = null
+      }
+    },
     cleanup () {
       this.showStream = false
       this.clearRetryTimer()
       this.stopDetectionSSE()
+      this.stopDangerDistanceSSE()
       this.clearBoxExpire()
+      this.clearDangerBoxExpire()
       if (this.latencyTimer) {
         clearInterval(this.latencyTimer)
         this.latencyTimer = null
@@ -481,6 +753,9 @@ export default {
     onWindowResize () {
       if (this.faceDetectionEnabled && this.latestBoxes.length > 0) {
         this.drawFaceBoxes()
+      }
+      if (this.dangerDistanceEnabled && this.latestDangerPersons.length > 0) {
+        this.drawDangerDistance()
       }
     },
     async fetchLatency () {
@@ -504,6 +779,58 @@ export default {
     warmupStream () {
       if (!this.selectedGate) return
       fetch('/api/v1/video-monitor/gate-warmup?gate_id=' + this.selectedGate).catch(function () {})
+    },
+    openCalibDialog () {
+      this.calibResult = ''
+      this.calibSuccess = false
+      const gate = this.gateList.find(g => String(g.id) === this.selectedGate)
+      if (gate) {
+        this.calibNearDist = gate.calib_near_dist || null
+        this.calibNearRatio = gate.calib_near_ratio || null
+        this.calibFarDist = gate.calib_far_dist || null
+        this.calibFarRatio = gate.calib_far_ratio || null
+      }
+      this.showCalibDialog = true
+    },
+    async doCalibrate () {
+      if (!this.calibDistance || this.calibDistance <= 0) {
+        this.$message.warning('请输入有效距离')
+        return
+      }
+      this.calibLoading = true
+      this.calibResult = ''
+      const self = this
+      try {
+        const ssePort = window.location.port === '8080' ? '5000' : window.location.port
+        const url = window.location.protocol + '//' + window.location.hostname + ':' + ssePort + '/api/v1/video-monitor/calibrate-distance/' + this.selectedGate
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ distance: this.calibDistance, point: this.calibPoint })
+        })
+        const data = await res.json()
+        if (data.code === 0) {
+          this.calibSuccess = true
+          const label = this.calibPoint === 'near' ? '近点' : '远点'
+          this.calibResult = label + '校准成功！' + data.data[this.calibPoint === 'near' ? 'calib_near_dist' : 'calib_far_dist'] + '米'
+          this.calibNearDist = data.data.calib_near_dist
+          this.calibNearRatio = data.data.calib_near_ratio
+          this.calibFarDist = data.data.calib_far_dist
+          this.calibFarRatio = data.data.calib_far_ratio
+          this.stopDangerDistanceSSE()
+          setTimeout(function () {
+            self.startDangerDistanceSSE()
+          }, 500)
+        } else {
+          this.calibSuccess = false
+          this.calibResult = data.error || '校准失败'
+        }
+      } catch (e) {
+        this.calibSuccess = false
+        this.calibResult = '请求失败: ' + e.message
+      } finally {
+        this.calibLoading = false
+      }
     }
   }
 }
@@ -724,6 +1051,120 @@ export default {
 .latency-bad {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+}
+
+.calib-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 4px;
+  color: #f59e0b;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.calib-btn:hover {
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.calib-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.calib-hint {
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+  line-height: 1.6;
+}
+
+.calib-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calib-label {
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  white-space: nowrap;
+}
+
+.calib-input {
+  flex: 1;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: var(--dark-text);
+  font-size: 13px;
+  outline: none;
+}
+
+.calib-input:focus {
+  border-color: var(--dark-accent-light);
+}
+
+.calib-result {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.calib-success {
+  color: var(--dark-success-green);
+}
+
+.calib-error {
+  color: #ef4444;
+}
+
+.calib-point-select {
+  display: flex;
+  gap: 6px;
+}
+
+.calib-point-btn {
+  padding: 4px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--dark-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.calib-point-btn.is-active {
+  border-color: var(--dark-accent-light);
+  color: var(--dark-accent-light);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.calib-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+
+.calib-status-item {
+  font-size: 11px;
+}
+
+.calib-near {
+  color: var(--dark-success-green);
+}
+
+.calib-far {
+  color: #f59e0b;
 }
 
 </style>
