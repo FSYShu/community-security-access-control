@@ -92,7 +92,7 @@
                   </div>
                 </div>
               </div>
-              <div class="v-form-hint">提交后可获得小区大门和单元门的单次通行权</div>
+              <div class="v-form-hint">业主确认后可获得小区大门和单元门的单次通行权</div>
             </div>
             <div class="v-form-footer">
               <button class="v-form-btn v-form-btn-primary v-form-btn-block" :disabled="!canSubmitVisitor || visitorSubmitting" @click="doSubmitVisitor">
@@ -141,7 +141,7 @@ import { submitFacePass } from '@/api/face'
 import { applyVisitorAuth } from '@/api/visitorAuth'
 import { enqueue, setupOnlineHandler } from '@/utils/offline-queue'
 
-var RESULT_DISPLAY_TIME = 5000
+const RESULT_DISPLAY_TIME = 5000
 
 export default {
   name: 'IdleScreenPage',
@@ -181,19 +181,19 @@ export default {
       return this.visitorForm.building && this.visitorForm.unit && this.visitorForm.room && this.visitorFaceCaptured
     },
     buildingOptions () {
-      var list = []
-      for (var i = 1; i <= 20; i++) list.push(i + '栋')
+      const list = []
+      for (let i = 1; i <= 20; i++) list.push(i + '栋')
       return list
     },
     unitOptions () {
-      var list = []
-      for (var i = 1; i <= 6; i++) list.push(i + '单元')
+      const list = []
+      for (let i = 1; i <= 6; i++) list.push(i + '单元')
       return list
     },
     roomOptions () {
-      var list = []
-      for (var f = 1; f <= 33; f++) {
-        for (var r = 1; r <= 4; r++) {
+      const list = []
+      for (let f = 1; f <= 33; f++) {
+        for (let r = 1; r <= 4; r++) {
           list.push(f + '0' + r)
         }
       }
@@ -218,7 +218,7 @@ export default {
     if (this.pushKey) {
       this.startCamera()
     }
-    var self = this
+    const self = this
     setupOnlineHandler(function (data) {
       self.submitOfflineItem(data)
     })
@@ -249,15 +249,15 @@ export default {
       this.$router.push('/settings')
     },
     updateTime () {
-      var now = new Date()
-      var y = now.getFullYear()
-      var m = String(now.getMonth() + 1).padStart(2, '0')
-      var d = String(now.getDate()).padStart(2, '0')
-      var h = String(now.getHours()).padStart(2, '0')
-      var min = String(now.getMinutes()).padStart(2, '0')
-      var s = String(now.getSeconds()).padStart(2, '0')
-      var weekDays = ['日', '一', '二', '三', '四', '五', '六']
-      var week = '星期' + weekDays[now.getDay()]
+      const now = new Date()
+      const y = now.getFullYear()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const d = String(now.getDate()).padStart(2, '0')
+      const h = String(now.getHours()).padStart(2, '0')
+      const min = String(now.getMinutes()).padStart(2, '0')
+      const s = String(now.getSeconds()).padStart(2, '0')
+      const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+      const week = '星期' + weekDays[now.getDay()]
       this.currentDate = y + '年' + m + '月' + d + '日 ' + week
       this.currentClock = h + ':' + min + ':' + s
     },
@@ -267,7 +267,7 @@ export default {
         this.stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
         })
-        var video = this.$refs.bgVideo
+        const video = this.$refs.bgVideo
         if (video) {
           video.srcObject = this.stream
           await video.play()
@@ -297,18 +297,18 @@ export default {
       }
     },
     captureFrame () {
-      var video = this.$refs.bgVideo
-      var canvas = this.$refs.captureCanvas
+      const video = this.$refs.bgVideo
+      const canvas = this.$refs.captureCanvas
       if (!video || !video.videoWidth) return null
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
-      var ctx = canvas.getContext('2d')
+      const ctx = canvas.getContext('2d')
       ctx.drawImage(video, 0, 0)
       return canvas.toDataURL('image/jpeg').split(',')[1]
     },
     async doFacePass () {
       if (this.faceLoading) return
-      var base64Image = this.captureFrame()
+      const base64Image = this.captureFrame()
       if (!base64Image) {
         this.faceResult = { passed: false, reason: '摄像头未就绪' }
         this.startResultTimer()
@@ -318,7 +318,7 @@ export default {
       this.faceResult = null
       this.clearResultTimer()
       try {
-        var res = await submitFacePass({
+        const res = await submitFacePass({
           face_image: base64Image,
           gate_id: this.gateId,
           _silent: true
@@ -332,19 +332,19 @@ export default {
           enqueue({ face_image: base64Image, gate_id: this.gateId })
           this.faceResult = { passed: false, reason: '网络断开，已暂存待网络恢复后自动提交' }
         } else {
-          var msg = (err && err.message) || '识别失败'
-          var noFaceKeywords = ['未检测到人脸', '未找到人脸', 'no face']
-          var isNoFace = noFaceKeywords.some(function (k) { return msg.includes(k) })
+          const msg = (err && err.message) || '识别失败'
+          const noFaceKeywords = ['未检测到人脸', '未找到人脸', 'no face']
+          const isNoFace = noFaceKeywords.some(function (k) { return msg.includes(k) })
           if (isNoFace) {
             this.faceResult = { passed: false, reason: '未检测到人脸，请正对摄像头' }
           } else {
-            var reasonMap = {
-              '生人': '未登记人员，禁止通行',
-              '黑名单': '黑名单人员，禁止通行',
-              '授权过期': '访客授权已过期',
-              '权限不足': '无此门禁通行权限'
+            const reasonMap = {
+              生人: '未登记人员，禁止通行',
+              黑名单: '黑名单人员，禁止通行',
+              授权过期: '访客授权已过期',
+              权限不足: '无此门禁通行权限'
             }
-            var reason = ''
+            let reason = ''
             Object.keys(reasonMap).forEach(function (key) {
               if (msg.includes(key)) reason = reasonMap[key]
             })
@@ -358,7 +358,7 @@ export default {
     },
     startResultTimer () {
       this.clearResultTimer()
-      var self = this
+      const self = this
       this.resultTimer = setTimeout(function () {
         self.faceResult = null
       }, RESULT_DISPLAY_TIME)
@@ -377,7 +377,7 @@ export default {
       }
     },
     openVisitorApply () {
-      var base64 = this.captureFrame()
+      const base64 = this.captureFrame()
       if (base64) {
         this.visitorFaceBase64 = base64
         this.visitorFaceCaptured = true
@@ -385,7 +385,7 @@ export default {
       this.showVisitorPopup = true
     },
     captureVisitorFace () {
-      var base64 = this.captureFrame()
+      const base64 = this.captureFrame()
       if (base64) {
         this.visitorFaceBase64 = base64
         this.visitorFaceCaptured = true
@@ -636,7 +636,7 @@ export default {
   border-radius: 16px 16px 0 0;
   overflow: hidden;
   width: 100%;
-  max-width: 560px;
+  max-width: min(480px, calc(100vw - 16px));
 }
 .visitor-popup-header {
   display: flex;
@@ -652,7 +652,8 @@ export default {
 }
 .visitor-popup-body {
   padding: 24px 24px 28px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .v-form-grid {
   display: flex;

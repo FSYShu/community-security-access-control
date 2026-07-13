@@ -1,5 +1,5 @@
 <template>
-  <app-layout page-title="告警中心">
+  <app-layout page-title="告警中心" :no-scroll="true">
     <div class="alarm-center">
       <div class="alarm-stats">
         <div class="stat-item">
@@ -219,50 +219,61 @@
               <i class="el-icon-download"></i>
               <span>导出</span>
             </button>
+            <button class="action-btn action-btn-danger" @click="onClearConfirm">
+              <i class="el-icon-delete"></i>
+              <span>清空</span>
+            </button>
           </div>
         </div>
       </div>
 
       <div class="alarm-list-section">
-        <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
-          <van-list
-            v-model="loading"
-            :finished="finished"
-            finished-text="没有更多了"
-            @load="loadData"
-          >
-            <van-cell v-for="alarm in alarmList" :key="alarm.id" is-link @click="showAlarmDetail(alarm)">
-              <template #title>
-                <div class="cell-title-row">
-                  <span class="type-tag" :class="getTypeClass(alarm.alarm_type)">{{ getTypeText(alarm.alarm_type) }}</span>
-                  <span class="cell-name">{{ alarm.alarm_description }}</span>
-                  <span class="type-tag" :class="getLevelClass(alarm.alarm_level)">{{ getLevelText(alarm.alarm_level) }}</span>
-                </div>
+        <div class="alarm-list">
+          <van-cell v-for="alarm in alarmList" :key="alarm.id" is-link @click="showAlarmDetail(alarm)">
+            <template #title>
+              <div class="cell-title-row">
+                <span class="type-tag" :class="getTypeClass(alarm.alarm_type)">{{ getTypeText(alarm.alarm_type) }}</span>
+                <span class="cell-name">{{ alarm.alarm_description }}</span>
+                <span class="type-tag" :class="getLevelClass(alarm.alarm_level)">{{ getLevelText(alarm.alarm_level) }}</span>
+              </div>
 
-                <div class="cell-label-row">
-                  <span class="cell-meta">
-                    <i class="el-icon-time"></i>
-                    <span>{{ formatTime(alarm.alarm_time) }}</span>
-                  </span>
-                </div>
-              </template>
-              <template #right-icon>
-                <span class="cell-status">
-                  <span class="status-dot" :class="alarm.handle_status === 'pending' ? 'dot-pending' : 'dot-handled'"></span>
-                  <span class="status-label">{{ getStatusText(alarm.handle_status) }}</span>
+              <div class="cell-label-row">
+                <span class="cell-meta">
+                  <i class="el-icon-time"></i>
+                  <span>{{ formatTime(alarm.alarm_time) }}</span>
                 </span>
-                <button
-                  v-if="alarm.handle_status === 'pending'"
-                  class="handle-btn"
-                  @click.stop="showHandleDialog(alarm)"
-                >
-                  <i class="el-icon-check"></i>
-                  <span>处置</span>
-                </button>
-              </template>
-            </van-cell>
-          </van-list>
-        </van-pull-refresh>
+              </div>
+            </template>
+            <template #right-icon>
+              <span class="cell-status">
+                <span class="status-dot" :class="alarm.handle_status === 'pending' ? 'dot-pending' : 'dot-handled'"></span>
+                <span class="status-label">{{ getStatusText(alarm.handle_status) }}</span>
+              </span>
+              <button
+                v-if="alarm.handle_status === 'pending'"
+                class="handle-btn"
+                @click.stop="showHandleDialog(alarm)"
+              >
+                <i class="el-icon-check"></i>
+                <span>处置</span>
+              </button>
+            </template>
+          </van-cell>
+          <div v-if="alarmList.length === 0 && !loading" class="empty-state">
+            <i class="el-icon-bell" style="font-size:48px;color:var(--dark-text-muted)"></i>
+            <p style="color:var(--dark-text-muted);margin-top:12px">暂无告警记录</p>
+          </div>
+        </div>
+        <div class="pagination-wrapper">
+          <el-pagination
+            background
+            layout="prev, pager, next"
+            :current-page="page"
+            :page-size="perPage"
+            :total="total"
+            @current-change="onPageChange"
+          />
+        </div>
       </div>
     </div>
 
@@ -342,7 +353,7 @@
 </template>
 
 <script>
-import { getAlarmList, getAlarmDetail, handleAlarm, exportAlarmLog } from '@/api/alarm'
+import { getAlarmList, getAlarmDetail, handleAlarm, exportAlarmLog, clearAllAlarms } from '@/api/alarm'
 
 export default {
   name: 'AlarmCenterPage',
@@ -350,9 +361,10 @@ export default {
     return {
       alarmList: [],
       loading: false,
-      finished: false,
-      refreshing: false,
       page: 1,
+      perPage: 20,
+      total: 0,
+      refreshing: false,
       openSelect: null,
       openDatePicker: null,
       showMonthYearPicker: null,
@@ -401,6 +413,7 @@ export default {
     }
   },
   mounted () {
+    this.loadData()
     this.loadStats()
     document.addEventListener('click', this.handleClickOutside)
   },
@@ -561,10 +574,11 @@ export default {
       return option && value !== 0 ? option.text : placeholderMap[type]
     },
     async loadData () {
+      this.loading = true
       try {
         const params = {
           page: this.page,
-          per_page: 20
+          per_page: this.perPage
         }
         if (this.filter.alarmType) {
           params.alarm_type = this.filter.alarmType
@@ -584,19 +598,17 @@ export default {
 
         const res = await getAlarmList(params)
         if (res.code === 0 && res.data) {
-          const items = res.data.items || []
-          if (this.page === 1) {
-            this.alarmList = items
-          } else {
-            this.alarmList.push(...items)
-          }
-          this.finished = this.alarmList.length >= res.data.total
-          this.page++
+          this.alarmList = res.data.items || []
+          this.total = res.data.total || 0
         }
       } catch (e) {
-        this.finished = true
+        console.error(e)
       }
       this.loading = false
+    },
+    onPageChange (newPage) {
+      this.page = newPage
+      this.loadData()
     },
     async loadStats () {
       try {
@@ -619,16 +631,11 @@ export default {
     },
     onRefresh () {
       this.page = 1
-      this.finished = false
-      this.alarmList = []
       this.loadData()
       this.loadStats()
-      this.refreshing = false
     },
     onSearch () {
       this.page = 1
-      this.finished = false
-      this.alarmList = []
       this.loadData()
     },
     onReset () {
@@ -678,6 +685,31 @@ export default {
       } catch (e) {
         console.error('Export error:', e)
         this.$message.error('导出失败')
+      }
+    },
+    onClearConfirm () {
+      this.$confirm('确定要清空所有告警记录吗？此操作不可恢复！', '警告', {
+        confirmButtonText: '确定清空',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }).then(function () {
+        this.doClearAlarms()
+      }.bind(this)).catch(function () {})
+    },
+    async doClearAlarms () {
+      try {
+        const res = await clearAllAlarms()
+        if (res.code === 0) {
+          this.$message.success(res.message || '清空成功')
+          this.alarmList = []
+          this.loadStats()
+        } else {
+          this.$message.error(res.message || '清空失败')
+        }
+      } catch (e) {
+        console.error('Clear error:', e)
+        this.$message.error('清空失败')
       }
     },
     async showAlarmDetail (alarm) {
@@ -779,6 +811,10 @@ export default {
 <style scoped>
 .alarm-center {
   width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .filter-section {
@@ -787,6 +823,7 @@ export default {
   border: 1px solid var(--dark-border);
   padding: 20px;
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .filter-row {
@@ -831,6 +868,7 @@ export default {
   align-items: center;
   gap: 8px;
   box-sizing: border-box;
+  height: 36px;
 }
 
 .select-trigger:hover {
@@ -930,6 +968,7 @@ export default {
   align-items: center;
   gap: 8px;
   box-sizing: border-box;
+  height: 36px;
 }
 
 .date-trigger:hover {
@@ -1157,6 +1196,7 @@ export default {
 .action-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 16px;
   border-radius: 8px;
@@ -1165,6 +1205,8 @@ export default {
   cursor: pointer;
   transition: all 0.2s;
   border: 1px solid;
+  box-sizing: border-box;
+  height: 36px;
 }
 
 .action-btn i {
@@ -1206,11 +1248,24 @@ export default {
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
 }
 
+.action-btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.action-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #f87171;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
 .alarm-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .stat-item {
@@ -1251,6 +1306,29 @@ export default {
   border-radius: 16px;
   border: 1px solid var(--dark-border);
   padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.alarm-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.pagination-wrapper {
+  padding-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 200px;
 }
 
 .type-face {
@@ -1356,8 +1434,13 @@ export default {
 }
 
 .cell-name {
+  flex: 1;
+  min-width: 0;
   font-size: 15px;
   color: var(--dark-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cell-label-row {
@@ -1480,30 +1563,76 @@ export default {
   color: var(--dark-danger);
 }
 
-@media (max-width: 768px) {
-  .filter-row {
-    grid-template-columns: 1fr;
-  }
-
-  .filter-group {
-    min-width: 100%;
-  }
-
-  .filter-time {
-    grid-template-columns: 1fr;
+@media (max-width: 1024px) {
+  .alarm-center {
+    height: auto;
+    min-height: calc(100vh - 120px);
   }
 
   .alarm-stats {
     grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .stat-item {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .filter-section {
+    padding: 16px;
+  }
+
+  .filter-row {
+    gap: 10px;
+  }
+
+  .filter-time {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .filter-time .filter-group {
+    flex: 1 1 calc(50% - 5px);
+    min-width: 0;
+  }
+
+  .filter-spacer {
+    display: none;
   }
 
   .filter-actions-group {
-    flex-wrap: wrap;
+    flex: 1 1 100%;
+    gap: 8px;
   }
 
   .action-btn {
     flex: 1;
-    min-width: 100px;
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  .alarm-list-section {
+    padding: 16px;
+  }
+
+}
+
+@media (max-width: 600px) {
+  .filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-time .filter-group {
+    flex: 1 1 100%;
+  }
+
+  .action-btn {
+    min-width: 80px;
   }
 }
 </style>
@@ -1549,5 +1678,32 @@ export default {
   background: rgba(255, 255, 255, 0.04) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   color: #EDEDEF !important;
+}
+
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next,
+.el-pagination.is-background .el-pager li {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: var(--dark-text-secondary) !important;
+}
+
+.el-pagination.is-background .btn-prev:hover,
+.el-pagination.is-background .btn-next:hover,
+.el-pagination.is-background .el-pager li:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--dark-text) !important;
+}
+
+.el-pagination.is-background .el-pager li.active {
+  background: var(--dark-accent) !important;
+  border-color: var(--dark-accent) !important;
+  color: #fff !important;
+}
+
+.el-pagination.is-background .btn-prev:disabled,
+.el-pagination.is-background .btn-next:disabled {
+  background: rgba(255, 255, 255, 0.02) !important;
+  color: var(--dark-text-dim) !important;
 }
 </style>

@@ -46,3 +46,11 @@ export function getAlarmStats () {
     method: 'get'
   })
 }
+
+/** 清空所有告警 */
+export function clearAllAlarms () {
+  return request({
+    url: '/alarm/clear',
+    method: 'delete'
+  })
+}

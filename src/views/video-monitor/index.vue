@@ -30,7 +30,7 @@
           @click="toggleDangerousBehavior"
         >
           <i class="el-icon-warning-outline"></i>
-          <span>危险行为检测</span>
+          <span>异常行为检测</span>
           <i :class="dangerousBehaviorEnabled ? 'el-icon-check' : 'el-icon-close'" class="detect-indicator"></i>
         </button>
         <button
@@ -57,7 +57,7 @@
         :face-detection-enabled="faceDetectionEnabled"
         :dangerous-behavior-enabled="dangerousBehaviorEnabled"
         :danger-distance-enabled="dangerDistanceEnabled"
-        :initial-gate-id="initialGateId"
+        :initial-gate-id="savedGateSelections['single'] || initialGateId"
       />
     </div>
 
@@ -73,7 +73,7 @@
           :face-detection-enabled="faceDetectionEnabled"
           :dangerous-behavior-enabled="dangerousBehaviorEnabled"
           :danger-distance-enabled="dangerDistanceEnabled"
-          :initial-gate-id="index === 1 ? initialGateId : ''"
+          :initial-gate-id="savedGateSelections['grid' + index] || (index === 1 ? initialGateId : '')"
         />
       </div>
     </div>
@@ -99,7 +99,8 @@ export default {
       dangerDistanceEnabled: false,
       refreshing: false,
       initialGateId: '',
-      pollTimer: null
+      pollTimer: null,
+      savedGateSelections: {}
     }
   },
   created () {
@@ -117,7 +118,32 @@ export default {
     }
     this.cleanupViewers()
   },
+  watch: {
+    layoutMode (newMode, oldMode) {
+      if (oldMode) {
+        this.saveGateSelections()
+        this.$nextTick(function () {
+          this.cleanupViewers()
+        })
+      }
+    }
+  },
   methods: {
+    saveGateSelections () {
+      if (this.layoutMode === 'single' && this.$refs.singleViewer) {
+        const gateId = this.$refs.singleViewer.selectedGate
+        if (gateId) {
+          this.savedGateSelections.single = gateId
+        }
+      } else {
+        for (let i = 1; i <= 6; i++) {
+          const ref = this.$refs['gridViewer' + i]
+          if (ref && ref[0] && ref[0].selectedGate) {
+            this.savedGateSelections['grid' + i] = ref[0].selectedGate
+          }
+        }
+      }
+    },
     cleanupViewers () {
       if (this.layoutMode === 'single' && this.$refs.singleViewer) {
         this.$refs.singleViewer.cleanup()
@@ -134,11 +160,19 @@ export default {
       try {
         const res = await getGatesWithStream()
         if (res.code === 0 && res.data) {
-          this.gateList = Array.isArray(res.data) ? res.data : []
+          const gates = Array.isArray(res.data) ? res.data : []
+          this.gateList = this.sortGatesNaturally(gates)
         }
       } catch (error) {
         // silent fail for polling
       }
+    },
+    sortGatesNaturally (gates) {
+      return gates.slice().sort(function (a, b) {
+        const nameA = a.gate_name || ''
+        const nameB = b.gate_name || ''
+        return nameA.localeCompare(nameB, 'zh-CN', { numeric: true, sensitivity: 'base' })
+      })
     },
     toggleFaceDetection () {
       this.faceDetectionEnabled = !this.faceDetectionEnabled
@@ -155,7 +189,7 @@ export default {
       this.dangerousBehaviorEnabled = !this.dangerousBehaviorEnabled
       if (this.dangerousBehaviorEnabled) this.faceDetectionEnabled = false
       this.$message({
-        message: this.dangerousBehaviorEnabled ? '危险行为检测已开启' : '危险行为检测已关闭',
+        message: this.dangerousBehaviorEnabled ? '异常行为检测已开启' : '异常行为检测已关闭',
         type: this.dangerousBehaviorEnabled ? 'success' : 'warning'
       })
     },
