@@ -182,7 +182,7 @@ def _run_detection_cycle():
             logger.info('Zone {} gate {} got frame {}x{} from RTMP'.format(zone.id, gate_id, frame.shape[1], frame.shape[0]))
 
             try:
-                result = process_frame_for_zone(zone.id, frame)
+                result = process_frame_for_zone(zone.id, frame, gate_id=gate_id)
                 if result:
                     logger.info('Alarm triggered for zone {}: {}'.format(zone.id, result.alarm_description))
             except Exception as e:

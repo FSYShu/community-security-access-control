@@ -11,7 +11,7 @@ class Gate(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     gate_name = db.Column(db.Text, nullable=False)
-
+    location = db.Column(db.Text, nullable=False, default='')
     gate_level = db.Column(db.Text, nullable=False, default='community_gate')
     building_unit = db.Column(db.Text, default='')
     camera_id = db.Column(db.Integer, nullable=True)
@@ -24,6 +24,10 @@ class Gate(db.Model):
     status = db.Column(db.Text, default='online')
     bound = db.Column(db.Integer, default=0)
     last_heartbeat = db.Column(db.Text, default='')
+    calib_near_dist = db.Column(db.Float, nullable=True, default=None)
+    calib_near_ratio = db.Column(db.Float, nullable=True, default=None)
+    calib_far_dist = db.Column(db.Float, nullable=True, default=None)
+    calib_far_ratio = db.Column(db.Float, nullable=True, default=None)
     created_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
     updated_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat(),
                            onupdate=lambda: datetime.utcnow().isoformat())
@@ -32,7 +36,7 @@ class Gate(db.Model):
         return {
             'id': self.id,
             'gate_name': self.gate_name,
-
+            'location': self.location,
             'gate_level': self.gate_level,
             'building_unit': self.building_unit,
             'camera_id': self.camera_id,
@@ -46,5 +50,9 @@ class Gate(db.Model):
             'bound': bool(self.bound),
             'display_status': 'unbound' if not self.bound else self.status,
             'last_heartbeat': self.last_heartbeat,
+            'calib_near_dist': self.calib_near_dist,
+            'calib_near_ratio': self.calib_near_ratio,
+            'calib_far_dist': self.calib_far_dist,
+            'calib_far_ratio': self.calib_far_ratio,
             'created_at': self.created_at
         }

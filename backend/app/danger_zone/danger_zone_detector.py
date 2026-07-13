@@ -1,7 +1,7 @@
 """
 禁区入侵检测核心模块
-使用运动检测+HOG行人检测双重策略
-运动检测灵敏度高，HOG减少误报
+使用运动检测+人脸检测双重策略
+距离判断基于近大远小原理：人脸在画面中越大，离摄像头越近
 """
 import logging
 import time
@@ -24,8 +24,14 @@ MOTION_THRESHOLD = 25
 MOTION_MIN_AREA = 500
 MOTION_AREA_RATIO = 0.005
 
-_hog_detector = None
-_hog_lock = threading.Lock()
+REFERENCE_FACE_HEIGHT_RATIO = 0.35
+REFERENCE_DISTANCE = 1.0
+
+_gate_calib = {}
+_gate_calib_lock = threading.Lock()
+
+_face_recognizer = None
+_face_rec_lock = threading.Lock()
 
 _zone_first_seen = {}
 _zone_first_seen_lock = threading.Lock()
@@ -33,17 +39,52 @@ _zone_first_seen_lock = threading.Lock()
 _prev_gray = {}
 
 
-def _get_hog_detector():
-    global _hog_detector
-    with _hog_lock:
-        if _hog_detector is None:
-            _hog_detector = cv2.HOGDescriptor()
-            _hog_detector.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
-        return _hog_detector
+def _get_face_recognizer():
+    global _face_recognizer
+    with _face_rec_lock:
+        if _face_recognizer is None:
+            try:
+                from core.face_recognition import FaceRecognizer
+                _face_recognizer = FaceRecognizer()
+            except Exception as e:
+                logger.error('FaceRecognizer init failed: {}'.format(str(e)))
+                return None
+        return _face_recognizer
 
 
-def _detect_persons_hog(frame):
-    hog = _get_hog_detector()
+def _update_gate_calib(gate_id, calib_distance, calib_face_ratio):
+    with _gate_calib_lock:
+        _gate_calib[gate_id] = {
+            'calib_distance': calib_distance,
+            'calib_face_ratio': calib_face_ratio,
+        }
+
+
+def _get_gate_calib(gate_id):
+    with _gate_calib_lock:
+        return _gate_calib.get(gate_id)
+
+
+def estimate_distance(face_rect, frame_height, gate_id=None):
+    x1, y1, x2, y2 = face_rect
+    face_pixel_height = y2 - y1
+    if face_pixel_height <= 0 or frame_height <= 0:
+        return float('inf')
+    height_ratio = face_pixel_height / frame_height
+    if height_ratio <= 0:
+        return float('inf')
+    calib = _get_gate_calib(gate_id) if gate_id else None
+    if calib and calib.get('calib_distance') and calib.get('calib_face_ratio') and calib['calib_face_ratio'] > 0:
+        distance = calib['calib_distance'] * calib['calib_face_ratio'] / height_ratio
+    else:
+        distance = REFERENCE_DISTANCE * REFERENCE_FACE_HEIGHT_RATIO / height_ratio
+    return round(distance, 2)
+
+
+def _detect_faces(frame, gate_id=None):
+    recognizer = _get_face_recognizer()
+    if recognizer is None:
+        return []
     h, w = frame.shape[:2]
     if w > DETECT_WIDTH:
         scale = DETECT_WIDTH / w
@@ -54,30 +95,24 @@ def _detect_persons_hog(frame):
         scale = 1.0
 
     try:
-        boxes, weights = hog.detectMultiScale(
-            detect_frame,
-            winStride=(8, 8),
-            padding=(4, 4),
-            scale=1.05
-        )
+        rgb_image = np.ascontiguousarray(detect_frame[:, :, ::-1])
+        faces = recognizer.detect_faces_rgb(rgb_image)
     except Exception as e:
-        logger.error('HOG detection error: {}'.format(str(e)))
+        logger.error('Face detection error: {}'.format(str(e)))
         return []
 
     persons = []
-    for i, (x, y, bw, bh) in enumerate(boxes):
-        confidence = weights[i][0] if i < len(weights) and len(weights[i]) > 0 else 0
-        if confidence < 0.05:
-            continue
+    for face_rect in faces:
         if scale != 1.0:
-            x = int(x / scale)
-            y = int(y / scale)
-            bw = int(bw / scale)
-            bh = int(bh / scale)
+            x1, y1, x2, y2 = face_rect
+            face_rect = (int(x1 / scale), int(y1 / scale),
+                         int(x2 / scale), int(y2 / scale))
+        distance = estimate_distance(face_rect, frame.shape[0], gate_id)
         persons.append({
-            'rect': (x, y, x + bw, y + bh),
-            'confidence': float(confidence),
-            'method': 'hog'
+            'rect': face_rect,
+            'confidence': 1.0,
+            'method': 'face',
+            'distance': distance
         })
     return persons
 
@@ -113,14 +148,14 @@ def _detect_motion(frame, zone_id):
     return False
 
 
-def _detect_persons(frame, zone_id):
-    hog_persons = _detect_persons_hog(frame)
-    if hog_persons:
-        return hog_persons
+def _detect_persons(frame, zone_id, gate_id=None):
+    face_persons = _detect_faces(frame, gate_id)
+    if face_persons:
+        return face_persons
 
     has_motion = _detect_motion(frame, zone_id)
     if has_motion:
-        return [{'rect': (0, 0, frame.shape[1], frame.shape[0]), 'confidence': 0.5, 'method': 'motion'}]
+        return [{'rect': (0, 0, frame.shape[1], frame.shape[0]), 'confidence': 0.5, 'method': 'motion', 'distance': float('inf')}]
 
     return []
 
@@ -162,7 +197,7 @@ def _create_alarm(zone_id, zone_name, alarm_level, description, capture_path=Non
     return alarm
 
 
-def process_frame_for_zone(zone_id, frame):
+def process_frame_for_zone(zone_id, frame, gate_id=None):
     try:
         zone = DangerZone.query.get(zone_id)
     except Exception as e:
@@ -173,7 +208,16 @@ def process_frame_for_zone(zone_id, frame):
     if not zone or zone.status != 'active':
         return None
 
-    persons = _detect_persons(frame, zone_id)
+    if gate_id:
+        from app.models.gate import Gate
+        try:
+            gate = Gate.query.get(gate_id)
+            if gate and gate.calib_distance and gate.calib_face_ratio:
+                _update_gate_calib(gate_id, gate.calib_distance, gate.calib_face_ratio)
+        except Exception:
+            pass
+
+    persons = _detect_persons(frame, zone_id, gate_id)
 
     now = time.time()
 
@@ -188,8 +232,23 @@ def process_frame_for_zone(zone_id, frame):
                     }
         return None
 
+    safety_distance = zone.safety_distance if zone.safety_distance else 2.0
+    close_persons = []
+    for p in persons:
+        dist = p.get('distance', float('inf'))
+        if dist <= safety_distance:
+            close_persons.append(p)
+
     method = persons[0].get('method', 'unknown')
-    logger.info('Zone {} detected {} person(s) via {}'.format(zone_id, len(persons), method))
+    min_distance = min(p.get('distance', float('inf')) for p in persons)
+    logger.info('Zone {} detected {} person(s) via {}, min_dist={:.2f}m, safety={:.2f}m, close={}'.format(
+        zone_id, len(persons), method, min_distance, safety_distance, len(close_persons)))
+
+    if not close_persons:
+        with _zone_first_seen_lock:
+            if zone_id in _zone_first_seen:
+                _zone_first_seen[zone_id]['first_seen'] = None
+        return None
 
     with _zone_first_seen_lock:
         if zone_id not in _zone_first_seen:
@@ -215,16 +274,23 @@ def process_frame_for_zone(zone_id, frame):
         tracker['last_alarm_time'] = now
 
     capture_path = _save_capture_image(frame, zone_id)
-    desc = '禁区[{}]检测到{}人闯入，已滞留{}秒'.format(
-        zone.zone_name, len(persons), int(elapsed))
+    min_close_dist = min(p.get('distance', float('inf')) for p in close_persons)
+    desc = '禁区[{}]检测到{}人闯入(最近{:.1f}m<安全距离{:.1f}m)，已滞留{}秒'.format(
+        zone.zone_name, len(close_persons), min_close_dist, safety_distance, int(elapsed))
     alarm = _create_alarm(zone.id, zone.zone_name, zone.alarm_level, desc, capture_path)
     return alarm
 
 
-def draw_detection_overlay(frame, persons):
+def draw_detection_overlay(frame, persons, safety_distance=None):
     for person in persons:
         x1, y1, x2, y2 = person['rect']
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-        cv2.putText(frame, 'INTRUSION', (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        dist = person.get('distance', float('inf'))
+        is_close = safety_distance is not None and dist <= safety_distance
+        color = (0, 0, 255) if is_close else (0, 165, 255)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        label = 'INTRUSION' if is_close else 'PERSON'
+        if dist < float('inf'):
+            label = '{} {:.1f}m'.format(label, dist)
+        cv2.putText(frame, label, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
     return frame

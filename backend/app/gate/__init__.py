@@ -188,10 +188,15 @@ def update_gate(gate_id):
         gate.gate_name = data['gate_name']
 
     if 'gate_level' in data:
-        level = GateLevel.query.get(data['gate_level'])
-        if not level:
-            return error_response(message='终端层级不存在', code=400)
+        old_level = gate.gate_level
         gate.gate_level = data['gate_level']
+        if old_level == 'dangerous_area' and data['gate_level'] != 'dangerous_area':
+            from app.models.danger_zone import DangerZone
+            zones = DangerZone.query.all()
+            for z in zones:
+                ids = [x.strip() for x in (z.camera_ids or '').split(',')]
+                if str(gate_id) in ids:
+                    db.session.delete(z)
     if 'building_unit' in data:
         gate.building_unit = data['building_unit']
     if 'camera_id' in data:
