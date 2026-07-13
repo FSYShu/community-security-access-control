@@ -3,24 +3,30 @@
 提供告警列表、告警详情、告警处置、告警导出等接口
 """
 import io
+import logging
 from datetime import datetime
-
 from flask import Blueprint, request, send_file
-from flask_jwt_extended import jwt_required, get_jwt
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill
 
-from app import db
+from app import db, limiter
 from app.models.alarm import AlarmEvent
+from app.models.user import User
 from utils.response import success_response, error_response, paginate_response
-from utils.permissions import admin_required, guard_or_admin_required
-from core.db_lock import with_write_lock
+from utils.permissions import guard_or_admin_required
 from core.audit_logger import log_audit
+
+logger = logging.getLogger(__name__)
 
 alarm_bp = Blueprint('alarm', __name__)
 
 
 @alarm_bp.route('/list', methods=['GET'])
 @jwt_required()
+@limiter.exempt
 def get_alarm_list():
+    """获取告警列表"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     alarm_type = request.args.get('alarm_type', '')
@@ -28,8 +34,9 @@ def get_alarm_list():
     handle_status = request.args.get('handle_status', '')
     start_time = request.args.get('start_time', '')
     end_time = request.args.get('end_time', '')
-
+    
     query = AlarmEvent.query
+    
     if alarm_type:
         query = query.filter_by(alarm_type=alarm_type)
     if alarm_level:
@@ -40,105 +47,186 @@ def get_alarm_list():
         query = query.filter(AlarmEvent.alarm_time >= start_time)
     if end_time:
         query = query.filter(AlarmEvent.alarm_time <= end_time)
-
-    pagination = query.order_by(AlarmEvent.alarm_time.desc()).paginate(
-        page=page, per_page=per_page, error_out=False
+    
+    query = query.order_by(AlarmEvent.alarm_time.desc())
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    items = []
+    for alarm in pagination.items:
+        item = alarm.to_dict()
+        if alarm.handler_id:
+            handler = User.query.get(alarm.handler_id)
+            if handler:
+                item['handler_name'] = handler.real_name or handler.username
+        items.append(item)
+    
+    return paginate_response(
+        items=items,
+        total=pagination.total,
+        page=pagination.page,
+        per_page=pagination.per_page
     )
-    items = [a.to_dict() for a in pagination.items]
-    return paginate_response(items, pagination.total, page, per_page)
 
 
 @alarm_bp.route('/<int:alarm_id>', methods=['GET'])
 @jwt_required()
 def get_alarm_detail(alarm_id):
+    """获取告警详情"""
     alarm = AlarmEvent.query.get(alarm_id)
     if not alarm:
         return error_response(message='告警事件不存在', code=404)
-    return success_response(data=alarm.to_dict())
+    
+    detail = alarm.to_dict()
+    if alarm.handler_id:
+        handler = User.query.get(alarm.handler_id)
+        if handler:
+            detail['handler_name'] = handler.real_name or handler.username
+    
+    return success_response(data=detail)
 
 
 @alarm_bp.route('/<int:alarm_id>/handle', methods=['PUT'])
 @guard_or_admin_required
-@with_write_lock
 def handle_alarm(alarm_id):
+    """处置告警"""
     alarm = AlarmEvent.query.get(alarm_id)
     if not alarm:
         return error_response(message='告警事件不存在', code=404)
-
+    
     if alarm.handle_status == 'handled':
-        return error_response(message='该告警已处置', code=409)
-
+        return error_response(message='该告警已处置', code=400)
+    
     data = request.get_json()
-    handle_remark = data.get('handle_remark', '').strip()
-    if not handle_remark:
-        return error_response(message='处置备注不能为空', code=400)
-
-    current_user = get_jwt()
-    user_id = int(current_user.get('sub', 0))
-
-    alarm.handle_status = 'handled'
-    alarm.handler_id = user_id
+    handle_status = data.get('handle_status', 'handled')
+    handle_remark = data.get('handle_remark', '')
+    
+    if handle_status not in ['handled', 'false_alarm']:
+        return error_response(message='处置状态无效', code=400)
+    
+    current_user_id = int(get_jwt_identity())
+    alarm.handle_status = handle_status
+    alarm.handler_id = current_user_id
     alarm.handle_time = datetime.utcnow().isoformat()
     alarm.handle_remark = handle_remark
+    
     db.session.commit()
-    log_audit(operation_type='handle_alarm', operation_content='处置告警ID: {}'.format(alarm_id))
-    return success_response(data=alarm.to_dict(), message='处置成功')
+    
+    log_audit(
+        operation_type='handle_alarm',
+        operation_content=f'处置告警: ID={alarm_id}, 状态={handle_status}'
+    )
+    
+    result = alarm.to_dict()
+    handler = User.query.get(current_user_id)
+    if handler:
+        result['handler_name'] = handler.real_name or handler.username
+    
+    return success_response(data=result, message='处置成功')
 
 
 @alarm_bp.route('/export', methods=['GET'])
 @guard_or_admin_required
 def export_alarm_log():
+    """导出告警日志"""
     alarm_type = request.args.get('alarm_type', '')
+    alarm_level = request.args.get('alarm_level', '')
     handle_status = request.args.get('handle_status', '')
     start_time = request.args.get('start_time', '')
     end_time = request.args.get('end_time', '')
-
+    
     query = AlarmEvent.query
+    
     if alarm_type:
         query = query.filter_by(alarm_type=alarm_type)
+    if alarm_level:
+        query = query.filter_by(alarm_level=alarm_level)
     if handle_status:
         query = query.filter_by(handle_status=handle_status)
     if start_time:
         query = query.filter(AlarmEvent.alarm_time >= start_time)
     if end_time:
         query = query.filter(AlarmEvent.alarm_time <= end_time)
-
-    alarms = query.order_by(AlarmEvent.alarm_time.desc()).limit(5000).all()
-
-    try:
-        import openpyxl
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = '告警日志'
-        headers = ['告警ID', '告警类型', '告警级别', '来源类型', '来源ID', '告警描述', '告警时间', '处置状态', '处置人ID', '处置时间', '处置备注']
-        ws.append(headers)
-        for a in alarms:
-            ws.append([
-                a.id, a.alarm_type, a.alarm_level, a.source_type, a.source_id,
-                a.alarm_description, a.alarm_time, a.handle_status,
-                a.handler_id, a.handle_time, a.handle_remark
-            ])
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
-        filename = 'alarm_log_{}.xlsx'.format(datetime.utcnow().strftime('%Y%m%d_%H%M%S'))
-        return send_file(output, as_attachment=True, attachment_filename=filename,
-                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    except Exception as e:
-        return error_response(message='导出失败: {}'.format(str(e)), code=500)
-
-
-@alarm_bp.route('/stats', methods=['GET'])
-@jwt_required()
-def get_alarm_stats():
-    total = AlarmEvent.query.count()
-    pending = AlarmEvent.query.filter_by(handle_status='pending').count()
-    handled = AlarmEvent.query.filter_by(handle_status='handled').count()
-    today = datetime.utcnow().strftime('%Y-%m-%d')
-    today_count = AlarmEvent.query.filter(AlarmEvent.alarm_time >= today).count()
-    return success_response(data={
-        'total': total,
-        'pending': pending,
-        'handled': handled,
-        'today_count': today_count
-    })
+    
+    query = query.order_by(AlarmEvent.alarm_time.desc())
+    alarms = query.all()
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = '告警日志'
+    
+    headers = ['ID', '告警类型', '告警级别', '告警描述', '告警时间', '处置状态', '处置人', '处置时间', '处置备注']
+    ws.append(headers)
+    
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font = Font(color='FFFFFF', bold=True)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    type_map = {
+        'face_alarm': '人脸告警',
+        'zone_intrusion': '禁区入侵',
+        'behavior_abnormal': '行为异常',
+        'danger_alarm': '险情告警'
+    }
+    level_map = {
+        'normal': '一般',
+        'warning': '警告',
+        'critical': '严重'
+    }
+    status_map = {
+        'pending': '待处置',
+        'handled': '已处置',
+        'false_alarm': '误报'
+    }
+    
+    for alarm in alarms:
+        handler_name = ''
+        if alarm.handler_id:
+            handler = User.query.get(alarm.handler_id)
+            if handler:
+                handler_name = handler.real_name or handler.username
+        
+        row = [
+            alarm.id,
+            type_map.get(alarm.alarm_type, alarm.alarm_type),
+            level_map.get(alarm.alarm_level, alarm.alarm_level),
+            alarm.alarm_description,
+            alarm.alarm_time,
+            status_map.get(alarm.handle_status, alarm.handle_status),
+            handler_name,
+            alarm.handle_time or '',
+            alarm.handle_remark or ''
+        ]
+        ws.append(row)
+    
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f'alarm_log_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    
+    log_audit(
+        operation_type='export_alarm',
+        operation_content=f'导出告警日志: {len(alarms)}条'
+    )
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
