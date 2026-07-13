@@ -35,6 +35,7 @@
     "html-webpack-plugin": "^4.5.2",
     "http-proxy-middleware": "^0.19.1",
     "mini-css-extract-plugin": "^1.6.2",
+    "node-notifier": "^10.0.1",
     "optimize-css-assets-webpack-plugin": "^6.0.1",
     "ora": "^5.4.1",
     "portfinder": "^1.0.32",

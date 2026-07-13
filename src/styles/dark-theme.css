@@ -468,3 +468,128 @@ img {
   background: #818CF8 !important;
   border-color: #818CF8 !important;
 }
+
+.van-dropdown-menu {
+  background: var(--dark-card) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.van-dropdown-menu__bar {
+  background: var(--dark-bg-secondary) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.van-dropdown-menu__title {
+  color: var(--dark-text) !important;
+}
+
+.van-dropdown-menu__title::after {
+  border-color: transparent transparent var(--dark-text-secondary) var(--dark-text-secondary) !important;
+}
+
+.van-dropdown-menu__item {
+  background: var(--dark-bg-secondary) !important;
+}
+
+.van-dropdown-menu__item--active {
+  background: rgba(99, 102, 241, 0.1) !important;
+}
+
+.van-dropdown-item__content {
+  background: var(--dark-bg-secondary) !important;
+  border: 1px solid var(--dark-border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+.van-dropdown-item__option {
+  color: var(--dark-text-secondary) !important;
+  background: transparent !important;
+}
+
+.van-dropdown-item__option--active {
+  color: var(--dark-accent-light) !important;
+  background: rgba(99, 102, 241, 0.1) !important;
+}
+
+.van-dropdown-item__option--active .van-dropdown-item__icon {
+  color: var(--dark-accent-light) !important;
+}
+
+.van-dropdown-item__title::after {
+  border-color: transparent transparent var(--dark-text-secondary) var(--dark-text-secondary) !important;
+}
+
+.van-icon {
+  color: var(--dark-text-secondary) !important;
+}
+
+.van-icon-arrow-down::before,
+.van-icon-arrow-up::before {
+  color: var(--dark-text-secondary) !important;
+}
+
+.van-datetime-picker__toolbar {
+  background: var(--dark-bg-secondary) !important;
+}
+
+.van-datetime-picker__title {
+  color: var(--dark-text) !important;
+}
+
+.van-datetime-picker__cancel {
+  color: var(--dark-text-secondary) !important;
+}
+
+.van-datetime-picker__confirm {
+  color: var(--dark-accent-light) !important;
+}
+
+.van-datetime-picker__options {
+  background: var(--dark-bg-secondary) !important;
+}
+
+.van-picker-column {
+  background: var(--dark-bg-secondary) !important;
+}
+
+.van-picker-column__item {
+  color: var(--dark-text-secondary) !important;
+}
+
+.van-picker-column__item--selected {
+  color: var(--dark-text) !important;
+  background: rgba(99, 102, 241, 0.1) !important;
+}
+
+.van-loading {
+  color: var(--dark-accent-light) !important;
+}
+
+.van-loading__spinner {
+  color: var(--dark-accent-light) !important;
+}
+
+.van-dialog__content {
+  background: transparent !important;
+}
+
+.van-dialog__message {
+  color: var(--dark-text-secondary) !important;
+}
+
+.van-dialog__confirm {
+  color: var(--dark-accent-light) !important;
+  background: transparent !important;
+}
+
+.van-dialog__cancel {
+  color: var(--dark-text-secondary) !important;
+  background: transparent !important;
+}
+
+.van-overlay {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
