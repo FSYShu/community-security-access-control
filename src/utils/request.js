@@ -82,6 +82,9 @@ service.interceptors.request.use(
 // 响应拦截器
 service.interceptors.response.use(
   response => {
+    if (response.config.responseType === 'blob') {
+      return response.data
+    }
     const res = response.data
     if (res.code !== 0) {
       const msgType = (res.code === 409 && res.message && res.message.includes('已被')) ? 'warning' : 'error'
