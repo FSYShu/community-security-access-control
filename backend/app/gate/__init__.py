@@ -303,6 +303,11 @@ def unbind_gate(gate_id):
     gate = Gate.query.get(gate_id)
     if not gate:
         return error_response(message='门禁终端不存在', code=404)
+    push_key = gate.push_key
     gate.bound = 0
     db.session.commit()
+    if push_key:
+        from core.rtmp_relay import stop_ffmpeg
+        stop_ffmpeg(push_key)
+        logger.info('Stopped FFmpeg push for unbound gate {} (push_key={})'.format(gate_id, push_key))
     return success_response(data=gate.to_dict(), message='解绑成功')
