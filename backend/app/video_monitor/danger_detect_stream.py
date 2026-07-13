@@ -17,7 +17,7 @@ MAX_WIDTH = 640
 
 
 def generate_frames_with_danger_detect(stream_url, zones, max_width=640):
-    entry = start_rtmp_pull(stream_url, fps=10, max_width=max_width)
+    entry = start_rtmp_pull(stream_url, fps=20, max_width=max_width)
     if entry is None:
         return
 

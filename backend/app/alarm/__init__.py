@@ -230,3 +230,22 @@ def export_alarm_log():
         as_attachment=True,
         download_name=filename
     )
+
+
+@alarm_bp.route('/clear', methods=['DELETE'])
+@guard_or_admin_required
+def clear_all_alarms():
+    """清空所有告警记录"""
+    try:
+        count = AlarmEvent.query.count()
+        AlarmEvent.query.delete()
+        db.session.commit()
+        log_audit(
+            operation_type='clear_alarms',
+            operation_content=f'清空所有告警记录: {count}条'
+        )
+        return success_response(message=f'已清空{count}条告警记录')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'Failed to clear alarms: {e}')
+        return error_response(message='清空失败', code=500)

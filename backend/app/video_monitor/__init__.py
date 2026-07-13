@@ -31,7 +31,7 @@ video_monitor_bp = Blueprint('video_monitor', __name__)
 logger = logging.getLogger(__name__)
 
 
-def _try_connect_rtmp_ffmpeg(stream_url, fps=10, max_width=640, timeout=10):
+def _try_connect_rtmp_ffmpeg(stream_url, fps=20, max_width=640, timeout=10):
     entry = start_rtmp_pull(stream_url, fps=fps, max_width=max_width)
     if entry is None:
         return None
@@ -79,14 +79,14 @@ BUFFER_DELAY_SECONDS = 5.0
 WARMUP_FRAME_RATIO = 0.5
 
 
-def generate_frames_ffmpeg(stream_url, fps=10, max_width=640):
+def generate_frames_ffmpeg(stream_url, fps=20, max_width=640):
     entry = _try_connect_rtmp_ffmpeg(stream_url, fps=fps, max_width=max_width)
     if entry is None:
         return
 
     push_key = _extract_push_key_from_url(stream_url)
 
-    buf = deque(maxlen=5)
+    buf = deque(maxlen=10)
     buf_lock = threading.Lock()
     buf_event = threading.Event()
     alive = {'flag': True}
@@ -137,7 +137,7 @@ def generate_frames_ffmpeg(stream_url, fps=10, max_width=640):
         stop_rtmp_pull(stream_url)
 
 
-def generate_cv2_frames_ffmpeg(stream_url, fps=10, max_width=640):
+def generate_cv2_frames_ffmpeg(stream_url, fps=20, max_width=640):
     from core.rtmp_relay import read_cv2_frame_from_pull
     entry = _try_connect_rtmp_ffmpeg(stream_url, fps=fps, max_width=max_width)
     if entry is None:
@@ -212,7 +212,34 @@ def gate_latency(push_key):
     rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
     rtmp_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, push_key)
     fps = get_pull_fps(rtmp_url)
-    return jsonify({'push_key': push_key, 'latency_ms': latency, 'fps': fps})
+    return jsonify({'code': 0, 'data': {'push_key': push_key, 'latency_ms': latency, 'fps': fps}})
+
+
+@video_monitor_bp.route('/pull-processes', methods=['GET'])
+@jwt_required()
+def get_pull_processes():
+    """获取所有拉流进程状态，用于监控和调试"""
+    from core.rtmp_relay import get_all_pull_processes
+    processes = get_all_pull_processes()
+    return jsonify({'code': 0, 'data': {'processes': processes, 'count': len(processes)}})
+
+
+@video_monitor_bp.route('/gate-warmup/gate/<int:gate_id>', methods=['GET', 'POST'])
+def gate_warmup_by_gate(gate_id):
+    from app.models.gate import Gate
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'code': -1, 'message': '门禁终端不存在或未绑定推流码'}), 404
+    config = current_app.config
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+    rtmp_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
+    fps = config.get('VIDEO_FPS', 20)
+    max_width = config.get('VIDEO_MAX_WIDTH', 640)
+    entry = start_rtmp_pull(rtmp_url, fps=fps, max_width=max_width)
+    if entry is None:
+        return jsonify({'code': -1, 'message': 'warmup failed'})
+    return jsonify({'code': 0, 'message': 'warmup started'})
 
 
 @video_monitor_bp.route('/gate-warmup/<push_key>', methods=['POST'])

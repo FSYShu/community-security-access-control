@@ -11,7 +11,7 @@ class Gate(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     gate_name = db.Column(db.Text, nullable=False)
-    location = db.Column(db.Text, nullable=False, default='')
+
     gate_level = db.Column(db.Text, nullable=False, default='community_gate')
     building_unit = db.Column(db.Text, default='')
     camera_id = db.Column(db.Integer, nullable=True)
@@ -36,7 +36,7 @@ class Gate(db.Model):
         return {
             'id': self.id,
             'gate_name': self.gate_name,
-            'location': self.location,
+
             'gate_level': self.gate_level,
             'building_unit': self.building_unit,
             'camera_id': self.camera_id,

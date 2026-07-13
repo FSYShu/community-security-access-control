@@ -29,10 +29,10 @@ class BaseConfig:
 
     # 视频流配置
     VIDEO_FPS = int(os.getenv('VIDEO_FPS', 30))
-    VIDEO_MAX_WIDTH = int(os.getenv('VIDEO_MAX_WIDTH', 640))
-    VIDEO_JPEG_QUALITY = int(os.getenv('VIDEO_JPEG_QUALITY', 50))
-    VIDEO_DETECT_WIDTH = int(os.getenv('VIDEO_DETECT_WIDTH', 320))
-    VIDEO_BUFFER_SIZE = int(os.getenv('VIDEO_BUFFER_SIZE', 30))
+    VIDEO_MAX_WIDTH = int(os.getenv('VIDEO_MAX_WIDTH', 1280))
+    VIDEO_JPEG_QUALITY = int(os.getenv('VIDEO_JPEG_QUALITY', 85))
+    VIDEO_DETECT_WIDTH = int(os.getenv('VIDEO_DETECT_WIDTH', 640))
+    VIDEO_BUFFER_SIZE = int(os.getenv('VIDEO_BUFFER_SIZE', 60))
 
     # AI 服务配置
     AI_SERVICE_URL = os.getenv('AI_SERVICE_URL', 'http://localhost:8001')
