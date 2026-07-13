@@ -11,6 +11,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core.device_tamper import BLOCKED, IMPACT, MOVED, NORMAL, DeviceTamperDetector
 from app.device_tamper_monitor import DeviceTamperMonitor, start_device_tamper_monitor
+from app.video_monitor.device_tamper_stream import (
+    _active_alarm_states,
+    _clear_alarm_states,
+)
 
 
 def textured_frame(seed=1):
@@ -200,3 +204,18 @@ def test_background_snapshot_returns_frame_copy():
 
     assert snapshot['status'] == NORMAL
     assert np.all(source == 80)
+
+
+def test_alarm_state_is_rearmed_only_after_recovery():
+    _active_alarm_states.clear()
+    _active_alarm_states.add((1, 'smoke'))
+
+    _clear_alarm_states(1, {'smoke'})
+    assert (1, 'smoke') in _active_alarm_states
+
+    _clear_alarm_states(1, set())
+    assert (1, 'smoke') not in _active_alarm_states
+
+    _active_alarm_states.add((1, 'smoke'))
+    assert (1, 'smoke') in _active_alarm_states
+    _active_alarm_states.clear()

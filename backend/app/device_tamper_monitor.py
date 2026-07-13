@@ -8,7 +8,12 @@ from app.models.gate import Gate
 from core.fire_smoke_detector import FireSmokeDetector
 from core.device_tamper import NORMAL, DeviceTamperDetector
 
-from .video_monitor.device_tamper_stream import _open_capture, _placeholder, _record_alarm
+from .video_monitor.device_tamper_stream import (
+    _clear_alarm_states,
+    _open_capture,
+    _placeholder,
+    _record_alarm,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +144,7 @@ class DeviceTamperMonitor:
             cap = _open_capture(stream_url, timeout=open_timeout)
             if cap is None:
                 self._update_worker_state(worker, placeholder, 'stream_offline', {})
+                _clear_alarm_states(gate_id, {'stream_offline'})
                 _record_alarm(self.app, gate_id, 'stream_offline', placeholder, {}, alarm_cooldown)
                 worker_stop.wait(reconnect_interval)
                 continue
@@ -155,6 +161,7 @@ class DeviceTamperMonitor:
                     ok, frame = cap.read()
                     if not ok or frame is None:
                         self._update_worker_state(worker, last_frame, 'stream_offline', {})
+                        _clear_alarm_states(gate_id, {'stream_offline'})
                         _record_alarm(
                             self.app, gate_id, 'stream_offline', last_frame, {}, alarm_cooldown
                         )
@@ -173,6 +180,12 @@ class DeviceTamperMonitor:
                     result_status = result.status
                     result_metrics = result.metrics
                     last_check = now
+                    active_states = {result_status} if result_status != NORMAL else set()
+                    if emergency.fire:
+                        active_states.add('open_flame')
+                    if emergency.smoke:
+                        active_states.add('smoke')
+                    _clear_alarm_states(gate_id, active_states)
                     self._update_worker_state(worker, frame, result_status, result_metrics)
                     if result.event:
                         _record_alarm(

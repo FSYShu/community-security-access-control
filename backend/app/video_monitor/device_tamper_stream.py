@@ -16,7 +16,7 @@ from core.device_tamper import BLOCKED, BLURRED, IMPACT, MOVED, NORMAL, DeviceTa
 logger = logging.getLogger(__name__)
 
 _alarm_lock = threading.Lock()
-_last_alarm_at = {}
+_active_alarm_states = set()
 
 STATUS_LABELS = {
     NORMAL: ('NORMAL', (80, 200, 80)),
@@ -89,6 +89,7 @@ def generate_frames_with_tamper_detection(app, stream_url, gate_id, max_width=64
             break
 
         frame = _placeholder('STREAM OFFLINE', placeholder_size)
+        _clear_alarm_states(gate_id, {'stream_offline'})
         _record_alarm(app, gate_id, 'stream_offline', frame, {}, alarm_cooldown)
         for _ in range(20):
             yield _multipart(frame)
@@ -140,12 +141,15 @@ def generate_frames_with_tamper_detection(app, stream_url, gate_id, max_width=64
             if time.monotonic() - updated_at > offline_timeout:
                 result_status = 'stream_offline'
                 result_metrics = {}
+                _clear_alarm_states(gate_id, {'stream_offline'})
                 _record_alarm(app, gate_id, result_status, frame, result_metrics, alarm_cooldown)
             elif time.monotonic() - last_check >= check_interval:
                 result = detector.analyze(frame)
                 result_status = result.status
                 result_metrics = result.metrics
                 last_check = time.monotonic()
+                active_states = {result_status} if result_status != NORMAL else set()
+                _clear_alarm_states(gate_id, active_states)
                 if result.event:
                     _record_alarm(app, gate_id, result_status, frame, result_metrics, alarm_cooldown)
 
@@ -195,12 +199,11 @@ def _open_capture(stream_url, timeout):
 
 
 def _record_alarm(app, gate_id, alarm_type, frame, metrics, cooldown):
-    now = time.monotonic()
     key = (gate_id, alarm_type)
     with _alarm_lock:
-        if now - _last_alarm_at.get(key, 0) < cooldown:
+        if key in _active_alarm_states:
             return
-        _last_alarm_at[key] = now
+        _active_alarm_states.add(key)
 
     descriptions = {
         BLOCKED: '门禁摄像头疑似被遮挡或画面异常变暗',
@@ -235,7 +238,15 @@ def _record_alarm(app, gate_id, alarm_type, frame, metrics, cooldown):
     except Exception:
         logger.exception('Failed to persist tamper alarm for gate %s', gate_id)
         with _alarm_lock:
-            _last_alarm_at.pop(key, None)
+            _active_alarm_states.discard(key)
+
+
+def _clear_alarm_states(gate_id, active_types):
+    """Allow a new alarm only after its previous state has recovered."""
+    with _alarm_lock:
+        for key in list(_active_alarm_states):
+            if key[0] == gate_id and key[1] not in active_types:
+                _active_alarm_states.remove(key)
 
 
 def _save_capture(app, gate_id, alarm_type, frame):
