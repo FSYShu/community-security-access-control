@@ -58,6 +58,9 @@ def create_app(config_name=None):
         from app.danger_zone.danger_zone_background import start_danger_zone_detector
         start_danger_zone_detector(app)
 
+    from app.device_tamper_monitor import start_device_tamper_monitor
+    start_device_tamper_monitor(app)
+
     return app
 
 

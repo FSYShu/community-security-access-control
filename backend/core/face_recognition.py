@@ -4,7 +4,10 @@ import threading
 import numpy as np
 import dlib
 
-DLIB_MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dat')
+DLIB_MODEL_DIR = os.getenv(
+    'DLIB_MODEL_DIR',
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dat')
+)
 DLIB_MODELS = {
     'shape_predictor_68_face_landmarks.dat': {
         'url': 'https://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2',
