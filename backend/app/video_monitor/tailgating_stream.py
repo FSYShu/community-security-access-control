@@ -13,6 +13,7 @@ import cv2
 
 from app import db
 from app.models.alarm import AlarmEvent
+from core.alarm_dedup import alarm_write_transaction, has_pending_alarm
 from core.tailgating_detector import MobileNetPersonDetector, TailgatingDetector
 
 from .device_tamper_stream import _open_capture, _placeholder
@@ -184,22 +185,27 @@ def _record_tailgating_alarm(app, gate_id, frame, track_ids,
             return
         _last_alarm_at[gate_id] = now
 
-    image_path = _save_capture(app, gate_id, frame)
     description = '疑似陌生人贴身尾随，短时间内有 {} 人通过门禁'.format(crossing_count)
     try:
         with app.app_context():
-            db.session.add(AlarmEvent(
-                alarm_type='tailgating',
-                alarm_level='critical',
-                source_id=gate_id,
-                source_type='gate',
-                alarm_description=description,
-                capture_image_path=image_path,
-                handle_remark='track_ids={}'.format(','.join(map(str, track_ids))),
-            ))
-            db.session.commit()
+            with alarm_write_transaction():
+                if has_pending_alarm(gate_id, 'tailgating'):
+                    return
+                image_path = _save_capture(app, gate_id, frame)
+                db.session.add(AlarmEvent(
+                    alarm_type='tailgating',
+                    alarm_level='critical',
+                    source_id=gate_id,
+                    source_type='gate',
+                    alarm_description=description,
+                    capture_image_path=image_path,
+                    handle_remark='track_ids={}'.format(','.join(map(str, track_ids))),
+                ))
+                db.session.commit()
     except Exception:
         logger.exception('Failed to persist tailgating alarm for gate %s', gate_id)
+        with app.app_context():
+            db.session.rollback()
         with _alarm_lock:
             _last_alarm_at.pop(gate_id, None)
 

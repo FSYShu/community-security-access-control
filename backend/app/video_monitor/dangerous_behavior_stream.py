@@ -183,17 +183,35 @@ def generate_frames_with_dangerous_behavior(
 def _draw_people_and_line(frame, tracks, line_ratio, scale, crossing_count):
     height, width = frame.shape[:2]
     visible_tracks = [track for track in tracks.values() if not track['missing']]
-    if not visible_tracks:
+    if len(visible_tracks) < 2:
         return
     line_y = int(height * line_ratio)
-    cv2.line(frame, (0, line_y), (width, line_y), (0, 220, 255), 2)
-    for track_id, track in tracks.items():
+    line_color = (180, 130, 70)
+    for start_x in range(0, width, 32):
+        cv2.line(
+            frame,
+            (start_x, line_y),
+            (min(start_x + 10, width - 1), line_y),
+            line_color,
+            1,
+        )
+    for track in tracks.values():
         if track['missing']:
             continue
         x1, y1, x2, y2 = [int(value * scale) for value in track['box'][:4]]
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (70, 220, 70), 2)
-        cv2.putText(frame, 'ID {}'.format(track_id), (x1 + 5, y1 + 22),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (70, 220, 70), 2)
+        _draw_track_corners(frame, x1, y1, x2, y2, line_color)
+
+
+def _draw_track_corners(frame, x1, y1, x2, y2, color):
+    corner = max(8, min(18, (x2 - x1) // 4, (y2 - y1) // 4))
+    segments = (
+        ((x1, y1), (x1 + corner, y1)), ((x1, y1), (x1, y1 + corner)),
+        ((x2, y1), (x2 - corner, y1)), ((x2, y1), (x2, y1 + corner)),
+        ((x1, y2), (x1 + corner, y2)), ((x1, y2), (x1, y2 - corner)),
+        ((x2, y2), (x2 - corner, y2)), ((x2, y2), (x2, y2 - corner)),
+    )
+    for start, end in segments:
+        cv2.line(frame, start, end, color, 1)
 
 
 def _draw_tailgating_status(frame, tracks, line_ratio, scale, crossing_count):

@@ -11,6 +11,7 @@ import numpy as np
 
 from app import db
 from app.models.alarm import AlarmEvent
+from core.alarm_dedup import alarm_write_transaction, has_pending_alarm
 from core.device_tamper import BLOCKED, BLURRED, IMPACT, MOVED, NORMAL, DeviceTamperDetector
 
 logger = logging.getLogger(__name__)
@@ -223,20 +224,25 @@ def _record_alarm(app, gate_id, alarm_type, frame, metrics, cooldown):
         'stream_offline': 'critical',
         BLURRED: 'warning',
     }
-    image_path = _save_capture(app, gate_id, alarm_type, frame)
     try:
         with app.app_context():
-            db.session.add(AlarmEvent(
-                alarm_type=alarm_type,
-                alarm_level=levels.get(alarm_type, 'warning'),
-                source_id=gate_id,
-                source_type='gate',
-                alarm_description=descriptions.get(alarm_type, alarm_type),
-                capture_image_path=image_path,
-            ))
-            db.session.commit()
+            with alarm_write_transaction():
+                if has_pending_alarm(gate_id, alarm_type):
+                    return
+                image_path = _save_capture(app, gate_id, alarm_type, frame)
+                db.session.add(AlarmEvent(
+                    alarm_type=alarm_type,
+                    alarm_level=levels.get(alarm_type, 'warning'),
+                    source_id=gate_id,
+                    source_type='gate',
+                    alarm_description=descriptions.get(alarm_type, alarm_type),
+                    capture_image_path=image_path,
+                ))
+                db.session.commit()
     except Exception:
         logger.exception('Failed to persist tamper alarm for gate %s', gate_id)
+        with app.app_context():
+            db.session.rollback()
         with _alarm_lock:
             _active_alarm_states.discard(key)
 
