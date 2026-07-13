@@ -108,7 +108,8 @@ def generate_frames_with_danger_detect(stream_url, zones, max_width=640):
 
             if persons:
                 from app.danger_zone.danger_zone_detector import draw_detection_overlay
-                frame = draw_detection_overlay(frame, persons)
+                min_safety = min((z.safety_distance for z in zones if z.safety_distance), default=None)
+                frame = draw_detection_overlay(frame, persons, safety_distance=min_safety)
 
             for zone in zones:
                 cv2.putText(frame, '[{}] DANGER ZONE'.format(zone.zone_name), (10, 30 + zones.index(zone) * 25),

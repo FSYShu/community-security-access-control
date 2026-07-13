@@ -372,10 +372,143 @@ def video_feed_by_gate_with_danger_detect(gate_id):
         return jsonify({'error': 'Failed to process danger detection stream'}), 500
 
 
+@video_monitor_bp.route('/danger-distance/<int:gate_id>/stream')
+@limiter.exempt
+def danger_distance_sse(gate_id):
+    """禁区距离检测SSE事件流，推送人员距离数据（近大远小）"""
+    from app.models.gate import Gate
+    from app.models.danger_zone import DangerZone
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
+
+    gate_id_str = str(gate_id)
+    zones = DangerZone.query.filter(
+        DangerZone.camera_ids.contains(gate_id_str),
+        DangerZone.status == 'active'
+    ).all()
+
+
+    config = current_app.config
+    max_width = config.get('VIDEO_MAX_WIDTH', 640)
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+    stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
+    fps = config.get('VIDEO_FPS', 20)
+    detect_width = config.get('VIDEO_DETECT_WIDTH', 320)
+    calib_near_dist = gate.calib_near_dist
+    calib_near_ratio = gate.calib_near_ratio
+    calib_far_dist = gate.calib_far_dist
+    calib_far_ratio = gate.calib_far_ratio
+    try:
+        from .danger_distance_sse import generate_danger_distance_sse
+        from flask import stream_with_context
+
+        def generate():
+            for event in generate_danger_distance_sse(stream_url, zones, fps=fps, max_width=max_width, detect_width=detect_width, calib_near_dist=calib_near_dist, calib_near_ratio=calib_near_ratio, calib_far_dist=calib_far_dist, calib_far_ratio=calib_far_ratio):
+                yield event
+
+        resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
+        resp.headers['Cache-Control'] = 'no-cache'
+        resp.headers['X-Accel-Buffering'] = 'no'
+        resp.headers['Connection'] = 'keep-alive'
+        return resp
+    except Exception as e:
+        logger.error('Failed to stream danger distance for gate {}: {}'.format(gate_id, str(e)))
+        return jsonify({'error': 'Failed to process danger distance stream'}), 500
+
+
 @video_monitor_bp.route('/list', methods=['GET'])
 def get_monitor_list():
     """获取监控区域列表"""
     return error_response(message='监控区域列表接口开发中', code=-1)
+
+
+@video_monitor_bp.route('/calibrate-distance/<int:gate_id>', methods=['POST'])
+def calibrate_distance(gate_id):
+    """距离校准：支持两点校准，point=near或far"""
+    from app.models.gate import Gate
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
+
+    data = flask_request.get_json(force=True, silent=True) or {}
+    known_distance = data.get('distance')
+    point = data.get('point', 'near')
+    if not known_distance or known_distance <= 0:
+        return jsonify({'error': '请提供有效的已知距离(米)'}), 400
+    if point not in ('near', 'far'):
+        return jsonify({'error': 'point参数应为near或far'}), 400
+
+    config = current_app.config
+    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+    stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
+
+    from core.rtmp_relay import start_rtmp_pull, read_cv2_frame_from_pull, stop_rtmp_pull
+    from core.shared_frame_store import get_frame as _get_shared_frame
+    import cv2
+    import numpy as np
+
+    frame = None
+    jpeg = _get_shared_frame(stream_url)
+    if jpeg is not None:
+        arr = np.frombuffer(jpeg, dtype=np.uint8).copy()
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+    if frame is None:
+        entry = start_rtmp_pull(stream_url, fps=5, max_width=640)
+        if entry is not None:
+            for _ in range(20):
+                ok, f = read_cv2_frame_from_pull(entry)
+                if ok and f is not None:
+                    frame = f
+                    break
+                time.sleep(0.2)
+            stop_rtmp_pull(stream_url)
+
+    if frame is None:
+        return jsonify({'error': '无法获取视频帧，请确认摄像头在线'}), 400
+
+    try:
+        from core.face_recognition import FaceRecognizer
+        recognizer = FaceRecognizer()
+        rgb_image = np.ascontiguousarray(frame[:, :, ::-1])
+        faces = recognizer.detect_faces_rgb(rgb_image)
+    except Exception as e:
+        logger.error('Calibration face detection error: {}'.format(str(e)))
+        return jsonify({'error': '人脸检测失败: {}'.format(str(e))}), 500
+
+    if not faces:
+        return jsonify({'error': '未检测到人脸，请站在摄像头前重试'}), 400
+
+    face_rect = faces[0]
+    face_pixel_height = face_rect[3] - face_rect[1]
+    frame_height = frame.shape[0]
+    face_ratio = round(face_pixel_height / frame_height, 6)
+
+    if point == 'near':
+        gate.calib_near_dist = float(known_distance)
+        gate.calib_near_ratio = face_ratio
+    else:
+        gate.calib_far_dist = float(known_distance)
+        gate.calib_far_ratio = face_ratio
+    db.session.commit()
+
+    logger.info('Gate {} calibrated {} point: distance={}m, ratio={}'.format(gate_id, point, known_distance, face_ratio))
+    return jsonify({
+        'code': 0,
+        'data': {
+            'gate_id': gate_id,
+            'point': point,
+            'calib_near_dist': gate.calib_near_dist,
+            'calib_near_ratio': gate.calib_near_ratio,
+            'calib_far_dist': gate.calib_far_dist,
+            'calib_far_ratio': gate.calib_far_ratio,
+            'face_pixel_height': face_pixel_height,
+            'frame_height': frame_height
+        }
+    })
 
 
 @video_monitor_bp.route('/recordings', methods=['GET'])
