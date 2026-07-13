@@ -10,6 +10,7 @@ from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from sqlalchemy import inspect as sa_inspect
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -168,6 +169,14 @@ def _migrate_schema(database):
             conn.execute(db.text("ALTER TABLE gates ADD COLUMN last_heartbeat TEXT DEFAULT ''"))
             conn.commit()
             logger.info('Migrated: added last_heartbeat column to gates')
+        except Exception:
+            pass
+        try:
+            col_names = [col['name'] for col in sa_inspect(db.engine).get_columns('gates')]
+            if 'location' in col_names:
+                conn.execute(db.text('ALTER TABLE gates DROP COLUMN location'))
+                conn.commit()
+                logger.info('Migrated: dropped location column from gates')
         except Exception:
             pass
 
