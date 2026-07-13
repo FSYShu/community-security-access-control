@@ -24,6 +24,15 @@
           <span>人脸检测</span>
           <i :class="faceDetectionEnabled ? 'el-icon-check' : 'el-icon-close'" class="detect-indicator"></i>
         </button>
+        <button
+          class="detect-btn"
+          :class="{ 'is-on': dangerousBehaviorEnabled, 'is-off': !dangerousBehaviorEnabled }"
+          @click="toggleDangerousBehavior"
+        >
+          <i class="el-icon-warning-outline"></i>
+          <span>危险行为检测</span>
+          <i :class="dangerousBehaviorEnabled ? 'el-icon-check' : 'el-icon-close'" class="detect-indicator"></i>
+        </button>
         <button class="refresh-btn" :class="{ 'is-loading': refreshing }" @click="handleRefresh">
           <i class="el-icon-refresh"></i>
           <span>刷新</span>
@@ -37,6 +46,7 @@
         ref="singleViewer"
         :gate-list="gateList"
         :face-detection-enabled="faceDetectionEnabled"
+        :dangerous-behavior-enabled="dangerousBehaviorEnabled"
         :initial-gate-id="initialGateId"
       />
     </div>
@@ -51,6 +61,7 @@
           :ref="'gridViewer' + index"
           :gate-list="gateList"
           :face-detection-enabled="faceDetectionEnabled"
+          :dangerous-behavior-enabled="dangerousBehaviorEnabled"
           :initial-gate-id="index === 1 ? initialGateId : ''"
         />
       </div>
@@ -73,6 +84,7 @@ export default {
       layoutMode: 'single',
       gateList: [],
       faceDetectionEnabled: false,
+      dangerousBehaviorEnabled: false,
       refreshing: false,
       initialGateId: '',
       pollTimer: null
@@ -118,9 +130,18 @@ export default {
     },
     toggleFaceDetection () {
       this.faceDetectionEnabled = !this.faceDetectionEnabled
+      if (this.faceDetectionEnabled) this.dangerousBehaviorEnabled = false
       this.$message({
         message: this.faceDetectionEnabled ? '人脸检测已开启：绿色框=已注册人员，红色框=陌生人' : '人脸检测已关闭',
         type: this.faceDetectionEnabled ? 'success' : 'warning'
+      })
+    },
+    toggleDangerousBehavior () {
+      this.dangerousBehaviorEnabled = !this.dangerousBehaviorEnabled
+      if (this.dangerousBehaviorEnabled) this.faceDetectionEnabled = false
+      this.$message({
+        message: this.dangerousBehaviorEnabled ? '危险行为检测已开启' : '危险行为检测已关闭',
+        type: this.dangerousBehaviorEnabled ? 'success' : 'warning'
       })
     },
     handleRefresh () {

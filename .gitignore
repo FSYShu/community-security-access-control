@@ -51,6 +51,12 @@ data/
 # Patch files
 patches/
 
+# 本地算法回放生成的输出，不作为测试输入提交
+test_assets/outputs/
+
+# Office 临时锁文件
+~$*.docx
+
 # Editor directories and files
 .idea
 .vscode

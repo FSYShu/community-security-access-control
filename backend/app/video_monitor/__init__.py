@@ -172,6 +172,19 @@ def generate_cv2_frames_ffmpeg(stream_url, fps=10, max_width=640):
 
 
 
+@video_monitor_bp.route('/gate-stop-push', methods=['POST'])
+@limiter.exempt
+def gate_stop_push():
+    """门禁端关闭时通知后端停止FFmpeg推流进程"""
+    data = flask_request.get_json(force=True, silent=True)
+    push_key = data.get('push_key') if data else None
+    if push_key:
+        from core.rtmp_relay import stop_ffmpeg
+        stop_ffmpeg(push_key)
+        logger.info('Gate stop push notification received for key: {}'.format(push_key))
+    return jsonify({'code': 0, 'message': 'ok'})
+
+
 @video_monitor_bp.route('/gate-push-frame', methods=['POST'])
 @limiter.exempt
 def gate_push_frame():
@@ -370,6 +383,148 @@ def video_feed_by_gate_with_danger_detect(gate_id):
     except Exception as e:
         logger.error('Failed to stream danger detect for gate {}: {}'.format(gate_id, str(e)))
         return jsonify({'error': 'Failed to process danger detection stream'}), 500
+
+
+@video_monitor_bp.route('/video_feed/gate/<int:gate_id>/tamper')
+@limiter.exempt
+def video_feed_by_gate_with_tamper_detection(gate_id):
+    """Return the gate stream with camera tamper detection annotations."""
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': 'Gate not found or push key is missing'}), 404
+
+    config = current_app.config
+    stream_url = 'rtmp://{}:{}/live/{}'.format(
+        config.get('RTMP_SERVER_HOST', '127.0.0.1'),
+        config.get('RTMP_SERVER_PORT', 9090),
+        gate.push_key,
+    )
+    app = current_app._get_current_object()
+    try:
+        from .device_tamper_stream import (
+            generate_frames_from_background_monitor,
+            generate_frames_with_tamper_detection,
+        )
+        monitor = app.extensions.get('device_tamper_monitor')
+        if monitor is not None:
+            generator = generate_frames_from_background_monitor(
+                monitor,
+                gate_id=gate.id,
+                max_width=config.get('VIDEO_MAX_WIDTH', 640),
+                offline_timeout=config.get('DEVICE_OFFLINE_TIMEOUT', 5),
+            )
+        else:
+            generator = generate_frames_with_tamper_detection(
+                app,
+                stream_url,
+                gate_id=gate.id,
+                max_width=config.get('VIDEO_MAX_WIDTH', 640),
+                confirm_frames=config.get('DEVICE_TAMPER_CONFIRM_FRAMES', 3),
+                blocked_confirm_frames=config.get('DEVICE_BLOCKED_CONFIRM_FRAMES', 8),
+                recovery_frames=config.get('DEVICE_TAMPER_RECOVERY_FRAMES', 4),
+                offline_timeout=config.get('DEVICE_OFFLINE_TIMEOUT', 5),
+                open_timeout=config.get('DEVICE_STREAM_OPEN_TIMEOUT', 20),
+                alarm_cooldown=config.get('DEVICE_ALARM_COOLDOWN', 60),
+                check_interval=config.get('DEVICE_TAMPER_CHECK_INTERVAL', 0.1),
+                impact_confirm_frames=config.get('DEVICE_IMPACT_CONFIRM_FRAMES', 1),
+                impact_motion_threshold=config.get('DEVICE_IMPACT_MOTION_THRESHOLD', 6.0),
+                impact_coherence_threshold=config.get('DEVICE_IMPACT_COHERENCE_THRESHOLD', 0.6),
+                impact_reversal_cosine=config.get('DEVICE_IMPACT_REVERSAL_COSINE', -0.35),
+                impact_window_frames=config.get('DEVICE_IMPACT_WINDOW_FRAMES', 6),
+                impact_blur_drop_threshold=config.get('DEVICE_IMPACT_BLUR_DROP_THRESHOLD', 0.35),
+                impact_min_tracked_points=config.get('DEVICE_IMPACT_MIN_TRACKED_POINTS', 20),
+                impact_scene_change_limit=config.get('DEVICE_IMPACT_SCENE_CHANGE_LIMIT', 0.60),
+                impact_sudden_multiplier=config.get('DEVICE_IMPACT_SUDDEN_MULTIPLIER', 1.25),
+            )
+        return Response(generator, mimetype='multipart/x-mixed-replace; boundary=frame')
+    except Exception:
+        logger.exception('Failed to start tamper detection for gate %s', gate_id)
+        return jsonify({'error': 'Failed to process tamper detection stream'}), 500
+
+
+@video_monitor_bp.route('/video_feed/gate/<int:gate_id>/tailgating')
+@limiter.exempt
+def video_feed_by_gate_with_tailgating(gate_id):
+    """Return an independent real-time tailgating detection stream."""
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': 'Gate not found or push key is missing'}), 404
+
+    config = current_app.config
+    stream_url = 'rtmp://{}:{}/live/{}'.format(
+        config.get('RTMP_SERVER_HOST', '127.0.0.1'),
+        config.get('RTMP_SERVER_PORT', 9090),
+        gate.push_key,
+    )
+    app = current_app._get_current_object()
+    try:
+        from .tailgating_stream import generate_frames_with_tailgating
+        generator = generate_frames_with_tailgating(
+            app,
+            stream_url,
+            gate_id=gate.id,
+            prototxt_path=config.get('TAILGATING_PROTOTXT_PATH'),
+            model_path=config.get('TAILGATING_MODEL_PATH'),
+            max_width=config.get('VIDEO_MAX_WIDTH', 640),
+            confidence=config.get('TAILGATING_CONFIDENCE', 0.25),
+            detection_interval=config.get('TAILGATING_DETECTION_INTERVAL', 0.10),
+            line_ratio=config.get('TAILGATING_LINE_RATIO', 0.62),
+            crossing_window=config.get('TAILGATING_CROSSING_WINDOW', 5.0),
+            max_horizontal_gap_ratio=config.get('TAILGATING_MAX_HORIZONTAL_GAP_RATIO', 0.28),
+            authorized_entries=config.get('TAILGATING_AUTHORIZED_ENTRIES', 1),
+            direction=config.get('TAILGATING_DIRECTION', 'both'),
+            status_hold_seconds=config.get('TAILGATING_STATUS_HOLD_SECONDS', 3.0),
+            alarm_cooldown=config.get('TAILGATING_ALARM_COOLDOWN', 60),
+            open_timeout=config.get('DEVICE_STREAM_OPEN_TIMEOUT', 20),
+        )
+        return Response(generator, mimetype='multipart/x-mixed-replace; boundary=frame')
+    except Exception:
+        logger.exception('Failed to start tailgating detection for gate %s', gate_id)
+        return jsonify({'error': 'Failed to process tailgating stream'}), 500
+
+
+@video_monitor_bp.route('/video_feed/gate/<int:gate_id>/dangerous-behavior')
+@limiter.exempt
+def video_feed_by_gate_with_dangerous_behavior(gate_id):
+    """Unified device-tamper, fire/smoke, and tailgating stream."""
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': 'Gate not found or push key is missing'}), 404
+
+    config = current_app.config
+    app = current_app._get_current_object()
+    monitor = app.extensions.get('device_tamper_monitor')
+    stream_url = 'rtmp://{}:{}/live/{}'.format(
+        config.get('RTMP_SERVER_HOST', '20.214.147.223'),
+        config.get('RTMP_SERVER_PORT', 9090),
+        gate.push_key,
+    )
+    try:
+        from .dangerous_behavior_stream import generate_frames_with_dangerous_behavior
+        generator = generate_frames_with_dangerous_behavior(
+            app,
+            monitor,
+            gate_id=gate.id,
+            prototxt_path=config.get('TAILGATING_PROTOTXT_PATH'),
+            model_path=config.get('TAILGATING_MODEL_PATH'),
+            stream_url=stream_url,
+            max_width=config.get('VIDEO_MAX_WIDTH', 640),
+            confidence=config.get('TAILGATING_CONFIDENCE', 0.25),
+            detection_interval=config.get('TAILGATING_DETECTION_INTERVAL', 0.10),
+            line_ratio=config.get('TAILGATING_LINE_RATIO', 0.62),
+            crossing_window=config.get('TAILGATING_CROSSING_WINDOW', 5.0),
+            max_horizontal_gap_ratio=config.get('TAILGATING_MAX_HORIZONTAL_GAP_RATIO', 0.28),
+            authorized_entries=config.get('TAILGATING_AUTHORIZED_ENTRIES', 1),
+            direction=config.get('TAILGATING_DIRECTION', 'both'),
+            status_hold_seconds=config.get('TAILGATING_STATUS_HOLD_SECONDS', 3.0),
+            alarm_cooldown=config.get('TAILGATING_ALARM_COOLDOWN', 60),
+            offline_timeout=config.get('DEVICE_OFFLINE_TIMEOUT', 5),
+            open_timeout=config.get('DEVICE_STREAM_OPEN_TIMEOUT', 20),
+        )
+        return Response(generator, mimetype='multipart/x-mixed-replace; boundary=frame')
+    except Exception:
+        logger.exception('Failed to start dangerous behavior stream for gate %s', gate_id)
+        return jsonify({'error': 'Failed to process dangerous behavior stream'}), 500
 
 
 @video_monitor_bp.route('/list', methods=['GET'])
