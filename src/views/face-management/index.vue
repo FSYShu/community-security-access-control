@@ -1,5 +1,5 @@
 <template>
-  <app-layout page-title="人脸信息管理">
+  <app-layout page-title="人脸信息管理" :no-scroll="true">
     <div class="dark-card">
       <div class="filter-row">
         <div class="filter-spacer"></div>
@@ -13,30 +13,41 @@
         </button>
       </div>
     </div>
-    <div class="dark-card">
-      <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
-        <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
-          <van-cell v-for="item in list" :key="item.id">
-            <template #title>
-              <div class="cell-title-row">
-                <span class="cell-status">
-                  <span class="status-dot" :class="item.status === 'active' ? 'dot-active' : 'dot-inactive'"></span>
-                  <span class="status-label">{{ item.status === 'active' ? '启用' : '停用' }}</span>
-                </span>
-                <span class="cell-name">{{ item.person_name }}</span>
-                <span class="type-tag" :class="item.person_type === 'owner' ? 'tag-owner' : 'tag-blacklist'">{{ typeMap[item.person_type] || item.person_type }}</span>
-              </div>
-            </template>
-            <template #right-icon>
-              <button class="delete-btn" @click="onDelete(item)">
-                <i class="el-icon-delete"></i>
-                <span>删除</span>
-              </button>
-            </template>
-          </van-cell>
-        </van-list>
-
-      </van-pull-refresh>
+    <div class="dark-card list-section">
+      <div class="list-content">
+        <van-cell v-for="item in list" :key="item.id">
+          <template #title>
+            <div class="cell-title-row">
+              <span class="cell-status">
+                <span class="status-dot" :class="item.status === 'active' ? 'dot-active' : 'dot-inactive'"></span>
+                <span class="status-label">{{ item.status === 'active' ? '启用' : '停用' }}</span>
+              </span>
+              <span class="cell-name">{{ item.person_name }}</span>
+              <span class="type-tag" :class="item.person_type === 'owner' ? 'tag-owner' : 'tag-blacklist'">{{ typeMap[item.person_type] || item.person_type }}</span>
+            </div>
+          </template>
+          <template #right-icon>
+            <button class="delete-btn" @click="onDelete(item)">
+              <i class="el-icon-delete"></i>
+              <span>删除</span>
+            </button>
+          </template>
+        </van-cell>
+        <div v-if="list.length === 0 && !loading" class="empty-state">
+          <i class="el-icon-user" style="font-size:48px;color:var(--dark-text-muted)"></i>
+          <p style="color:var(--dark-text-muted);margin-top:12px">暂无人脸信息</p>
+        </div>
+      </div>
+      <div class="pagination-wrapper">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :current-page="page"
+          :page-size="perPage"
+          :total="total"
+          @current-change="onPageChange"
+        />
+      </div>
     </div>
 
     <el-dialog :visible.sync="showAddDialog" title="新增人脸" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetAddForm">
@@ -159,9 +170,9 @@ export default {
     return {
       list: [],
       loading: false,
-      finished: false,
-      refreshing: false,
       page: 1,
+      perPage: 20,
+      total: 0,
       typeMap: { owner: '业主', blacklist: '黑名单' },
       showAddDialog: false,
       showTestDialog: false,
@@ -189,6 +200,7 @@ export default {
   },
   mounted () {
     document.addEventListener('click', this.closeDropdowns)
+    this.loadData()
   },
   beforeDestroy () {
     document.removeEventListener('click', this.closeDropdowns)
@@ -203,31 +215,25 @@ export default {
     },
     async loadData () {
       try {
-        const res = await getFaceList({ page: this.page, per_page: 20 })
+        this.loading = true
+        const res = await getFaceList({ page: this.page, per_page: this.perPage })
         const data = res.data
         if (data && data.items) {
-          if (this.page === 1) {
-            this.list = data.items
-          } else {
-            this.list = this.list.concat(data.items)
-          }
-          this.finished = this.list.length >= data.total
-          this.page++
-        } else {
-          this.finished = true
+          this.list = data.items
+          this.total = data.total || 0
         }
       } catch (err) {
-        this.finished = true
+        console.error(err)
       } finally {
         this.loading = false
-        this.refreshing = false
       }
+    },
+    onPageChange (newPage) {
+      this.page = newPage
+      this.loadData()
     },
     onRefresh () {
       this.page = 1
-      this.finished = false
-      this.list = []
-      this.loading = true
       this.loadData()
     },
     onDelete (item) {
@@ -409,6 +415,35 @@ export default {
   border: 1px solid var(--dark-border);
   padding: 20px;
   margin-bottom: 16px;
+}
+
+.list-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.list-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.pagination-wrapper {
+  padding-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 200px;
 }
 
 .filter-row {
@@ -886,5 +921,32 @@ export default {
 
 .dark-dialog .el-dialog__body {
   padding: 20px;
+}
+
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next,
+.el-pagination.is-background .el-pager li {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: var(--dark-text-secondary) !important;
+}
+
+.el-pagination.is-background .btn-prev:hover,
+.el-pagination.is-background .btn-next:hover,
+.el-pagination.is-background .el-pager li:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--dark-text) !important;
+}
+
+.el-pagination.is-background .el-pager li.active {
+  background: var(--dark-accent) !important;
+  border-color: var(--dark-accent) !important;
+  color: #fff !important;
+}
+
+.el-pagination.is-background .btn-prev:disabled,
+.el-pagination.is-background .btn-next:disabled {
+  background: rgba(255, 255, 255, 0.02) !important;
+  color: var(--dark-text-dim) !important;
 }
 </style>

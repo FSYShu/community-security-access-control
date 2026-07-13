@@ -585,6 +585,8 @@ export default {
 .main-content.no-scroll {
   overflow: hidden;
   padding-bottom: 24px;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 768px) {

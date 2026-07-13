@@ -9,6 +9,11 @@
         <transition name="dropdown">
           <div v-if="showDropdown" class="select-dropdown">
             <div
+              class="select-option"
+              :class="{ 'is-active': !selectedGate }"
+              @click="selectGate(null)"
+            >无</div>
+            <div
               v-for="gate in gateList"
               :key="gate.id"
               class="select-option"
@@ -23,6 +28,7 @@
         <span class="status-dot" :class="statusDotClass"></span>
         <span class="status-text">{{ statusLabel }}</span>
         <span v-if="latencyMs !== null" class="latency-tag" :class="latencyClass">{{ latencyText }}</span>
+        <span v-if="currentFps !== null" class="fps-tag">{{ currentFps }}fps</span>
       </div>
       <button v-if="dangerDistanceEnabled && selectedGate" class="calib-btn" @click="openCalibDialog">
         <i class="el-icon-aim"></i>
@@ -88,7 +94,8 @@
 
 <script>
 const AUTO_RETRY_MAX = 10
-const AUTO_RETRY_INTERVAL = 10000
+const AUTO_RETRY_INTERVAL = 3000
+const STREAM_CONNECT_TIMEOUT = 15000
 
 export default {
   name: 'VideoStreamViewer',
@@ -122,6 +129,7 @@ export default {
       retryTimer: null,
       urlVersion: 0,
       latencyMs: null,
+      currentFps: null,
       detectionEventSource: null,
       latestBoxes: [],
       detectionFrameWidth: 0,
@@ -199,6 +207,7 @@ export default {
       this.stopDangerDistanceSSE()
       this.latestBoxes = []
       this.latestDangerPersons = []
+      this.warmupStream()
       if (this.selectedGate && this.faceDetectionEnabled) {
         this.startDetectionSSE()
       }
@@ -236,17 +245,24 @@ export default {
     }
   },
   mounted () {
+    let saved = ''
+    try {
+      saved = localStorage.getItem('videoMonitor_selectedGate') || ''
+    } catch (e) {}
     if (this.initialGateId) {
       this.selectedGate = this.initialGateId
+    } else if (saved) {
+      this.selectedGate = saved
     }
     document.addEventListener('click', this.onDocumentClick)
     window.addEventListener('resize', this.onWindowResize)
     this.warmupStream()
     this.fetchLatency()
+    this.startStreamConnectTimer()
     const self = this
     this.latencyTimer = setInterval(function () {
       self.fetchLatency()
-    }, 10000)
+    }, 2000)
     setTimeout(function () {
       if (self.selectedGate && self.faceDetectionEnabled && !self.detectionEventSource) {
         self.startDetectionSSE()
@@ -267,7 +283,17 @@ export default {
       this.showDropdown = !this.showDropdown
     },
     selectGate (gate) {
-      this.selectedGate = String(gate.id)
+      if (gate && gate.id) {
+        this.selectedGate = String(gate.id)
+        try {
+          localStorage.setItem('videoMonitor_selectedGate', String(gate.id))
+        } catch (e) {}
+      } else {
+        this.selectedGate = ''
+        try {
+          localStorage.removeItem('videoMonitor_selectedGate')
+        } catch (e) {}
+      }
       this.showDropdown = false
     },
     onDocumentClick (e) {
@@ -281,6 +307,7 @@ export default {
       this.autoRetrying = false
       this.retryCount = 0
       this.clearRetryTimer()
+      this.clearStreamConnectTimer()
       this.stopDetectionSSE()
       this.stopDangerDistanceSSE()
       this.urlVersion = Date.now()
@@ -288,6 +315,7 @@ export default {
       const self = this
       this.$nextTick(function () {
         self.showStream = true
+        self.startStreamConnectTimer()
       })
     },
     manualRefresh () {
@@ -295,11 +323,13 @@ export default {
       this.autoRetrying = false
       this.retryCount = 0
       this.clearRetryTimer()
+      this.clearStreamConnectTimer()
       this.urlVersion = Date.now()
       this.showStream = false
       const self = this
       this.$nextTick(function () {
         self.showStream = true
+        self.startStreamConnectTimer()
       })
     },
     onStreamLoad () {
@@ -308,6 +338,7 @@ export default {
       this.autoRetrying = false
       this.retryCount = 0
       this.clearRetryTimer()
+      this.clearStreamConnectTimer()
       if (this.faceDetectionEnabled && this.selectedGate) {
         this.startDetectionSSE()
       }
@@ -337,6 +368,7 @@ export default {
         self.showStream = false
         self.$nextTick(function () {
           self.showStream = true
+          self.startStreamConnectTimer()
         })
       }, AUTO_RETRY_INTERVAL)
     },
@@ -344,6 +376,24 @@ export default {
       if (this.retryTimer) {
         clearTimeout(this.retryTimer)
         this.retryTimer = null
+      }
+    },
+    startStreamConnectTimer () {
+      this.clearStreamConnectTimer()
+      if (!this.selectedGate || !this.showStream) return
+      const self = this
+      this.streamConnectTimer = setTimeout(function () {
+        if (!self.connected && self.showStream) {
+          console.warn('[VideoStream] connection timeout (' + STREAM_CONNECT_TIMEOUT + 'ms), retrying...')
+          self.streamConnectTimer = null
+          self.onStreamError()
+        }
+      }, STREAM_CONNECT_TIMEOUT)
+    },
+    clearStreamConnectTimer () {
+      if (this.streamConnectTimer) {
+        clearTimeout(this.streamConnectTimer)
+        this.streamConnectTimer = null
       }
     },
     startDetectionSSE () {
@@ -735,6 +785,7 @@ export default {
     cleanup () {
       this.showStream = false
       this.clearRetryTimer()
+      this.clearStreamConnectTimer()
       this.stopDetectionSSE()
       this.stopDangerDistanceSSE()
       this.clearBoxExpire()
@@ -768,7 +819,7 @@ export default {
         const data = await res.json()
         if (data.code === 0 && data.data && data.data.latency_ms !== undefined) {
           this.latencyMs = data.data.latency_ms
-          if (data.data.fps) this.currentFps = data.data.fps
+          if (data.data.fps !== undefined) this.currentFps = data.data.fps
           if (data.data.latency_ms >= 0 && !this.connected) this.connected = true
           if (data.data.latency_ms < 0 && this.connected) this.connected = false
         }
@@ -846,13 +897,44 @@ export default {
 .viewer-header {
   display: flex;
   align-items: center;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--dark-border);
 }
 .gate-select {
   position: relative;
-  width: 100%;
+  max-width: 280px;
+  min-width: 160px;
+  flex: 1 1 auto;
+  order: 1;
+}
+.status-indicator {
+  order: 2;
+}
+.calib-btn {
+  order: 3;
+}
+
+@media (max-width: 767px) {
+  .status-indicator {
+    order: 3;
+    flex: 0 0 100%;
+    justify-content: center;
+  }
+  .calib-btn {
+    order: 2;
+  }
+}
+
+@media (min-width: 768px) {
+  .gate-select {
+    flex: 1 1 auto;
+  }
+  .status-indicator {
+    order: 2;
+    flex: 0 1 auto;
+  }
 }
 .select-trigger {
   display: flex;
@@ -995,14 +1077,13 @@ export default {
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
   font-size: 11px;
   color: var(--dark-text-secondary);
   white-space: nowrap;
-  padding: 0 4px;
-  width: 58px;
-  justify-content: center;
+  padding: 0 6px;
+  min-width: auto;
 }
 
 .status-dot {
@@ -1051,6 +1132,15 @@ export default {
 .latency-bad {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+}
+.fps-tag {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 2px;
+  font-weight: 500;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
 }
 
 .calib-btn {
@@ -1165,6 +1255,14 @@ export default {
 
 .calib-far {
   color: #f59e0b;
+}
+.fps-tag {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  margin-left: 4px;
 }
 
 </style>

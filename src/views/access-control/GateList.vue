@@ -1,5 +1,5 @@
 <template>
-  <app-layout page-title="门禁终端管理">
+  <app-layout page-title="门禁终端管理" :no-scroll="true">
     <div class="dark-card">
       <div class="filter-row">
         <div class="filter-select" :class="{ 'is-open': showLevelDropdown }">
@@ -43,34 +43,46 @@
         </button>
       </div>
     </div>
-    <div class="dark-card">
-      <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
-        <van-list v-model="loading" :finished="finished" finished-text="没有更多了" @load="loadData">
-          <van-cell v-for="item in gateList" :key="item.id" is-link @click="goToMonitor(item)">
-            <template #title>
-              <div class="cell-title-row">
-                <span class="cell-status">
-                  <span class="status-dot" :class="statusDotClass(item)"></span>
-                  <span class="status-label">{{ displayStatusText(item) }}</span>
-                </span>
-                <span class="cell-name">{{ item.gate_name }}</span>
-                <span class="type-tag" :class="levelTagClass(item.gate_level)">{{ item.level_name || item.gate_level }}</span>
-              </div>
-            </template>
+    <div class="dark-card list-section">
+      <div class="list-content">
+        <van-cell v-for="item in gateList" :key="item.id" is-link @click="goToMonitor(item)">
+          <template #title>
+            <div class="cell-title-row">
+              <span class="cell-status">
+                <span class="status-dot" :class="statusDotClass(item)"></span>
+                <span class="status-label">{{ displayStatusText(item) }}</span>
+              </span>
+              <span class="cell-name">{{ item.gate_name }}</span>
+              <span class="type-tag" :class="levelTagClass(item.gate_level)">{{ item.level_name || item.gate_level }}</span>
+            </div>
+          </template>
 
-            <template #right-icon>
-              <button class="edit-btn" @click.stop="openEditDialog(item)">
-                <i class="el-icon-edit"></i>
-                <span>编辑</span>
-              </button>
-              <button class="delete-btn" @click.stop="onDelete(item)">
-                <i class="el-icon-delete"></i>
-                <span>删除</span>
-              </button>
-            </template>
-          </van-cell>
-        </van-list>
-      </van-pull-refresh>
+          <template #right-icon>
+            <button class="edit-btn" @click.stop="openEditDialog(item)">
+              <i class="el-icon-edit"></i>
+              <span>编辑</span>
+            </button>
+            <button class="delete-btn" @click.stop="onDelete(item)">
+              <i class="el-icon-delete"></i>
+              <span>删除</span>
+            </button>
+          </template>
+        </van-cell>
+        <div v-if="gateList.length === 0 && !loading" class="empty-state">
+          <i class="el-icon-office-building" style="font-size:48px;color:var(--dark-text-muted)"></i>
+          <p style="color:var(--dark-text-muted);margin-top:12px">暂无门禁终端</p>
+        </div>
+      </div>
+      <div class="pagination-wrapper">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :current-page="page"
+          :page-size="perPage"
+          :total="total"
+          @current-change="onPageChange"
+        />
+      </div>
     </div>
 
     <el-dialog :visible.sync="showDialog" :title="dialogTitle" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetForm">
@@ -118,9 +130,9 @@ export default {
     return {
       gateList: [],
       loading: false,
-      finished: false,
-      refreshing: false,
       page: 1,
+      perPage: 20,
+      total: 0,
       filterLevel: '',
       filterStatus: '',
       showLevelDropdown: false,
@@ -152,6 +164,7 @@ export default {
   },
   mounted () {
     document.addEventListener('click', this.closeDropdowns)
+    this.loadData()
     this.pollTimer = setInterval(this.silentRefresh, 15000)
   },
   beforeDestroy () {
@@ -188,35 +201,30 @@ export default {
       this.onRefresh()
     },
     async loadData () {
-      if (this._loading) return
-      this._loading = true
       try {
+        this.loading = true
         const levelMap = { 社区大门: 'community_gate', 单元门: 'unit_door', 危险防护区域: 'dangerous_area' }
         const statusMap = { 未绑定: 'unbound', 在线: 'online', 离线: 'offline', 维护中: 'maintenance' }
-        const params = { page: this.page, per_page: 20 }
+        const params = { page: this.page, per_page: this.perPage }
         if (this.filterLevel && this.filterLevel !== '全部') params.gate_level = levelMap[this.filterLevel]
         if (this.filterStatus && this.filterStatus !== '全部') params.status = statusMap[this.filterStatus]
         const res = await getGateList(params)
         if (res.code === 0 && res.data) {
-          const items = res.data.items || []
-          if (this.page === 1) this.gateList = items
-          else this.gateList.push(...items)
-          this.finished = this.gateList.length >= res.data.total
-          this.page++
+          this.gateList = res.data.items || []
+          this.total = res.data.total || 0
         }
       } catch (e) {
-        this.finished = true
+        console.error(e)
       }
-      this._loading = false
       this.loading = false
-      this.refreshing = false
     },
-    onRefresh () { this.page = 1; this.finished = false; this.gateList = []; this.loading = true; this.loadData() },
+    onPageChange (newPage) {
+      this.page = newPage
+      this.loadData()
+    },
+    onRefresh () { this.page = 1; this.loadData() },
     silentRefresh () {
       this.page = 1
-      this.finished = false
-      this.loading = false
-      this.refreshing = false
       this.loadData()
     },
     goToMonitor (item) {
@@ -227,13 +235,17 @@ export default {
       return map[level] || ''
     },
     displayStatusText (item) {
-      if (!item.bound) return '未绑定'
+      const isBound = item.bound === true || item.bound === 'true' || item.bound === 1
+      if (!isBound) return '未绑定'
       const map = { online: '在线', offline: '离线', maintenance: '维护中' }
       return map[item.status] || item.status
     },
     statusDotClass (item) {
-      if (!item.bound) return 'dot-unbound'
-      return item.status === 'online' ? 'dot-online' : 'dot-offline'
+      const isBound = item.bound === true || item.bound === 'true' || item.bound === 1
+      if (!isBound) return 'dot-unbound'
+      if (item.status === 'online') return 'dot-online'
+      if (item.status === 'maintenance') return 'dot-maintenance'
+      return 'dot-offline'
     },
     onDelete (item) {
       this.$confirm('确定要删除「' + item.gate_name + '」终端吗？', '确认删除', {
@@ -316,6 +328,35 @@ export default {
   border: 1px solid var(--dark-border);
   padding: 20px;
   margin-bottom: 16px;
+}
+
+.list-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.list-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.pagination-wrapper {
+  padding-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 200px;
 }
 
 .filter-spacer {
@@ -544,8 +585,13 @@ export default {
 }
 
 .dot-unbound {
-  background: #9ca3af;
-  box-shadow: 0 0 6px rgba(156, 163, 175, 0.3);
+  background: #9ca3af !important;
+  box-shadow: 0 0 6px rgba(156, 163, 175, 0.3) !important;
+}
+
+.dot-maintenance {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
 }
 
 .status-label {
@@ -632,6 +678,35 @@ export default {
   background: rgba(239, 68, 68, 0.1);
   border-color: #ef4444;
   color: #ef4444;
+}
+</style>
+
+<style>
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next,
+.el-pagination.is-background .el-pager li {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: var(--dark-text-secondary) !important;
+}
+
+.el-pagination.is-background .btn-prev:hover,
+.el-pagination.is-background .btn-next:hover,
+.el-pagination.is-background .el-pager li:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--dark-text) !important;
+}
+
+.el-pagination.is-background .el-pager li.active {
+  background: var(--dark-accent) !important;
+  border-color: var(--dark-accent) !important;
+  color: #fff !important;
+}
+
+.el-pagination.is-background .btn-prev:disabled,
+.el-pagination.is-background .btn-next:disabled {
+  background: rgba(255, 255, 255, 0.02) !important;
+  color: var(--dark-text-dim) !important;
 }
 </style>
 

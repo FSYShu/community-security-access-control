@@ -1,5 +1,5 @@
 <template>
-  <app-layout page-title="历史视频回放">
+  <app-layout page-title="历史视频回放" :no-scroll="true">
     <van-loading v-if="loading" class="page-loading" size="24px" vertical>加载中...</van-loading>
     <div v-else-if="loadError" class="page-loading">
       <i class="el-icon-warning-outline" style="font-size:40px;color:var(--dark-orange)"></i>
@@ -9,36 +9,51 @@
     <van-empty v-else-if="recordings.length === 0" description="暂无历史录像" />
 
     <div v-else class="playback-layout">
-      <div class="playback-list">
-        <div class="group-mode-tabs">
-          <div class="mode-tab" :class="{ 'is-active': groupMode === 'location' }" @click="groupMode = 'location'">按位置</div>
-          <div class="mode-tab" :class="{ 'is-active': groupMode === 'date' }" @click="groupMode = 'date'">按日期</div>
-        </div>
-        <div v-for="(group, idx) in groupedRecordings" :key="idx" class="record-group">
-          <div class="group-header" @click="toggleGroup(idx)">
-            <span class="group-name"><i class="el-icon-arrow-right group-arrow" :class="{ 'is-expanded': expandedGroups[idx] }"></i>{{ group.label }}</span>
-            <span class="group-count">{{ group.files.length }}段录像</span>
+      <div class="playback-left">
+        <div class="playback-controls">
+          <div class="group-mode-tabs">
+            <div class="mode-tab" :class="{ 'is-active': groupMode === 'location' }" @click="groupMode = 'location'">按位置</div>
+            <div class="mode-tab" :class="{ 'is-active': groupMode === 'date' }" @click="groupMode = 'date'">按日期</div>
           </div>
-          <div class="card-grid" v-show="expandedGroups[idx]">
-            <div
-              v-for="file in group.files"
-              :key="file.filename"
-              class="video-card"
-              :class="{ 'is-active': currentFile && currentFile.filename === file.filename }"
-              @click="playRecording(file)"
-            >
-              <div class="card-icon">
-                <i class="el-icon-video-camera"></i>
+          <div class="filter-bar">
+            <div class="custom-select" :class="{ 'is-open': showFilterDrop }">
+              <div class="select-trigger" @click="showFilterDrop = !showFilterDrop">
+                <span>{{ selectedFilterLabel }}</span>
+                <i class="el-icon-arrow-down" :class="{ 'is-reverse': showFilterDrop }"></i>
               </div>
-              <div class="card-info">
-                <span class="card-time">{{ file._gate_name }} {{ file.datetime }}</span>
-                <span class="card-meta">{{ file.duration_text }} | {{ file.file_size_text }}</span>
+              <div v-if="showFilterDrop" class="select-dropdown">
+                <div class="select-option" :class="{ 'is-active': selectedFilter === '' }" @click="selectFilter('')">全部</div>
+                <div v-for="opt in filterOptions" :key="opt.value" class="select-option" :class="{ 'is-active': selectedFilter === opt.value }" @click="selectFilter(opt.value)">{{ opt.label }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="playback-list">
+          <div v-for="(group, idx) in filteredGroups" :key="idx" class="record-group">
+            <div class="group-header" @click="toggleGroup(idx)">
+              <span class="group-name"><i class="el-icon-arrow-right group-arrow" :class="{ 'is-expanded': expandedGroups[idx] }"></i>{{ group.label }}</span>
+              <span class="group-count">{{ group.files.length }}段录像</span>
+            </div>
+            <div class="card-grid" v-show="expandedGroups[idx]">
+              <div
+                v-for="file in group.files"
+                :key="file.filename"
+                class="video-card"
+                :class="{ 'is-active': currentFile && currentFile.filename === file.filename }"
+                @click="playRecording(file)"
+              >
+                <div class="card-icon">
+                  <i class="el-icon-video-camera"></i>
+                </div>
+                <div class="card-info">
+                  <span class="card-time">{{ file._gate_name }} {{ file.datetime }}</span>
+                  <span class="card-meta">{{ file.duration_text }} | {{ file.file_size_text }}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-
       <div class="playback-player">
         <div v-if="!currentFile" class="player-empty">
           <i class="el-icon-video-play" style="font-size:48px;color:var(--dark-text-dim)"></i>
@@ -76,6 +91,8 @@ export default {
       loadError: false,
       recordings: [],
       groupMode: 'location',
+      selectedFilter: '',
+      showFilterDrop: false,
       currentFile: null,
       flvPlayer: null,
       playerError: '',
@@ -83,6 +100,21 @@ export default {
     }
   },
   computed: {
+    filterOptions () {
+      return this.groupedRecordings.map(function (g) {
+        return { label: g.label, value: g.label }
+      })
+    },
+    selectedFilterLabel () {
+      if (!this.selectedFilter) return '全部类别'
+      return this.selectedFilter
+    },
+    filteredGroups () {
+      if (!this.selectedFilter) return this.groupedRecordings
+      return this.groupedRecordings.filter(function (g) {
+        return g.label === this.selectedFilter
+      }.bind(this))
+    },
     groupedRecordings () {
       if (this.groupMode === 'location') {
         return this.recordings.map(function (g) {
@@ -113,12 +145,19 @@ export default {
         groups[idx] = true
       })
       this.expandedGroups = groups
+    },
+    groupMode () {
+      this.selectedFilter = ''
     }
   },
   beforeDestroy () {
     this.stopPlayback()
   },
   methods: {
+    selectFilter (value) {
+      this.selectedFilter = value
+      this.showFilterDrop = false
+    },
     async fetchRecordings () {
       this.loading = true
       try {
@@ -223,17 +262,29 @@ export default {
 .playback-layout {
   display: flex;
   gap: 16px;
-  height: calc(100vh - 140px);
+  flex: 1;
   overflow: hidden;
+  min-height: 0;
+}
+
+.playback-left {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  order: 1;
+}
+
+.playback-controls {
+  flex-shrink: 0;
+  margin-bottom: 14px;
 }
 
 .playback-list {
-  width: 340px;
-  flex-shrink: 0;
+  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;
-
 }
 
 .playback-list::-webkit-scrollbar {
@@ -281,6 +332,75 @@ export default {
   color: #fff;
 }
 
+.filter-bar {
+  margin-bottom: 14px;
+}
+
+.custom-select {
+  position: relative;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--dark-text);
+  transition: border-color 0.2s;
+}
+
+.custom-select.is-open .select-trigger {
+  border-color: var(--dark-accent-light);
+}
+
+.select-trigger i {
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+  transition: transform 0.2s;
+}
+
+.select-trigger i.is-reverse {
+  transform: rotate(180deg);
+}
+
+.select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #0A0A0A;
+  border: 1px solid var(--dark-border);
+  border-radius: 8px;
+  padding: 4px 0;
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.select-option {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.select-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dark-text);
+}
+
+.select-option.is-active {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--dark-accent-light);
+}
+
 .record-group {
   margin-bottom: 16px;
 }
@@ -295,9 +415,14 @@ export default {
 }
 
 .group-name {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--dark-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .group-arrow {
@@ -385,6 +510,9 @@ export default {
 .card-meta {
   font-size: 12px;
   color: var(--dark-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .retry-btn {
@@ -414,6 +542,7 @@ export default {
   overflow: hidden;
   position: relative;
   min-height: 0;
+  order: 2;
 }
 
 .player-empty {
@@ -443,11 +572,12 @@ export default {
   justify-content: center;
   padding: 8px;
   background: #000;
+  min-height: 0;
 }
 
 .player-video {
   width: 100%;
-  max-height: 100%;
+  height: 100%;
   object-fit: contain;
   background: #000;
 }
@@ -466,27 +596,53 @@ export default {
   margin-top: 8px;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .playback-layout {
     flex-direction: column;
-    height: auto;
-    overflow: visible;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .playback-left {
+    order: 2;
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .playback-controls {
+    flex-shrink: 0;
+    padding: 8px 0;
+    background: #0A0A0A;
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
 
   .playback-player {
-    order: -1;
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    min-height: 220px;
-    max-height: 40vh;
+    order: 1;
+    width: 100%;
+    flex: none;
     flex-shrink: 0;
+    aspect-ratio: 4 / 3;
+  }
+
+  .group-mode-tabs {
+    margin-bottom: 8px;
+  }
+
+  .filter-bar {
+    margin-bottom: 0;
   }
 
   .playback-list {
-    width: 100%;
-    max-height: none;
-    overflow-y: visible;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
   }
 
   .card-grid {
@@ -494,23 +650,11 @@ export default {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
   }
+}
 
-  .video-card {
-    padding: 10px;
-  }
-
-  .card-icon {
-    width: 28px;
-    height: 28px;
-    font-size: 13px;
-  }
-
-  .card-time {
-    font-size: 12px;
-  }
-
-  .card-meta {
-    font-size: 11px;
+@media (max-width: 1024px) {
+  .card-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

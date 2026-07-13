@@ -270,6 +270,7 @@ export default {
   align-items: center;
   gap: 14px;
   overflow: hidden;
+  transition: padding 0.3s ease, gap 0.3s ease;
 }
 
 .stat-card-inner::after {
@@ -297,6 +298,7 @@ export default {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: width 0.3s ease, height 0.3s ease;
 }
 
 .stat-icon-indigo {
@@ -332,12 +334,15 @@ export default {
   letter-spacing: -0.02em;
   line-height: 1.2;
   color: var(--dark-text);
+  white-space: nowrap;
+  transition: font-size 0.3s ease;
 }
 
 .stat-label {
   font-size: 12px;
   color: var(--dark-text-secondary);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .stat-arrow {
@@ -431,6 +436,9 @@ export default {
 .alarm-meta {
   font-size: 11px;
   color: var(--dark-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .alarm-badge {
@@ -594,6 +602,26 @@ export default {
 @media (max-width: 1024px) {
   .stats-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .stat-card-inner {
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .stat-icon-wrap {
+    width: 36px;
+    height: 36px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 600px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
