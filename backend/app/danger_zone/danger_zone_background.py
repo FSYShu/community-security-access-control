@@ -1,11 +1,13 @@
 """
 禁区入侵后台检测服务
 持续监控所有活跃禁区关联的摄像头，自动检测人员并触发告警
-通过RTMP拉流获取视频帧，使用FFmpeg子进程解码
+使用cv2.VideoCapture独立拉流，避免与前端视频流共享FFmpeg stdout导致冲突
 """
 import logging
 import threading
 import time
+
+import cv2
 
 from flask import current_app
 
@@ -13,7 +15,6 @@ from app import db
 from app.models.danger_zone import DangerZone
 from app.models.gate import Gate
 from app.danger_zone.danger_zone_detector import process_frame_for_zone
-from core.rtmp_relay import start_rtmp_pull, read_cv2_frame_from_pull, stop_rtmp_pull
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,9 @@ _detect_thread = None
 _detect_stop_event = threading.Event()
 DETECT_LOOP_INTERVAL = 2.0
 MAX_WIDTH = 480
-_pull_entries = {}
+_capture_entries = {}
+_CAPTURE_OPEN_TIMEOUT = 15
+_CAPTURE_RECONNECT_INTERVAL = 5
 
 
 def start_danger_zone_detector(app):
@@ -54,12 +57,12 @@ def start_danger_zone_detector(app):
 
 def stop_danger_zone_detector():
     _detect_stop_event.set()
-    for url, entry in list(_pull_entries.items()):
+    for url, cap in list(_capture_entries.items()):
         try:
-            stop_rtmp_pull(url)
+            cap.release()
         except Exception:
             pass
-    _pull_entries.clear()
+    _capture_entries.clear()
     logger.info('Danger zone detector stopping...')
 
 
@@ -70,21 +73,52 @@ def _get_rtmp_url(push_key):
     return 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, push_key)
 
 
-def _get_pull_entry(rtmp_url):
-    if rtmp_url in _pull_entries:
-        entry = _pull_entries[rtmp_url]
-        if entry and entry['process'].poll() is None:
-            return entry
+def _open_capture_with_timeout(stream_url, timeout=_CAPTURE_OPEN_TIMEOUT):
+    result = {'cap': None}
+    finished = threading.Event()
+    abandoned = threading.Event()
+
+    def try_open():
+        cap = None
         try:
-            stop_rtmp_pull(rtmp_url)
+            candidate = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+            if candidate.isOpened():
+                cap = candidate
+            else:
+                candidate.release()
+        except Exception:
+            logger.exception('Failed to open RTMP stream: %s', stream_url)
+
+        if abandoned.is_set():
+            if cap is not None:
+                cap.release()
+        else:
+            result['cap'] = cap
+        finished.set()
+
+    threading.Thread(target=try_open, daemon=True).start()
+    if not finished.wait(timeout=timeout):
+        abandoned.set()
+        logger.warning('Timed out opening RTMP stream: %s', stream_url)
+        return None
+    return result['cap']
+
+
+def _get_capture(rtmp_url):
+    if rtmp_url in _capture_entries:
+        cap = _capture_entries[rtmp_url]
+        if cap is not None and cap.isOpened():
+            return cap
+        try:
+            cap.release()
         except Exception:
             pass
-        del _pull_entries[rtmp_url]
+        del _capture_entries[rtmp_url]
 
-    entry = start_rtmp_pull(rtmp_url, fps=5, max_width=MAX_WIDTH)
-    if entry is not None:
-        _pull_entries[rtmp_url] = entry
-    return entry
+    cap = _open_capture_with_timeout(rtmp_url)
+    if cap is not None:
+        _capture_entries[rtmp_url] = cap
+    return cap
 
 
 def _detection_loop(app):
@@ -130,14 +164,19 @@ def _run_detection_cycle():
                 continue
 
             rtmp_url = _get_rtmp_url(gate.push_key)
-            entry = _get_pull_entry(rtmp_url)
-            if entry is None:
-                logger.info('Zone {} gate {} cannot start RTMP pull'.format(zone.id, gate_id))
+            cap = _get_capture(rtmp_url)
+            if cap is None:
+                logger.info('Zone {} gate {} cannot open RTMP capture'.format(zone.id, gate_id))
                 continue
 
-            ok, frame = read_cv2_frame_from_pull(entry)
+            ok, frame = cap.read()
             if not ok or frame is None:
-                logger.info('Zone {} gate {} no frame from RTMP pull'.format(zone.id, gate_id))
+                logger.info('Zone {} gate {} no frame from capture, will reconnect'.format(zone.id, gate_id))
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+                _capture_entries.pop(rtmp_url, None)
                 continue
 
             logger.info('Zone {} gate {} got frame {}x{} from RTMP'.format(zone.id, gate_id, frame.shape[1], frame.shape[0]))

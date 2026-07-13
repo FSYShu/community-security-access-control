@@ -100,7 +100,7 @@ class DeviceTamperMonitor:
     def _monitor_gate(self, gate_id, push_key, worker_stop, worker):
         config = self.app.config
         stream_url = 'rtmp://{}:{}/live/{}'.format(
-            config.get('RTMP_SERVER_HOST', '127.0.0.1'),
+            config.get('RTMP_SERVER_HOST', '20.214.147.223'),
             config.get('RTMP_SERVER_PORT', 9090),
             push_key,
         )

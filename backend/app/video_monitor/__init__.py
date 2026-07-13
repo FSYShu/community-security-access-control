@@ -172,6 +172,19 @@ def generate_cv2_frames_ffmpeg(stream_url, fps=10, max_width=640):
 
 
 
+@video_monitor_bp.route('/gate-stop-push', methods=['POST'])
+@limiter.exempt
+def gate_stop_push():
+    """门禁端关闭时通知后端停止FFmpeg推流进程"""
+    data = flask_request.get_json(force=True, silent=True)
+    push_key = data.get('push_key') if data else None
+    if push_key:
+        from core.rtmp_relay import stop_ffmpeg
+        stop_ffmpeg(push_key)
+        logger.info('Gate stop push notification received for key: {}'.format(push_key))
+    return jsonify({'code': 0, 'message': 'ok'})
+
+
 @video_monitor_bp.route('/gate-push-frame', methods=['POST'])
 @limiter.exempt
 def gate_push_frame():
@@ -481,6 +494,11 @@ def video_feed_by_gate_with_dangerous_behavior(gate_id):
     config = current_app.config
     app = current_app._get_current_object()
     monitor = app.extensions.get('device_tamper_monitor')
+    stream_url = 'rtmp://{}:{}/live/{}'.format(
+        config.get('RTMP_SERVER_HOST', '20.214.147.223'),
+        config.get('RTMP_SERVER_PORT', 9090),
+        gate.push_key,
+    )
     try:
         from .dangerous_behavior_stream import generate_frames_with_dangerous_behavior
         generator = generate_frames_with_dangerous_behavior(
@@ -489,6 +507,7 @@ def video_feed_by_gate_with_dangerous_behavior(gate_id):
             gate_id=gate.id,
             prototxt_path=config.get('TAILGATING_PROTOTXT_PATH'),
             model_path=config.get('TAILGATING_MODEL_PATH'),
+            stream_url=stream_url,
             max_width=config.get('VIDEO_MAX_WIDTH', 640),
             confidence=config.get('TAILGATING_CONFIDENCE', 0.25),
             detection_interval=config.get('TAILGATING_DETECTION_INTERVAL', 0.10),
@@ -500,6 +519,7 @@ def video_feed_by_gate_with_dangerous_behavior(gate_id):
             status_hold_seconds=config.get('TAILGATING_STATUS_HOLD_SECONDS', 3.0),
             alarm_cooldown=config.get('TAILGATING_ALARM_COOLDOWN', 60),
             offline_timeout=config.get('DEVICE_OFFLINE_TIMEOUT', 5),
+            open_timeout=config.get('DEVICE_STREAM_OPEN_TIMEOUT', 20),
         )
         return Response(generator, mimetype='multipart/x-mixed-replace; boundary=frame')
     except Exception:
