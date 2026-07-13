@@ -1,7 +1,7 @@
 <template>
   <div class="pass-result" :class="resultClass">
     <div class="result-icon">
-      <van-icon :name="passed ? 'checked' : 'cross'" size="64" />
+      <i :class="passed ? 'el-icon-circle-check' : 'el-icon-close'" style="font-size:64px"></i>
     </div>
     <div class="result-title">{{ passed ? '认证通过' : '认证失败' }}</div>
     <div v-if="!passed && reason" class="result-reason">{{ reason }}</div>

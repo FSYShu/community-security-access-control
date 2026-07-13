@@ -1,7 +1,7 @@
 var STORAGE_KEY = 'gate_bound_info'
 
 function loadFromStorage () {
-  var result = { gateId: '', gateName: '', pushKey: '', gateLevel: '' }
+  var result = { gateId: '', gateName: '', pushKey: '', gateLevel: '', cameraDeviceId: '', cameraLabel: '' }
   try {
     var data = localStorage.getItem(STORAGE_KEY)
     if (data) {
@@ -10,6 +10,8 @@ function loadFromStorage () {
       result.gateName = parsed.gateName || ''
       result.pushKey = parsed.pushKey || ''
       result.gateLevel = parsed.gateLevel || ''
+      result.cameraDeviceId = parsed.cameraDeviceId || ''
+      result.cameraLabel = parsed.cameraLabel || ''
     }
   } catch (e) {
     // ignore
@@ -27,7 +29,21 @@ var mutations = {
       gateId: state.gateId,
       gateName: state.gateName,
       pushKey: state.pushKey,
-      gateLevel: state.gateLevel
+      gateLevel: state.gateLevel,
+      cameraDeviceId: state.cameraDeviceId,
+      cameraLabel: state.cameraLabel
+    }))
+  },
+  SET_CAMERA (state, payload) {
+    state.cameraDeviceId = payload.deviceId || ''
+    state.cameraLabel = payload.label || ''
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      gateId: state.gateId,
+      gateName: state.gateName,
+      pushKey: state.pushKey,
+      gateLevel: state.gateLevel,
+      cameraDeviceId: state.cameraDeviceId,
+      cameraLabel: state.cameraLabel
     }))
   },
   CLEAR_GATE (state) {
@@ -35,6 +51,8 @@ var mutations = {
     state.gateName = ''
     state.pushKey = ''
     state.gateLevel = ''
+    state.cameraDeviceId = ''
+    state.cameraLabel = ''
     localStorage.removeItem(STORAGE_KEY)
   }
 }
@@ -44,7 +62,9 @@ var getters = {
   gateId: function (state) { return state.gateId },
   gateName: function (state) { return state.gateName },
   pushKey: function (state) { return state.pushKey },
-  gateLevel: function (state) { return state.gateLevel }
+  gateLevel: function (state) { return state.gateLevel },
+  cameraDeviceId: function (state) { return state.cameraDeviceId },
+  cameraLabel: function (state) { return state.cameraLabel }
 }
 
 export default {

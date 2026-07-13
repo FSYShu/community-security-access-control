@@ -6,12 +6,12 @@
       <van-loading size="24px" color="#6366f1">摄像头启动中...</van-loading>
     </div>
     <div v-if="cameraError" class="camera-error">
-      <van-icon name="warning-o" size="40" color="#ef4444" />
+      <i class="el-icon-warning-outline" style="font-size:40px;color:#ef4444"></i>
       <p class="error-msg">{{ cameraError }}</p>
       <button class="gate-btn gate-btn-outline" style="width:auto;padding:8px 16px;margin-top:8px;" @click="startCamera">重试</button>
     </div>
     <div v-if="cameraReady && showSwitch" class="camera-switch" @click="switchCamera">
-      <van-icon name="replay" size="20" />
+      <i class="el-icon-refresh" style="font-size:20px"></i>
     </div>
   </div>
 </template>
@@ -31,6 +31,10 @@ export default {
       default: true
     },
     pushKey: {
+      type: String,
+      default: ''
+    },
+    deviceId: {
       type: String,
       default: ''
     }
@@ -55,9 +59,13 @@ export default {
       this.cameraError = ''
       this.cameraReady = false
       try {
-        this.stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: this.currentFacing, width: { ideal: 640 }, height: { ideal: 480 } }
-        })
+        var constraints = { video: { width: { ideal: 640 }, height: { ideal: 480 } } }
+        if (this.deviceId) {
+          constraints.video.deviceId = { exact: this.deviceId }
+        } else {
+          constraints.video.facingMode = this.currentFacing
+        }
+        this.stream = await navigator.mediaDevices.getUserMedia(constraints)
         this.$refs.video.srcObject = this.stream
         await this.$refs.video.play()
         this.cameraReady = true

@@ -1,7 +1,7 @@
 <template>
   <div class="gate-page visitor-apply-page">
     <div class="gate-header">
-      <van-icon name="arrow-left" size="20" color="#9ca3af" @click="$router.push('/idle')" />
+      <i class="el-icon-arrow-left" style="font-size:20px;color:#9ca3af" @click="$router.push('/idle')"></i>
       <span class="gate-header-title">访客临时授权申请</span>
       <span style="width:20px;"></span>
     </div>
@@ -29,9 +29,9 @@
 
         <div class="form-item">
           <label class="form-label">访客人脸照片</label>
-          <face-camera ref="camera" :show-switch="true" style="max-width:320px;margin:0 auto;" />
+          <face-camera ref="camera" :show-switch="true" :device-id="cameraDeviceId" style="max-width:320px;margin:0 auto;" />
           <button class="gate-btn gate-btn-outline" style="margin-top:8px;" @click="captureFace">
-            <van-icon name="photograph" /> 拍照采集
+            <i class="el-icon-camera"></i> 拍照采集
           </button>
           <p v-if="faceCaptured" class="capture-hint">已采集人脸照片</p>
         </div>
@@ -78,6 +78,7 @@ export default {
     }
   },
   computed: {
+    cameraDeviceId () { return this.$store.getters['gate/cameraDeviceId'] },
     canSubmit () {
       return this.form.visitorName && this.form.ownerName && this.form.gateLevels.length > 0 && this.form.startTime && this.form.endTime && this.faceCaptured
     }
