@@ -33,6 +33,15 @@
           <span>危险行为检测</span>
           <i :class="dangerousBehaviorEnabled ? 'el-icon-check' : 'el-icon-close'" class="detect-indicator"></i>
         </button>
+        <button
+          class="detect-btn"
+          :class="{ 'is-on': dangerDistanceEnabled, 'is-off': !dangerDistanceEnabled }"
+          @click="toggleDangerDistance"
+        >
+          <i class="el-icon-aim"></i>
+          <span>距离检测</span>
+          <i :class="dangerDistanceEnabled ? 'el-icon-check' : 'el-icon-close'" class="detect-indicator"></i>
+        </button>
         <button class="refresh-btn" :class="{ 'is-loading': refreshing }" @click="handleRefresh">
           <i class="el-icon-refresh"></i>
           <span>刷新</span>
@@ -47,6 +56,7 @@
         :gate-list="gateList"
         :face-detection-enabled="faceDetectionEnabled"
         :dangerous-behavior-enabled="dangerousBehaviorEnabled"
+        :danger-distance-enabled="dangerDistanceEnabled"
         :initial-gate-id="initialGateId"
       />
     </div>
@@ -62,6 +72,7 @@
           :gate-list="gateList"
           :face-detection-enabled="faceDetectionEnabled"
           :dangerous-behavior-enabled="dangerousBehaviorEnabled"
+          :danger-distance-enabled="dangerDistanceEnabled"
           :initial-gate-id="index === 1 ? initialGateId : ''"
         />
       </div>
@@ -85,6 +96,7 @@ export default {
       gateList: [],
       faceDetectionEnabled: false,
       dangerousBehaviorEnabled: false,
+      dangerDistanceEnabled: false,
       refreshing: false,
       initialGateId: '',
       pollTimer: null
@@ -131,6 +143,9 @@ export default {
     toggleFaceDetection () {
       this.faceDetectionEnabled = !this.faceDetectionEnabled
       if (this.faceDetectionEnabled) this.dangerousBehaviorEnabled = false
+      if (this.faceDetectionEnabled && this.dangerDistanceEnabled) {
+        this.dangerDistanceEnabled = false
+      }
       this.$message({
         message: this.faceDetectionEnabled ? '人脸检测已开启：绿色框=已注册人员，红色框=陌生人' : '人脸检测已关闭',
         type: this.faceDetectionEnabled ? 'success' : 'warning'
@@ -142,6 +157,16 @@ export default {
       this.$message({
         message: this.dangerousBehaviorEnabled ? '危险行为检测已开启' : '危险行为检测已关闭',
         type: this.dangerousBehaviorEnabled ? 'success' : 'warning'
+      })
+    },
+    toggleDangerDistance () {
+      this.dangerDistanceEnabled = !this.dangerDistanceEnabled
+      if (this.dangerDistanceEnabled && this.faceDetectionEnabled) {
+        this.faceDetectionEnabled = false
+      }
+      this.$message({
+        message: this.dangerDistanceEnabled ? '距离检测已开启：红色框=入侵(低于安全距离)，橙色框=安全距离外' : '距离检测已关闭',
+        type: this.dangerDistanceEnabled ? 'success' : 'warning'
       })
     },
     handleRefresh () {
@@ -217,19 +242,21 @@ export default {
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .detect-btn {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 7px 12px;
+  padding: 7px 10px;
   background: rgba(255, 255, 255, 0.04);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: background 0.2s, color 0.2s, border-color 0.2s;
+  white-space: nowrap;
 }
 
 .detect-btn.is-on {
