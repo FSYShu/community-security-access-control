@@ -114,7 +114,7 @@ def generate_daily_report(report_date, replace=False):
         )
         report.workflow_source = result['workflow_source']
         report.generate_status = 'generated'
-        report.generated_at = datetime.utcnow().isoformat()
+        report.generated_at = datetime.now(_CST).isoformat()
         db.session.add(report)
         db.session.commit()
         return report

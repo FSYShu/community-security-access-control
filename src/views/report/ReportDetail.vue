@@ -5,7 +5,7 @@
         <div>
           <span class="date-label">{{ report.report_date }}</span>
           <h2>社区安防日报</h2>
-          <p>{{ sourceLabel(report.workflow_source) }} · {{ report.generated_at || '刚刚生成' }}</p>
+          <p>{{ sourceLabel(report.workflow_source) }} · {{ formatTime(report.generated_at) || '刚刚生成' }}</p>
         </div>
         <div class="risk-score" :class="`risk-${report.risk_level || 'low'}`">
           <strong>{{ report.risk_score || 0 }}</strong>
@@ -58,31 +58,12 @@
         </div>
       </section>
 
-      <div class="report-actions">
-        <van-button
-          icon="replay"
-          size="small"
-          :loading="regenerating"
-          :disabled="regenerating || deleting"
-          loading-text="生成中..."
-          @click="onRegenerate"
-        >重新生成</van-button>
-        <van-button
-          type="danger"
-          icon="delete"
-          size="small"
-          :loading="deleting"
-          :disabled="regenerating || deleting"
-          @click="onDelete"
-        >删除日报</van-button>
-      </div>
     </div>
   </app-layout>
 </template>
 
 <script>
-import { Dialog } from 'vant'
-import { getReportDetail, regenerateReport, deleteReport } from '@/api/property'
+import { getReportDetail } from '@/api/property'
 import ReportCharts from '@/components/report/ReportCharts'
 
 export default {
@@ -94,9 +75,7 @@ export default {
       passStats: {},
       alarmStats: {},
       abnormalEvents: [],
-      recommendations: [],
-      regenerating: false,
-      deleting: false
+      recommendations: []
     }
   },
   computed: {
@@ -124,40 +103,7 @@ export default {
         if (!e.__messageShown) this.$message.error(e.message || '日报加载失败')
       }
     },
-    async onRegenerate () {
-      if (this.regenerating || this.deleting || !this.report) return
-      this.regenerating = true
-      try {
-        const res = await regenerateReport(this.report.id)
-        if (res.code !== 0) throw new Error(res.message)
-        this.$message.success('日报已重新生成')
-        await this.loadDetail()
-      } catch (e) {
-        if (!e.__messageShown) this.$message.error(e.message || '重新生成失败')
-      } finally {
-        this.regenerating = false
-      }
-    },
-    onDelete () {
-      if (this.regenerating || this.deleting || !this.report) return
-      Dialog.confirm({
-        title: '确认删除',
-        message: '删除后不可恢复，确定删除这份日报吗？'
-      }).then(() => this.doDelete()).catch(() => {})
-    },
-    async doDelete () {
-      this.deleting = true
-      try {
-        const res = await deleteReport(this.report.id)
-        if (res.code !== 0) throw new Error(res.message)
-        this.$message.success('日报已删除')
-        this.$router.replace('/report')
-      } catch (e) {
-        if (!e.__messageShown) this.$message.error(e.message || '删除日报失败')
-      } finally {
-        this.deleting = false
-      }
-    },
+
     parseJson (value, fallback) {
       try { return JSON.parse(value || '') } catch (e) { return fallback }
     },
@@ -182,6 +128,10 @@ export default {
         danger_zone_intrusion: '危险区域入侵'
       }
       return labels[type] || type
+    },
+    formatTime (time) {
+      if (!time) return ''
+      return time.replace('T', ' ').substring(0, 19)
     }
   }
 }
@@ -254,11 +204,7 @@ export default {
 .event-row { display: grid; gap: 4px; }
 .event-row span { color: var(--dark-text-secondary); }
 .event-row small { color: var(--dark-text-secondary); }
-.report-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
+
 @media (max-width: 640px) {
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metrics div:nth-child(2) { border-right: 0; }
