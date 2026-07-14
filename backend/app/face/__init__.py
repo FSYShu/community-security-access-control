@@ -35,8 +35,11 @@ def get_face_list():
     per_page = request.args.get('per_page', 20, type=int)
     person_type = request.args.get('person_type', '')
     status = request.args.get('status', '')
+    keyword = request.args.get('keyword', '')
 
     query = FaceInfo.query
+    if keyword:
+        query = query.filter(FaceInfo.person_name.contains(keyword))
     if person_type:
         query = query.filter_by(person_type=person_type)
     if status:
