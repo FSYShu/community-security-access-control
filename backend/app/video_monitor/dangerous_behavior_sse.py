@@ -1,24 +1,194 @@
 """SSE event stream for dangerous behavior detection (tailgating + device tamper status)."""
 
+import ctypes
 import json
 import logging
 import math
 import os
+import shutil
+import tempfile
 import threading
 import time
+from datetime import datetime
 
 import cv2
 import numpy as np
 
+from app import db
+from app.models.alarm import AlarmEvent
+from core.alarm_dedup import alarm_write_transaction, has_pending_alarm
 from core.rtmp_relay import start_rtmp_pull, read_cv2_frame_from_pull, stop_rtmp_pull
 from core.shared_frame_store import get_frame_with_info as _get_shared_frame_with_info
-from .tailgating_stream import _opencv_compatible_path, _record_tailgating_alarm
-from .device_tamper_stream import _clear_alarm_states, _record_alarm, _placeholder
 from core.tailgating_detector import MobileNetPersonDetector, TailgatingDetector
-from core.device_tamper import NORMAL, DeviceTamperDetector
+from core.device_tamper import NORMAL, BLOCKED, BLURRED, IMPACT, MOVED, FLAME, SMOKE, OFFLINE, TAILGATING, DeviceTamperDetector
 from core.fire_smoke_detector import FireSmokeDetector
 
 logger = logging.getLogger(__name__)
+
+_alarm_lock = threading.Lock()
+_active_alarm_states = set()
+_tailgating_last_alarm_at = {}
+
+
+def _opencv_compatible_path(path):
+    if os.name != 'nt' or path.isascii():
+        return path
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = ctypes.windll.kernel32.GetShortPathNameW(
+        str(path), buffer, len(buffer)
+    )
+    short_path = buffer.value if length else path
+    if short_path.isascii():
+        return short_path
+
+    cache_dir = os.path.join(tempfile.gettempdir(), 'community_security_models')
+    os.makedirs(cache_dir, exist_ok=True)
+    cached_path = os.path.join(cache_dir, os.path.basename(path))
+    if (
+        not os.path.isfile(cached_path)
+        or os.path.getsize(cached_path) != os.path.getsize(path)
+    ):
+        shutil.copy2(path, cached_path)
+    return cached_path
+
+
+def _clear_alarm_states(gate_id, active_types):
+    with _alarm_lock:
+        for key in list(_active_alarm_states):
+            if key[0] == gate_id and key[1] not in active_types:
+                _active_alarm_states.remove(key)
+
+
+def _save_capture(app, gate_id, alarm_type, frame):
+    directory = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'alarm_captures')
+    os.makedirs(directory, exist_ok=True)
+    filename = '{}_gate_{}_{}.jpg'.format(
+        datetime.utcnow().strftime('%Y%m%d_%H%M%S'), gate_id, alarm_type
+    )
+    path = os.path.join(directory, filename)
+    encoded, buffer = cv2.imencode('.jpg', frame)
+    if encoded:
+        with open(path, 'wb') as target:
+            target.write(buffer.tobytes())
+    return path
+
+
+def _record_alarm(app, gate_id, alarm_type, frame, metrics, cooldown):
+    key = (gate_id, alarm_type)
+    with _alarm_lock:
+        if key in _active_alarm_states:
+            return
+        _active_alarm_states.add(key)
+
+    descriptions = {
+        BLOCKED: '门禁摄像头疑似被遮挡或画面异常变暗',
+        BLURRED: '门禁摄像头画面持续严重模糊',
+        MOVED: '门禁摄像头视角疑似发生改变或设备被移动',
+        IMPACT: '门禁摄像头疑似受到拍打或冲击，画面出现短时剧烈震动',
+        'open_flame': '门禁区域疑似出现明火',
+        'smoke': '门禁区域疑似出现烟雾',
+        'stream_offline': '门禁视频流中断，设备可能断电或网络异常',
+    }
+    levels = {
+        BLOCKED: 'critical',
+        MOVED: 'critical',
+        IMPACT: 'critical',
+        'open_flame': 'critical',
+        'smoke': 'critical',
+        'stream_offline': 'critical',
+        BLURRED: 'warning',
+    }
+    try:
+        with app.app_context():
+            with alarm_write_transaction():
+                if has_pending_alarm(gate_id, alarm_type):
+                    return
+                image_path = _save_capture(app, gate_id, alarm_type, frame)
+                db.session.add(AlarmEvent(
+                    alarm_type=alarm_type,
+                    alarm_level=levels.get(alarm_type, 'warning'),
+                    source_id=gate_id,
+                    source_type='gate',
+                    alarm_description=descriptions.get(alarm_type, alarm_type),
+                    capture_image_path=image_path,
+                ))
+                db.session.commit()
+    except Exception:
+        logger.exception('Failed to persist tamper alarm for gate %s', gate_id)
+        with app.app_context():
+            db.session.rollback()
+        with _alarm_lock:
+            _active_alarm_states.discard(key)
+
+
+def _record_tailgating_alarm(app, gate_id, frame, track_ids,
+                              crossing_count, cooldown):
+    now = time.monotonic()
+    with _alarm_lock:
+        if now - _tailgating_last_alarm_at.get(gate_id, 0.0) < cooldown:
+            return
+        _tailgating_last_alarm_at[gate_id] = now
+
+    description = '疑似陌生人贴身尾随，短时间内有 {} 人通过门禁'.format(crossing_count)
+    try:
+        with app.app_context():
+            with alarm_write_transaction():
+                if has_pending_alarm(gate_id, 'tailgating'):
+                    return
+                image_path = _save_capture(app, gate_id, 'tailgating', frame)
+                db.session.add(AlarmEvent(
+                    alarm_type='tailgating',
+                    alarm_level='critical',
+                    source_id=gate_id,
+                    source_type='gate',
+                    alarm_description=description,
+                    capture_image_path=image_path,
+                    handle_remark='track_ids={}'.format(','.join(map(str, track_ids))),
+                ))
+                db.session.commit()
+    except Exception:
+        logger.exception('Failed to persist tailgating alarm for gate %s', gate_id)
+        with app.app_context():
+            db.session.rollback()
+        with _alarm_lock:
+            _tailgating_last_alarm_at.pop(gate_id, None)
+
+
+def _placeholder(text, resolution):
+    frame = np.zeros((resolution[1], resolution[0], 3), dtype=np.uint8)
+    cv2.putText(frame, text, (20, resolution[1] // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+    return frame
+
+
+def _open_capture(stream_url, timeout):
+    result = {'cap': None}
+    finished = threading.Event()
+    abandoned = threading.Event()
+
+    def try_open():
+        cap = None
+        try:
+            candidate = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+            if candidate.isOpened():
+                cap = candidate
+            else:
+                candidate.release()
+        except Exception:
+            logger.exception('Failed to open RTMP stream: %s', stream_url)
+
+        if abandoned.is_set():
+            if cap is not None:
+                cap.release()
+        else:
+            result['cap'] = cap
+        finished.set()
+
+    threading.Thread(target=try_open, daemon=True).start()
+    if not finished.wait(timeout=timeout):
+        abandoned.set()
+        logger.warning('Timed out opening RTMP stream: %s', stream_url)
+        return None
+    return result['cap']
 
 DETECT_INTERVAL = 0.5
 SSE_PUSH_INTERVAL = 0.5
