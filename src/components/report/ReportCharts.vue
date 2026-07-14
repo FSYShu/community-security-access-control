@@ -201,8 +201,9 @@ export default {
       return 'risk-color-low'
     },
     riskMarkerStyle () {
-      const position = Math.min(99, Math.max(1, this.normalizedRiskScore))
-      return { left: `${position}%` }
+      return {
+        left: `clamp(7px, ${this.normalizedRiskScore}%, calc(100% - 7px))`
+      }
     }
   },
   watch: {
@@ -474,7 +475,20 @@ export default {
 .risk-segment { display: block; height: 8px; border-radius: 2px; }
 .risk-segment-low { background: rgba(67, 184, 141, 0.45); }
 .risk-segment-medium { background: rgba(225, 170, 77, 0.52); }
-.risk-segment-high { background: rgba(239, 100, 97, 0.56); }
+.risk-segment-high {
+  position: relative;
+  background: rgba(239, 100, 97, 0.56);
+}
+.risk-segment-high::after {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  width: 6px;
+  height: 8px;
+  border-radius: 0 2px 2px 0;
+  background: inherit;
+  content: '';
+}
 .risk-track i {
   position: absolute;
   top: -4px;
