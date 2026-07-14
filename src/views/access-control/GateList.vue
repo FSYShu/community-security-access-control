@@ -2,6 +2,11 @@
   <app-layout page-title="门禁终端管理" :no-scroll="true">
     <div class="dark-card">
       <div class="filter-row">
+        <div class="search-box">
+          <i class="el-icon-search"></i>
+          <input v-model="searchText" placeholder="搜索终端名称" class="search-input" @input="debouncedSearch" />
+          <i v-if="searchText" class="el-icon-circle-close search-clear" @click="searchText = ''; onSearch()"></i>
+        </div>
         <div class="filter-select" :class="{ 'is-open': showLevelDropdown }">
           <div class="select-trigger" @click="toggleLevelDropdown">
             <span class="select-value">{{ filterLevel || '终端层级' }}</span>
@@ -47,8 +52,9 @@
         </button>
       </div>
     </div>
-    <div class="dark-card list-section">
-      <div class="list-content">
+    <div class="dark-card list-section" ref="listSection">
+      <div v-if="!perPageReady" class="probe-loading"><i class="el-icon-loading"></i><span>加载中...</span></div>
+      <div class="list-content" ref="listContent" :style="{ visibility: perPageReady ? '' : 'hidden' }">
         <van-cell v-for="item in gateList" :key="item.id" is-link @click="goToMonitor(item)">
           <template #title>
             <div class="cell-title-row">
@@ -77,8 +83,9 @@
           <i class="el-icon-office-building" style="font-size:48px;color:var(--dark-text-muted)"></i>
           <p style="color:var(--dark-text-muted);margin-top:12px">暂无门禁终端</p>
         </div>
+
       </div>
-      <div class="pagination-wrapper">
+      <div class="pagination-wrapper" v-show="perPageReady">
         <el-pagination
           background
           layout="prev, pager, next"
@@ -145,16 +152,7 @@
                   <span>滞留时长: {{ item.stay_duration }}s</span>
                 </div>
               </div>
-              <button
-                v-if="item.status === 'active'"
-                class="zone-status-btn zone-disable-btn"
-                @click.stop="toggleZoneStatus(item, 'inactive')"
-              >禁用</button>
-              <button
-                v-else
-                class="zone-status-btn zone-enable-btn"
-                @click.stop="toggleZoneStatus(item, 'active')"
-              >启用</button>
+
             </div>
             <div v-if="zoneList.length === 0 && !zoneLoading" class="zone-empty">
               <p>暂无禁区数据</p>
@@ -163,6 +161,22 @@
         </div>
         <div class="zone-form">
           <div class="zone-form-content">
+            <div class="form-item">
+              <label class="form-label">状态</label>
+              <div class="zone-status-field">
+                <span class="zone-status-text" :class="zoneForm.status === 'active' ? 'is-active' : 'is-inactive'">{{ zoneForm.status === 'active' ? '已启用' : '已禁用' }}</span>
+                <button
+                  v-if="zoneForm.status === 'active'"
+                  class="zone-status-btn zone-disable-btn"
+                  @click="toggleZoneStatus(selectedZone, 'inactive')"
+                >禁用</button>
+                <button
+                  v-else
+                  class="zone-status-btn zone-enable-btn"
+                  @click="toggleZoneStatus(selectedZone, 'active')"
+                >启用</button>
+              </div>
+            </div>
             <div class="form-item">
               <label class="form-label">禁区名称</label>
               <input v-model="zoneForm.zone_name" class="form-input" placeholder="请输入禁区名称" disabled />
@@ -218,10 +232,11 @@ export default {
       gateList: [],
       loading: false,
       page: 1,
-      perPage: 20,
+      perPage: 10,
       total: 0,
       filterLevel: '',
       filterStatus: '',
+      searchText: '',
       showLevelDropdown: false,
       showStatusDropdown: false,
       levelOptions: ['全部', '社区大门', '单元门', '危险防护区域'],
@@ -242,14 +257,15 @@ export default {
       zoneList: [],
       zoneLoading: false,
       selectedZoneId: null,
-      zoneForm: { zone_name: '', safety_distance: 0, stay_duration: 0, alarm_level: '' },
+      zoneForm: { zone_name: '', safety_distance: 0, stay_duration: 0, alarm_level: '', status: 'active' },
       zoneLevelOptions: [
         { text: '低告警级别', value: 'low' },
         { text: '中告警级别', value: 'medium' },
         { text: '高告警级别', value: 'high' }
       ],
       showZoneLevelDropdown: false,
-      zoneSubmitLoading: false
+      zoneSubmitLoading: false,
+      perPageReady: false
     }
   },
   computed: {
@@ -263,15 +279,31 @@ export default {
     zoneLevelLabel () {
       const opt = this.zoneLevelOptions.find(o => o.value === this.zoneForm.alarm_level)
       return opt ? opt.text : ''
+    },
+    selectedZone () {
+      return this.zoneList.find(z => z.id === this.selectedZoneId) || null
     }
+  },
+  watch: {
+
   },
   mounted () {
     document.addEventListener('click', this.closeDropdowns)
-    this.loadData()
+    window.addEventListener('resize', this.handleResize)
+    if (window.ResizeObserver && this.$refs.listContent) {
+      this._resizeObserver = new ResizeObserver(this.handleResize)
+      this._resizeObserver.observe(this.$refs.listContent)
+    }
+    this.initData()
     this.pollTimer = setInterval(this.silentRefresh, 15000)
   },
   beforeDestroy () {
     document.removeEventListener('click', this.closeDropdowns)
+    window.removeEventListener('resize', this.handleResize)
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect()
+      this._resizeObserver = null
+    }
     if (this.pollTimer) {
       clearInterval(this.pollTimer)
       this.pollTimer = null
@@ -286,6 +318,49 @@ export default {
         this.showZoneLevelDropdown = false
       }
     },
+    initData () {
+      this.perPageReady = false
+
+      this.perPage = 2
+      this.loadData()
+    },
+    calcPerPage () {
+      const content = this.$refs.listContent
+      if (!content || content.clientHeight <= 0) return false
+      const cells = content.querySelectorAll('.van-cell')
+      if (!cells.length) return false
+      let totalH = 0
+      for (let i = 0; i < cells.length; i++) totalH += cells[i].offsetHeight
+      const avgCellH = totalH / cells.length
+      const newPerPage = Math.max(5, Math.round(content.clientHeight / avgCellH))
+      if (newPerPage > this.perPage) {
+        this.perPage = newPerPage
+        return true
+      }
+      return false
+    },
+    handleResize () {
+      clearTimeout(this._resizeTimer)
+      this._resizeTimer = setTimeout(() => {
+        requestAnimationFrame(() => {
+          this.calcPerPage()
+          this.loadData()
+        })
+      }, 200)
+    },
+
+    debouncedSearch () {
+      clearTimeout(this._searchTimer)
+      this._searchTimer = setTimeout(() => {
+        this.page = 1
+        this.loadData()
+      }, 300)
+    },
+    onSearch () {
+      this.page = 1
+      this.loadData()
+    },
+
     toggleLevelDropdown () {
       this.showStatusDropdown = false
       this.showLevelDropdown = !this.showLevelDropdown
@@ -310,6 +385,7 @@ export default {
         const levelMap = { 社区大门: 'community_gate', 单元门: 'unit_door', 危险防护区域: 'dangerous_area' }
         const statusMap = { 未绑定: 'unbound', 在线: 'online', 离线: 'offline', 维护中: 'maintenance' }
         const params = { page: this.page, per_page: this.perPage }
+        if (this.searchText) params.keyword = this.searchText
         if (this.filterLevel && this.filterLevel !== '全部') params.gate_level = levelMap[this.filterLevel]
         if (this.filterStatus && this.filterStatus !== '全部') params.status = statusMap[this.filterStatus]
         const res = await getGateList(params)
@@ -320,7 +396,20 @@ export default {
       } catch (e) {
         console.error(e)
       }
-      this.loading = false
+      if (!this.perPageReady) {
+        this.$nextTick(() => {
+          setTimeout(() => {
+            if (this.calcPerPage()) {
+              this.loadData()
+            } else {
+              this.perPageReady = true
+              this.loading = false
+            }
+          }, 150)
+        })
+      } else {
+        this.loading = false
+      }
     },
     onPageChange (newPage) {
       this.page = newPage
@@ -451,6 +540,7 @@ export default {
       this.zoneForm.safety_distance = item.safety_distance || 0
       this.zoneForm.stay_duration = item.stay_duration || 0
       this.zoneForm.alarm_level = item.alarm_level || ''
+      this.zoneForm.status = item.status || 'active'
     },
     zoneTagClass (level) {
       const map = { low: 'zone-tag-low', medium: 'zone-tag-medium', high: 'zone-tag-high' }
@@ -464,13 +554,14 @@ export default {
       try {
         await updateDangerZone(item.id, { status })
         this.$message.success(status === 'active' ? '启用成功' : '禁用成功')
+        this.zoneForm.status = status
         this.loadZoneList()
       } catch (e) {
         this.$message.error('操作失败')
       }
     },
     resetZoneForm () {
-      this.zoneForm = { zone_name: '', safety_distance: 0, stay_duration: 0, alarm_level: '' }
+      this.zoneForm = { zone_name: '', safety_distance: 0, stay_duration: 0, alarm_level: '', status: 'active' }
       this.selectedZoneId = null
       this.showZoneLevelDropdown = false
     },
@@ -495,7 +586,6 @@ export default {
         this.$message.error('保存失败')
       }
       this.zoneSubmitLoading = false
-
     }
   }
 }
@@ -511,10 +601,35 @@ export default {
 }
 
 .list-section {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.probe-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--dark-text-secondary);
+  font-size: 14px;
+}
+
+.probe-loading i {
+  font-size: 18px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .list-content {
@@ -541,6 +656,52 @@ export default {
 
 .filter-spacer {
   flex: 1;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  height: 36px;
+  min-width: 180px;
+  transition: border-color 0.2s;
+}
+
+.search-box:focus-within {
+  border-color: var(--dark-accent-light);
+}
+
+.search-box i {
+  font-size: 14px;
+  color: var(--dark-text-secondary);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--dark-text);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.search-input::placeholder {
+  color: var(--dark-text-secondary);
+}
+
+.search-clear {
+  cursor: pointer;
+  font-size: 14px !important;
+}
+
+.search-clear:hover {
+  color: var(--dark-text) !important;
 }
 
 .filter-row {
@@ -1079,6 +1240,33 @@ export default {
 
 .zone-disable-btn:hover {
   background: rgba(239, 68, 68, 0.25);
+}
+
+.zone-status-field {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 12px;
+  gap: 12px;
+}
+
+.zone-status-field .zone-status-text {
+  flex: 1;
+  font-size: 14px;
+}
+
+.zone-status-text {
+  font-size: 13px;
+}
+
+.zone-status-text.is-active {
+  color: #10b981;
+}
+
+.zone-status-text.is-inactive {
+  color: #ef4444;
 }
 
 .zone-empty {

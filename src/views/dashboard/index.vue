@@ -11,7 +11,7 @@
             <i class="el-icon-user" style="font-size:22px"></i>
           </div>
           <div class="stat-info">
-            <span class="stat-value">{{ stats.passCount }}</span>
+            <span class="stat-value">{{ stats.passCount === null ? '--' : stats.passCount }}</span>
             <span class="stat-label">今日通行</span>
           </div>
           <i class="el-icon-arrow-right stat-arrow" style="font-size:14px"></i>
@@ -28,7 +28,7 @@
             <i class="el-icon-warning-outline" style="font-size:22px"></i>
           </div>
           <div class="stat-info">
-            <span class="stat-value">{{ stats.alarmCount }}</span>
+            <span class="stat-value">{{ stats.alarmCount === null ? '--' : stats.alarmCount }}</span>
             <span class="stat-label">待处理告警</span>
           </div>
           <i class="el-icon-arrow-right stat-arrow" style="font-size:14px"></i>
@@ -42,7 +42,7 @@
             <i class="el-icon-lock" style="font-size:22px"></i>
           </div>
           <div class="stat-info">
-            <span class="stat-value">{{ stats.onlineDevices }}</span>
+            <span class="stat-value">{{ stats.onlineDevices === null ? '--' : stats.onlineDevices }}</span>
             <span class="stat-label">在线设备</span>
           </div>
           <i class="el-icon-arrow-right stat-arrow" style="font-size:14px"></i>
@@ -56,7 +56,7 @@
             <i class="el-icon-view" style="font-size:22px"></i>
           </div>
           <div class="stat-info">
-            <span class="stat-value">{{ stats.zoneStatus }}</span>
+            <span class="stat-value">{{ stats.zoneStatus === '--' ? '--' : stats.zoneStatus }}</span>
             <span class="stat-label">禁区状态</span>
           </div>
           <i class="el-icon-arrow-right stat-arrow" style="font-size:14px"></i>
@@ -131,10 +131,10 @@ export default {
   data () {
     return {
       stats: {
-        passCount: 0,
-        alarmCount: 0,
-        onlineDevices: 0,
-        zoneStatus: '正常运行',
+        passCount: null,
+        alarmCount: null,
+        onlineDevices: null,
+        zoneStatus: '--',
         zoneList: []
       },
       recentAlarms: [],
@@ -145,11 +145,13 @@ export default {
     zoneCardClass () {
       if (this.stats.zoneStatus === '告警中') return 'stat-card-danger'
       if (this.stats.zoneStatus === '已停用') return 'stat-card-muted'
+      if (this.stats.zoneStatus === '--') return ''
       return 'stat-card-success'
     },
     zoneIconClass () {
       if (this.stats.zoneStatus === '告警中') return 'stat-icon-rose'
       if (this.stats.zoneStatus === '已停用') return 'stat-icon-muted'
+      if (this.stats.zoneStatus === '--') return ''
       return 'stat-icon-emerald'
     }
   },
