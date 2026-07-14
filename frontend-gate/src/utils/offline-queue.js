@@ -1,9 +1,9 @@
-var STORAGE_KEY = 'gate_offline_queue'
-var MAX_QUEUE_SIZE = 20
+const STORAGE_KEY = 'gate_offline_queue'
+const MAX_QUEUE_SIZE = 20
 
 function getQueue () {
   try {
-    var data = localStorage.getItem(STORAGE_KEY)
+    const data = localStorage.getItem(STORAGE_KEY)
     return data ? JSON.parse(data) : []
   } catch (e) {
     return []
@@ -19,7 +19,7 @@ function saveQueue (queue) {
 }
 
 function enqueue (item) {
-  var queue = getQueue()
+  const queue = getQueue()
   if (queue.length >= MAX_QUEUE_SIZE) {
     queue.shift()
   }
@@ -31,7 +31,7 @@ function enqueue (item) {
 }
 
 function dequeueAll () {
-  var queue = getQueue()
+  const queue = getQueue()
   saveQueue([])
   return queue
 }
@@ -42,7 +42,7 @@ function getQueueSize () {
 
 function setupOnlineHandler (submitFn) {
   window.addEventListener('online', function () {
-    var queue = dequeueAll()
+    const queue = dequeueAll()
     queue.forEach(function (item) {
       if (submitFn) {
         submitFn(item.data)

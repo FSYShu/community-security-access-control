@@ -45,12 +45,22 @@ export function getReportDetail (id) {
 
 /** 手动生成安防监控日报 */
 export function generateReport (data) {
-  return request({ url: '/report/generate', method: 'post', data })
+  return request({ url: '/report/generate', method: 'post', data, timeout: 120000 })
 }
 
 /** 重新生成安防监控日报 */
 export function regenerateReport (id) {
-  return request({ url: `/report/${id}/regenerate`, method: 'post' })
+  return request({ url: `/report/${id}/regenerate`, method: 'post', timeout: 120000 })
+}
+
+/** 删除安防监控日报 */
+export function deleteReport (id) {
+  return request({ url: `/report/${id}`, method: 'delete' })
+}
+
+/** 获取AI日报工作流状态 */
+export function getReportWorkflowStatus () {
+  return request({ url: '/report/workflow/status', method: 'get' })
 }
 
 /** 历史通行日志 */

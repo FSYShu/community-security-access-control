@@ -35,7 +35,27 @@ class BaseConfig:
     VIDEO_BUFFER_SIZE = int(os.getenv('VIDEO_BUFFER_SIZE', 60))
 
     # AI 服务配置
-    AI_SERVICE_URL = os.getenv('AI_SERVICE_URL', 'http://localhost:8001')
+    AI_SERVICE_URL = os.getenv('AI_SERVICE_URL', '')
+    AI_REPORT_PROVIDER = os.getenv('AI_REPORT_PROVIDER', 'siliconflow')
+    SILICONFLOW_BASE_URL = os.getenv(
+        'SILICONFLOW_BASE_URL', 'https://api.siliconflow.cn/v1'
+    )
+    SILICONFLOW_API_KEY = os.getenv('SILICONFLOW_API_KEY', '')
+    SILICONFLOW_MODEL = os.getenv(
+        'SILICONFLOW_MODEL', 'Qwen/Qwen2.5-7B-Instruct'
+    )
+    AI_REPORT_ENABLED = os.getenv('AI_REPORT_ENABLED', 'true').lower() in (
+        '1', 'true', 'yes', 'on'
+    )
+    AI_REPORT_ENDPOINT = os.getenv(
+        'AI_REPORT_ENDPOINT', '/chat/completions'
+    )
+    AI_REPORT_TIMEOUT = float(os.getenv('AI_REPORT_TIMEOUT', '60'))
+    DAILY_REPORT_AUTO_ENABLED = os.getenv(
+        'DAILY_REPORT_AUTO_ENABLED', 'true'
+    ).lower() in ('1', 'true', 'yes', 'on')
+    DAILY_REPORT_GENERATE_TIME = os.getenv('DAILY_REPORT_GENERATE_TIME', '00:10')
+    DAILY_REPORT_CHECK_INTERVAL = int(os.getenv('DAILY_REPORT_CHECK_INTERVAL', '60'))
 
     # 消息推送配置
     PUSH_SERVICE_URL = os.getenv('PUSH_SERVICE_URL', 'http://localhost:8002')
@@ -119,6 +139,8 @@ class TestingConfig(BaseConfig):
     )
     WTF_CSRF_ENABLED = False
     DEVICE_TAMPER_BACKGROUND_ENABLED = False
+    AI_REPORT_ENABLED = False
+    DAILY_REPORT_AUTO_ENABLED = False
 
 
 class ProductionConfig(BaseConfig):

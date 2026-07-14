@@ -53,7 +53,6 @@ export default {
         this.form.gate_level_label = d.level_name || d.gate_level || ''
         this.form.building_unit = d.building_unit || ''
         this.form.push_key = d.push_key || ''
-
       } catch (e) {
         this.$message.error('加载终端信息失败')
       }

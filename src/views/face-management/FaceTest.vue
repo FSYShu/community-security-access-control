@@ -82,7 +82,6 @@ export default {
       const canvas = this.$refs.canvas
       if (!video.videoWidth) {
         return this.$message.warning('摄像头未就绪')
-        return
       }
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
@@ -100,7 +99,8 @@ export default {
           this.$message.error(res.message || '识别失败')
         }
       } catch (error) {
-        // 拦截器已弹出后端错误消息，此处不再重复提示
+        console.error('Face test error:', error)
+        this.$message.error('识别请求失败')
       } finally {
         this.testing = false
       }

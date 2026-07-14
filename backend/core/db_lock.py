@@ -65,8 +65,11 @@ def with_write_lock(fn):
         try:
             write_lock_queue.acquire(timeout=5)
         except WriteLockTimeoutError as e:
+            from flask import has_app_context
             from utils.response import error_response
             logger.error(f'with_write_lock timeout for {fn.__name__}: {str(e)}')
+            if not has_app_context():
+                return {'code': 408, 'message': str(e), 'data': None}, 408
             return error_response(message=str(e), code=408, http_status=408)
         try:
             return fn(*args, **kwargs)

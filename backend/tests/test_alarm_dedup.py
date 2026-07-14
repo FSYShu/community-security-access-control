@@ -93,7 +93,7 @@ def test_handled_alarm_allows_a_new_alarm_of_same_type(alarm_app):
 
 def test_pending_tailgating_alarm_is_deduplicated(alarm_app):
     _record_tailgating_alarm(alarm_app, 1, _frame(), [1, 2], 2, cooldown=0)
-    _last_alarm_at.clear()
+    _tailgating_last_alarm_at.clear()
     _record_tailgating_alarm(alarm_app, 1, _frame(), [1, 2], 3, cooldown=0)
 
     with alarm_app.app_context():

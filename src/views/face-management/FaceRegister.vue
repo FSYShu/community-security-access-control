@@ -25,7 +25,6 @@
 <script>
 import { registerFace } from '@/api/face'
 
-
 export default {
   name: 'FaceRegister',
   data () {
@@ -60,13 +59,11 @@ export default {
     async captureAndRegister () {
       if (!this.personName) {
         return this.$message.warning('请输入姓名')
-        return
       }
       const video = this.$refs.video
       const canvas = this.$refs.canvas
       if (!video.videoWidth) {
         return this.$message.warning('摄像头未就绪')
-        return
       }
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight

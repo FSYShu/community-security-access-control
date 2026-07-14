@@ -14,6 +14,11 @@ class DailyReport(db.Model):
     pass_stats = db.Column(db.Text, default='{}')
     alarm_stats = db.Column(db.Text, default='{}')
     abnormal_events = db.Column(db.Text, default='[]')
+    ai_summary = db.Column(db.Text, default='')
+    risk_level = db.Column(db.Text, default='low')
+    risk_score = db.Column(db.Integer, default=0)
+    recommendations = db.Column(db.Text, default='[]')
+    workflow_source = db.Column(db.Text, default='local_rules')
     generate_status = db.Column(db.Text, default='generating')
     generated_at = db.Column(db.Text, nullable=True)
 
@@ -24,6 +29,11 @@ class DailyReport(db.Model):
             'pass_stats': self.pass_stats,
             'alarm_stats': self.alarm_stats,
             'abnormal_events': self.abnormal_events,
+            'ai_summary': self.ai_summary,
+            'risk_level': self.risk_level,
+            'risk_score': self.risk_score,
+            'recommendations': self.recommendations,
+            'workflow_source': self.workflow_source,
             'generate_status': self.generate_status,
             'generated_at': self.generated_at
         }

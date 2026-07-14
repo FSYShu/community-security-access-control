@@ -39,7 +39,7 @@ export default {
       try {
         await this.$store.dispatch('user/loginAction', this.form)
         await this.$store.dispatch('user/getUserInfoAction')
-        var redirect = this.$route.query.redirect || '/settings'
+        const redirect = this.$route.query.redirect || '/settings'
         this.$router.push(redirect)
       } catch (err) {
         // error handled by interceptor

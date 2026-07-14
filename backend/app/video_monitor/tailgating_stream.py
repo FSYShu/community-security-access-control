@@ -16,7 +16,7 @@ from app.models.alarm import AlarmEvent
 from core.alarm_dedup import alarm_write_transaction, has_pending_alarm
 from core.tailgating_detector import MobileNetPersonDetector, TailgatingDetector
 
-from .device_tamper_stream import _open_capture, _placeholder
+from .dangerous_behavior_sse import _open_capture, _placeholder
 
 logger = logging.getLogger(__name__)
 

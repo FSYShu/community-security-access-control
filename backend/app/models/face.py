@@ -12,7 +12,7 @@ class FaceInfo(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     person_type = db.Column(db.Text, nullable=False)
     person_name = db.Column(db.Text, nullable=False)
-    face_image_path = db.Column(db.Text, nullable=False)
+    face_image_path = db.Column(db.Text, nullable=False, default='')
     face_feature = db.Column(db.Text, nullable=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     auth_start_time = db.Column(db.Text, nullable=True)

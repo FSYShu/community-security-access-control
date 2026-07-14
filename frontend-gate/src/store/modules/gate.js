@@ -1,11 +1,11 @@
-var STORAGE_KEY = 'gate_bound_info'
+const STORAGE_KEY = 'gate_bound_info'
 
 function loadFromStorage () {
-  var result = { gateId: '', gateName: '', pushKey: '', gateLevel: '', cameraDeviceId: '', cameraLabel: '' }
+  const result = { gateId: '', gateName: '', pushKey: '', gateLevel: '', cameraDeviceId: '', cameraLabel: '' }
   try {
-    var data = localStorage.getItem(STORAGE_KEY)
+    const data = localStorage.getItem(STORAGE_KEY)
     if (data) {
-      var parsed = JSON.parse(data)
+      const parsed = JSON.parse(data)
       result.gateId = parsed.gateId || ''
       result.gateName = parsed.gateName || ''
       result.pushKey = parsed.pushKey || ''
@@ -19,7 +19,7 @@ function loadFromStorage () {
   return result
 }
 
-var mutations = {
+const mutations = {
   SET_GATE (state, gateInfo) {
     state.gateId = String(gateInfo.id || '')
     state.gateName = gateInfo.gate_name || ''
@@ -57,7 +57,7 @@ var mutations = {
   }
 }
 
-var getters = {
+const getters = {
   isBound: function (state) { return !!state.gateId },
   gateId: function (state) { return state.gateId },
   gateName: function (state) { return state.gateName },

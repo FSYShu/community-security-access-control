@@ -83,7 +83,6 @@ export default {
       const canvas = this.$refs.canvas
       if (!video.videoWidth) {
         return this.$message.warning('摄像头未就绪')
-        return
       }
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight

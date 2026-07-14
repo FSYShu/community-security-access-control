@@ -1,8 +1,8 @@
 import request from '@/utils/request'
 
 export function submitFacePass (data) {
-  var silent = data && data._silent
-  var config = { url: '/face/pass', method: 'post', data: data, timeout: 30000 }
+  const silent = data && data._silent
+  const config = { url: '/face/pass', method: 'post', data: data, timeout: 30000 }
   if (silent) {
     delete data._silent
     config._silent = true

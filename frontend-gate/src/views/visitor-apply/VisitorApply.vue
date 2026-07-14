@@ -86,7 +86,7 @@ export default {
   methods: {
     captureFace () {
       if (!this.$refs.camera) return
-      var base64 = this.$refs.camera.captureFrame()
+      const base64 = this.$refs.camera.captureFrame()
       if (base64) {
         this.faceBase64 = base64
         this.faceCaptured = true
@@ -96,11 +96,11 @@ export default {
       }
     },
     formatTime (date) {
-      var y = date.getFullYear()
-      var m = String(date.getMonth() + 1).padStart(2, '0')
-      var d = String(date.getDate()).padStart(2, '0')
-      var h = String(date.getHours()).padStart(2, '0')
-      var min = String(date.getMinutes()).padStart(2, '0')
+      const y = date.getFullYear()
+      const m = String(date.getMonth() + 1).padStart(2, '0')
+      const d = String(date.getDate()).padStart(2, '0')
+      const h = String(date.getHours()).padStart(2, '0')
+      const min = String(date.getMinutes()).padStart(2, '0')
       return y + '-' + m + '-' + d + ' ' + h + ':' + min
     },
     onStartConfirm (val) {

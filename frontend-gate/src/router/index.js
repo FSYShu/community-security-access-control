@@ -4,7 +4,7 @@ import store from '@/store'
 
 Vue.use(Router)
 
-var routes = [
+const routes = [
   {
     path: '/',
     redirect: '/idle'
@@ -41,16 +41,16 @@ var routes = [
   }
 ]
 
-var router = new Router({
+const router = new Router({
   mode: 'hash',
   routes: routes
 })
 
 function isJwtExpired (token) {
   try {
-    var parts = token.split('.')
+    const parts = token.split('.')
     if (parts.length !== 3) return true
-    var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
     if (!payload.exp) return false
     return Date.now() >= payload.exp * 1000
   } catch (e) {
@@ -66,7 +66,7 @@ router.beforeEach(function (to, from, next) {
     return
   }
 
-  var token = store.getters['user/token']
+  const token = store.getters['user/token']
 
   if (!token || isJwtExpired(token)) {
     store.commit('user/CLEAR_USER')
@@ -88,8 +88,8 @@ router.beforeEach(function (to, from, next) {
 })
 
 function checkRoles (to, next) {
-  var roles = to.meta.roles
-  var userRoles = store.getters['user/roles'] || []
+  const roles = to.meta.roles
+  const userRoles = store.getters['user/roles'] || []
   if (roles && !roles.some(function (role) { return userRoles.includes(role) })) {
     next('/idle')
     return

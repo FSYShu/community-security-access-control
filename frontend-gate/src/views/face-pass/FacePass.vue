@@ -33,7 +33,7 @@ import { submitFacePass } from '@/api/face'
 import { checkBrowserSupport, checkHTTPS } from '@/utils/browser-check'
 import { enqueue, setupOnlineHandler } from '@/utils/offline-queue'
 
-var RESULT_DISPLAY_TIME = 5000
+const RESULT_DISPLAY_TIME = 5000
 
 export default {
   name: 'FacePassPage',
@@ -55,8 +55,8 @@ export default {
   },
   mounted () {
     this.gateId = this.$store.getters['gate/gateId'] || this.$route.query.gate_id || ''
-    var browser = checkBrowserSupport()
-    var https = checkHTTPS()
+    const browser = checkBrowserSupport()
+    const https = checkHTTPS()
     if (!browser.supported) {
       this.cameraError = browser.message
       this.browserCheck = browser
@@ -64,7 +64,7 @@ export default {
       this.cameraError = https.message
       this.browserCheck = https
     }
-    var self = this
+    const self = this
     setupOnlineHandler(function (data) {
       self.submitOfflineItem(data)
     })
@@ -79,7 +79,7 @@ export default {
     async doFacePass () {
       if (this.browserCheck && !this.browserCheck.supported) return
       if (!this.$refs.camera) return
-      var base64Image = this.$refs.camera.captureFrame()
+      const base64Image = this.$refs.camera.captureFrame()
       if (!base64Image) {
         this.$toast.fail('摄像头未就绪')
         return
@@ -87,7 +87,7 @@ export default {
       this.loading = true
       this.result = null
       try {
-        var res = await submitFacePass({
+        const res = await submitFacePass({
           face_image: base64Image,
           gate_id: this.gateId
         })
@@ -100,14 +100,14 @@ export default {
           enqueue({ face_image: base64Image, gate_id: this.gateId })
           this.result = { passed: false, reason: '网络断开，已暂存待网络恢复后自动提交' }
         } else {
-          var msg = (err && err.message) || '识别失败'
-          var reasonMap = {
-            '生人': '未登记人员，禁止通行',
-            '黑名单': '黑名单人员，禁止通行',
-            '授权过期': '访客授权已过期',
-            '权限不足': '无此门禁通行权限'
+          const msg = (err && err.message) || '识别失败'
+          const reasonMap = {
+            生人: '未登记人员，禁止通行',
+            黑名单: '黑名单人员，禁止通行',
+            授权过期: '访客授权已过期',
+            权限不足: '无此门禁通行权限'
           }
-          var reason = ''
+          let reason = ''
           Object.keys(reasonMap).forEach(function (key) {
             if (msg.includes(key)) reason = reasonMap[key]
           })
@@ -120,7 +120,7 @@ export default {
     },
     startResultTimer () {
       this.clearResultTimer()
-      var self = this
+      const self = this
       this.resultTimer = setTimeout(function () {
         self.$router.push('/idle')
       }, RESULT_DISPLAY_TIME)

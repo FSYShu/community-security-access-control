@@ -55,15 +55,19 @@ def create_app(config_name=None):
     with app.app_context():
         init_database(app)
 
-    if os.getenv('ENABLE_DANGER_ZONE_DETECTOR', '1') == '1':
-        from app.danger_zone.danger_zone_background import start_danger_zone_detector
-        start_danger_zone_detector(app)
+    if not app.config.get('TESTING'):
+        if os.getenv('ENABLE_DANGER_ZONE_DETECTOR', '1') == '1':
+            from app.danger_zone.danger_zone_background import start_danger_zone_detector
+            start_danger_zone_detector(app)
 
-    from app.device_tamper_monitor import start_device_tamper_monitor
-    start_device_tamper_monitor(app)
+        from app.device_tamper_monitor import start_device_tamper_monitor
+        start_device_tamper_monitor(app)
 
-    from core.cleanup_task import start_cleanup_task
-    start_cleanup_task(app)
+        from core.cleanup_task import start_cleanup_task
+        start_cleanup_task(app)
+
+        from app.daily_report_scheduler import start_daily_report_scheduler
+        start_daily_report_scheduler(app)
 
     return app
 
@@ -157,9 +161,11 @@ def init_database(app):
             db.create_all()
             _migrate_schema(db)
             _migrate_danger_zone_columns()
+            _migrate_daily_report_columns()
     else:
         db.create_all()
         _migrate_schema(db)
+        _migrate_daily_report_columns()
 
 
 def _migrate_schema(database):
@@ -228,6 +234,35 @@ def _migrate_danger_zone_columns():
                 logger.info('Added alarm_level column to danger_zones')
     except Exception as e:
         logger.warning('Migration check failed (non-critical): {}'.format(str(e)))
+
+
+def _migrate_daily_report_columns():
+    """Add AI report fields to existing daily_reports tables."""
+    from sqlalchemy import inspect, text
+
+    columns = {
+        'ai_summary': "TEXT DEFAULT ''",
+        'risk_level': "TEXT DEFAULT 'low'",
+        'risk_score': 'INTEGER DEFAULT 0',
+        'recommendations': "TEXT DEFAULT '[]'",
+        'workflow_source': "TEXT DEFAULT 'local_rules'",
+    }
+    try:
+        inspector = inspect(db.engine)
+        if 'daily_reports' not in inspector.get_table_names():
+            return
+        existing = {item['name'] for item in inspector.get_columns('daily_reports')}
+        for name, definition in columns.items():
+            if name in existing:
+                continue
+            db.session.execute(text(
+                'ALTER TABLE daily_reports ADD COLUMN {} {}'.format(name, definition)
+            ))
+            db.session.commit()
+            logger.info('Added daily_reports.%s', name)
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning('Daily report migration failed (non-critical): %s', exc)
 
 
 def _seed_default_data():

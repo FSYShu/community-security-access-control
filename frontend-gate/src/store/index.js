@@ -5,7 +5,7 @@ import gate from './modules/gate'
 
 Vue.use(Vuex)
 
-var store = new Vuex.Store({
+const store = new Vuex.Store({
   modules: {
     user: user,
     gate: gate

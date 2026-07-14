@@ -92,7 +92,9 @@ service.interceptors.response.use(
       if (res.code === 401) {
         handleUnauthorized()
       }
-      return Promise.reject(new Error(res.message || '请求失败'))
+      const handledError = new Error(res.message || '请求失败')
+      handledError.__messageShown = true
+      return Promise.reject(handledError)
     }
     return res
   },
@@ -127,6 +129,7 @@ service.interceptors.response.use(
     }
     const message = (error.response && error.response.data && error.response.data.message) || messageMap[status] || '网络异常(' + status + ')'
     Message({ message: message, type: 'error' })
+    error.__messageShown = true
 
     if (status === 401) {
       handleUnauthorized()

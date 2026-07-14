@@ -293,7 +293,7 @@ export default {
     startDistDetect () {
       this.stopDistDetect()
       if (!this.isBound) return
-      var self = this
+      const self = this
       this.distDetectTimer = setInterval(function () {
         self.detectDistance()
       }, 2000)
@@ -308,25 +308,25 @@ export default {
     async detectDistance () {
       if (!this.$refs.previewVideo || !this.previewStream || !this.gateId) return
       try {
-        var canvas = document.createElement('canvas')
-        var video = this.$refs.previewVideo
-        var w = Math.min(video.videoWidth || 320, 320)
-        var h = Math.min(video.videoHeight || 240, 240)
+        const canvas = document.createElement('canvas')
+        const video = this.$refs.previewVideo
+        const w = Math.min(video.videoWidth || 320, 320)
+        const h = Math.min(video.videoHeight || 240, 240)
         canvas.width = w
         canvas.height = h
         canvas.getContext('2d').drawImage(video, 0, 0, w, h)
-        var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.5) })
+        const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.5) })
         if (!blob) return
-        var formData = new FormData()
+        const formData = new FormData()
         formData.append('frame', blob, 'frame.jpg')
-        var url = '/api/v1/video-monitor/detect-distance/' + this.gateId
-        var headers = {}
-        var token = localStorage.getItem('gate_token')
-        if (token) { headers['Authorization'] = 'Bearer ' + token }
-        var res = await fetch(url, { method: 'POST', headers: headers, body: formData })
-        var data = await res.json()
+        const url = '/api/v1/video-monitor/detect-distance/' + this.gateId
+        const headers = {}
+        const token = localStorage.getItem('gate_token')
+        if (token) { headers.Authorization = 'Bearer ' + token }
+        const res = await fetch(url, { method: 'POST', headers: headers, body: formData })
+        const data = await res.json()
         if (data.code === 0 && data.data && data.data.persons && data.data.persons.length > 0) {
-          var d = data.data.persons[0].distance
+          const d = data.data.persons[0].distance
           if (d !== null && d !== undefined) {
             this.liveDistance = d
             this.distFailCount = 0
@@ -348,38 +348,38 @@ export default {
         this.$toast.fail('请输入有效距离')
         return
       }
-      var formData = new FormData()
+      const formData = new FormData()
       formData.append('distance', String(parseFloat(this.calibDistance)))
       formData.append('point', this.calibPoint)
       if (this.$refs.previewVideo && this.previewStream) {
         try {
-          var canvas = document.createElement('canvas')
-          var video = this.$refs.previewVideo
-          var w = Math.min(video.videoWidth || 320, 320)
-          var h = Math.min(video.videoHeight || 240, 240)
+          const canvas = document.createElement('canvas')
+          const video = this.$refs.previewVideo
+          const w = Math.min(video.videoWidth || 320, 320)
+          const h = Math.min(video.videoHeight || 240, 240)
           canvas.width = w
           canvas.height = h
           canvas.getContext('2d').drawImage(video, 0, 0, w, h)
-          var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.7) })
+          const blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.7) })
           if (blob) { formData.append('frame', blob, 'frame.jpg') }
         } catch (e) { /* ignore */ }
       }
       this.calibLoading = true
       this.calibResult = ''
       try {
-        var url = '/api/v1/video-monitor/calibrate-distance/' + this.gateId
-        var headers = {}
-        var token = localStorage.getItem('gate_token')
-        if (token) { headers['Authorization'] = 'Bearer ' + token }
-        var res = await fetch(url, {
+        const url = '/api/v1/video-monitor/calibrate-distance/' + this.gateId
+        const headers = {}
+        const token = localStorage.getItem('gate_token')
+        if (token) { headers.Authorization = 'Bearer ' + token }
+        const res = await fetch(url, {
           method: 'POST',
           headers: headers,
           body: formData
         })
-        var data = await res.json()
+        const data = await res.json()
         if (data.code === 0) {
           this.calibSuccess = true
-          var label = this.calibPoint === 'near' ? '近点' : '远点'
+          const label = this.calibPoint === 'near' ? '近点' : '远点'
           this.calibResult = label + '校准成功！' + data.data[this.calibPoint === 'near' ? 'calib_near_dist' : 'calib_far_dist'] + '米'
           this.calibNearDist = data.data.calib_near_dist
           this.calibNearRatio = data.data.calib_near_ratio

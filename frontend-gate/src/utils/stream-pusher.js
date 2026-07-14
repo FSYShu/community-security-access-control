@@ -1,5 +1,5 @@
-var STREAM_INTERVAL = 33
-var UPLOAD_URL = '/api/v1/video-monitor/gate-push-frame'
+const STREAM_INTERVAL = 33
+const UPLOAD_URL = '/api/v1/video-monitor/gate-push-frame'
 
 function GateStreamPusher (videoElement, pushKey) {
   this.video = videoElement
@@ -17,7 +17,7 @@ GateStreamPusher.prototype.start = function () {
   if (this.running || !this.pushKey) return
   this.running = true
   this.lastSendTime = Date.now()
-  var self = this
+  const self = this
   this.timer = setInterval(function () {
     self.captureAndSend()
   }, STREAM_INTERVAL)
@@ -32,26 +32,26 @@ GateStreamPusher.prototype.stop = function () {
 }
 
 GateStreamPusher.prototype.captureAndSend = function () {
-  var video = this.video
+  const video = this.video
   if (!video || !video.videoWidth || !this.pushKey) return
 
   if (this.pendingFrames >= this.maxPendingFrames) {
     return
   }
 
-  var targetWidth = Math.min(video.videoWidth, 1280)
-  var scale = targetWidth / video.videoWidth
-  var targetHeight = Math.round(video.videoHeight * scale)
+  const targetWidth = Math.min(video.videoWidth, 1280)
+  const scale = targetWidth / video.videoWidth
+  const targetHeight = Math.round(video.videoHeight * scale)
 
   this.canvas.width = targetWidth
   this.canvas.height = targetHeight
   this.ctx.drawImage(video, 0, 0, targetWidth, targetHeight)
 
-  var dataUrl = this.canvas.toDataURL('image/jpeg', 0.85)
-  var base64 = dataUrl.split(',')[1]
+  const dataUrl = this.canvas.toDataURL('image/jpeg', 0.85)
+  const base64 = dataUrl.split(',')[1]
 
-  var self = this
-  var xhr = new XMLHttpRequest()
+  const self = this
+  const xhr = new XMLHttpRequest()
   xhr.open('POST', UPLOAD_URL, true)
   xhr.setRequestHeader('Content-Type', 'application/json')
   xhr.timeout = 2000

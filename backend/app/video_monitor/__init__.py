@@ -63,7 +63,7 @@ def generate_frames_ffmpeg(stream_url, fps=20, max_width=640):
                 buf_event.set()
                 break
             jpeg = read_jpeg_frame_from_pull(entry)
-            if jpeg is None:
+            if not isinstance(jpeg, (bytes, bytearray)):
                 alive['flag'] = False
                 buf_event.set()
                 break

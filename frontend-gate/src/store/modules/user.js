@@ -26,17 +26,17 @@ const mutations = {
 
 const actions = {
   async loginAction ({ commit }, loginForm) {
-    var res = await login(loginForm)
-    var token = res.data.token
+    const res = await login(loginForm)
+    const token = res.data.token
     commit('SET_TOKEN', token)
     localStorage.setItem('gate_token', token)
     return res
   },
   async getUserInfoAction ({ commit }) {
-    var res = await getUserInfo()
-    var userData = res.data
+    const res = await getUserInfo()
+    const userData = res.data
     commit('SET_USER_INFO', userData)
-    var roles = userData.roles || (userData.role ? [userData.role] : [])
+    const roles = userData.roles || (userData.role ? [userData.role] : [])
     commit('SET_ROLES', roles)
     return res.data
   },
