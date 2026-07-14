@@ -177,6 +177,7 @@ export default {
     gateName () { return this.$store.getters['gate/gateName'] },
     pushKey () { return this.$store.getters['gate/pushKey'] },
     gateId () { return this.$store.getters['gate/gateId'] || '' },
+    cameraDeviceId () { return this.$store.getters['gate/cameraDeviceId'] },
     canSubmitVisitor () {
       return this.visitorForm.building && this.visitorForm.unit && this.visitorForm.room && this.visitorFaceCaptured
     },
@@ -202,6 +203,9 @@ export default {
   },
   watch: {
     pushKey () {
+      this.restartStream()
+    },
+    cameraDeviceId () {
       this.restartStream()
     },
     isBound (val) {
@@ -264,14 +268,29 @@ export default {
     async startCamera () {
       if (!this.pushKey) return
       try {
-        this.stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
-        })
+        const constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 } } }
+        if (this.cameraDeviceId) {
+          constraints.video.deviceId = { exact: this.cameraDeviceId }
+        } else {
+          constraints.video.facingMode = 'user'
+        }
+        this.stream = await navigator.mediaDevices.getUserMedia(constraints)
         const video = this.$refs.bgVideo
         if (video) {
           video.srcObject = this.stream
           await video.play()
         }
+
+        await new Promise(function (resolve) {
+          function checkReady () {
+            if (video && video.videoWidth > 0) {
+              resolve()
+            } else {
+              requestAnimationFrame(checkReady)
+            }
+          }
+          checkReady()
+        })
         this.streamPusher = new GateStreamPusher(video, this.pushKey)
         this.streamPusher.start()
         this.streaming = true

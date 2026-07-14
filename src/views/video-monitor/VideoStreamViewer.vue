@@ -44,7 +44,7 @@
           @error="onStreamError"
         />
         <canvas
-          v-if="showStream && selectedGate && (faceDetectionEnabled || dangerDistanceEnabled)"
+          v-if="showStream && selectedGate && (faceDetectionEnabled || dangerDistanceEnabled || dangerousBehaviorEnabled)"
           ref="overlayCanvas"
           class="overlay-canvas"
         ></canvas>
@@ -122,8 +122,29 @@ export default {
       dangerSafetyDistance: 2.0,
       dangerBoxExpireTimer: null,
       dangerSseErrorCount: 0,
-      dangerSseConnectTimer: null
-
+      dangerSseConnectTimer: null,
+      dangerousBehaviorEventSource: null,
+      latestBehaviorTracks: {},
+      latestBehaviorCrossingCount: 0,
+      latestBehaviorTailgatingActive: false,
+      latestBehaviorTamperStatus: 'normal',
+      latestBehaviorModelAvailable: false,
+      latestBehaviorLineRatio: 0.62,
+      behaviorFrameWidth: 0,
+      behaviorFrameHeight: 0,
+      behaviorSseErrorCount: 0,
+      behaviorSseConnectTimer: null,
+      behaviorBoxExpireTimer: null,
+      showCalibDialog: false,
+      calibDistance: 1.0,
+      calibPoint: 'near',
+      calibLoading: false,
+      calibResult: '',
+      calibSuccess: false,
+      calibNearDist: null,
+      calibNearRatio: null,
+      calibFarDist: null,
+      calibFarRatio: null
     }
   },
   computed: {
@@ -174,14 +195,19 @@ export default {
       this.resetConnection()
       this.stopDetectionSSE()
       this.stopDangerDistanceSSE()
+      this.stopDangerousBehaviorSSE()
       this.latestBoxes = []
       this.latestDangerPersons = []
+      this.latestBehaviorTracks = {}
       this.warmupStream()
       if (this.selectedGate && this.faceDetectionEnabled) {
         this.startDetectionSSE()
       }
       if (this.selectedGate && this.dangerDistanceEnabled) {
         this.startDangerDistanceSSE()
+      }
+      if (this.selectedGate && this.dangerousBehaviorEnabled) {
+        this.startDangerousBehaviorSSE()
       }
       this.fetchLatency()
       const self = this
@@ -191,6 +217,9 @@ export default {
         }
         if (self.selectedGate && self.dangerDistanceEnabled && !self.dangerDistanceEventSource) {
           self.startDangerDistanceSSE()
+        }
+        if (self.selectedGate && self.dangerousBehaviorEnabled && !self.dangerousBehaviorEventSource) {
+          self.startDangerousBehaviorSSE()
         }
       }, 1500)
     },
@@ -203,8 +232,14 @@ export default {
         this.clearOverlay()
       }
     },
-    dangerousBehaviorEnabled () {
-      this.resetConnection()
+    dangerousBehaviorEnabled (val) {
+      if (val && this.selectedGate) {
+        this.startDangerousBehaviorSSE()
+      } else {
+        this.stopDangerousBehaviorSSE()
+        this.latestBehaviorTracks = {}
+        this.clearOverlay()
+      }
     },
     dangerDistanceEnabled (val) {
       if (val && this.selectedGate) {
@@ -241,6 +276,9 @@ export default {
       }
       if (self.selectedGate && self.dangerDistanceEnabled && !self.dangerDistanceEventSource) {
         self.startDangerDistanceSSE()
+      }
+      if (self.selectedGate && self.dangerousBehaviorEnabled && !self.dangerousBehaviorEventSource) {
+        self.startDangerousBehaviorSSE()
       }
     }, 2000)
   },
@@ -282,6 +320,7 @@ export default {
       this.clearStreamConnectTimer()
       this.stopDetectionSSE()
       this.stopDangerDistanceSSE()
+      this.stopDangerousBehaviorSSE()
       this.urlVersion = Date.now()
       this.showStream = false
       const self = this
@@ -317,12 +356,16 @@ export default {
       if (this.dangerDistanceEnabled && this.selectedGate) {
         this.startDangerDistanceSSE()
       }
+      if (this.dangerousBehaviorEnabled && this.selectedGate) {
+        this.startDangerousBehaviorSSE()
+      }
     },
     onStreamError () {
       this.connected = false
       this.streamError = true
       this.stopDetectionSSE()
       this.stopDangerDistanceSSE()
+      this.stopDangerousBehaviorSSE()
       this.startAutoRetry()
     },
     startAutoRetry () {
@@ -531,6 +574,97 @@ export default {
       this.dangerFrameWidth = 0
       this.dangerFrameHeight = 0
       this.clearDangerBoxExpire()
+      this.clearOverlay()
+    },
+    startDangerousBehaviorSSE () {
+      if (this.dangerousBehaviorEventSource) return
+      if (!this.selectedGate || !this.dangerousBehaviorEnabled) return
+      const self = this
+      const ssePort = window.location.port === '8080' ? '5000' : window.location.port
+      const sseBase = window.location.protocol + '//' + window.location.hostname + ':' + ssePort
+      const url = sseBase + '/api/v1/video-monitor/dangerous-behavior/' + this.selectedGate + '/stream'
+      console.log('[DangerousBehavior] connecting SSE:', url)
+      this.dangerousBehaviorEventSource = new EventSource(url)
+      this.behaviorSseConnectTimer = setTimeout(function () {
+        if (self.dangerousBehaviorEventSource && self.behaviorSseErrorCount === 0) {
+          console.error('[DangerousBehavior] SSE connection timeout (10s), backend may not be running')
+          self.$message({ message: '异常行为检测服务连接超时，请检查后端服务是否启动', type: 'error' })
+          self.stopDangerousBehaviorSSE()
+        }
+      }, 10000)
+      this.dangerousBehaviorEventSource.addEventListener('detection', function (e) {
+        try {
+          const data = JSON.parse(e.data)
+          const tracks = data.tracks || {}
+          console.log('[DangerousBehavior] detection event, tracks:', Object.keys(tracks).length, 'tailgating:', data.tailgating_active, 'tamper:', data.tamper_status, 'model:', data.model_available)
+          if (data.frame_width) self.behaviorFrameWidth = data.frame_width
+          if (data.frame_height) self.behaviorFrameHeight = data.frame_height
+          if (data.line_ratio) self.latestBehaviorLineRatio = data.line_ratio
+          self.latestBehaviorTracks = tracks
+          self.latestBehaviorCrossingCount = data.crossing_count || 0
+          self.latestBehaviorTailgatingActive = data.tailgating_active || false
+          self.latestBehaviorTamperStatus = data.tamper_status || 'normal'
+          self.latestBehaviorModelAvailable = !!data.model_available
+          const hasVisibleTracks = Object.keys(tracks).some(function (k) { return !tracks[k].missing })
+          if (hasVisibleTracks || (data.tamper_status && data.tamper_status !== 'normal') || data.model_available) {
+            self.drawDangerousBehavior()
+            self.resetBehaviorBoxExpire()
+            if (!self.$refs.overlayCanvas || !self.$refs.overlayCanvas.getBoundingClientRect().width) {
+              setTimeout(function () { self.drawDangerousBehavior() }, 500)
+            }
+          }
+        } catch (err) {
+          console.error('[DangerousBehavior] parse error:', err)
+        }
+      })
+      this.dangerousBehaviorEventSource.addEventListener('error', function (e) {
+        try {
+          const msg = e.data ? JSON.parse(e.data) : {}
+          console.error('[DangerousBehavior] backend error:', msg.error || 'unknown')
+        } catch (err) {}
+      })
+      this.dangerousBehaviorEventSource.onopen = function () {
+        console.log('[DangerousBehavior] SSE connected')
+        self.behaviorSseErrorCount = 0
+        if (self.behaviorSseConnectTimer) {
+          clearTimeout(self.behaviorSseConnectTimer)
+          self.behaviorSseConnectTimer = null
+        }
+      }
+      this.dangerousBehaviorEventSource.onerror = function () {
+        self.behaviorSseErrorCount++
+        console.error('[DangerousBehavior] SSE error, retry in 3s')
+        if (self.behaviorSseConnectTimer) {
+          clearTimeout(self.behaviorSseConnectTimer)
+          self.behaviorSseConnectTimer = null
+        }
+        if (self.behaviorSseErrorCount === 3) {
+          self.$message({ message: '异常行为检测连接失败，正在重试...', type: 'warning' })
+        }
+        self.stopDangerousBehaviorSSE()
+        setTimeout(function () {
+          if (self.dangerousBehaviorEnabled && self.selectedGate) {
+            self.startDangerousBehaviorSSE()
+          }
+        }, 3000)
+      }
+    },
+    stopDangerousBehaviorSSE () {
+      if (this.behaviorSseConnectTimer) {
+        clearTimeout(this.behaviorSseConnectTimer)
+        this.behaviorSseConnectTimer = null
+      }
+      if (this.dangerousBehaviorEventSource) {
+        this.dangerousBehaviorEventSource.close()
+        this.dangerousBehaviorEventSource = null
+      }
+      this.latestBehaviorTracks = {}
+      this.latestBehaviorCrossingCount = 0
+      this.latestBehaviorTailgatingActive = false
+      this.latestBehaviorTamperStatus = 'normal'
+      this.behaviorFrameWidth = 0
+      this.behaviorFrameHeight = 0
+      this.clearBehaviorBoxExpire()
       this.clearOverlay()
     },
     drawFaceBoxes (retryCount) {
@@ -754,14 +888,180 @@ export default {
         this.dangerBoxExpireTimer = null
       }
     },
+    drawDangerousBehavior (retryCount) {
+      if (retryCount === undefined) retryCount = 0
+      const canvas = this.$refs.overlayCanvas
+      const img = this.$refs.streamImage
+      if (!canvas) {
+        if (retryCount < 10) {
+          const self = this
+          requestAnimationFrame(function () { self.drawDangerousBehavior(retryCount + 1) })
+        }
+        return
+      }
+      const rect = canvas.getBoundingClientRect()
+      const containerWidth = rect.width || canvas.clientWidth
+      const containerHeight = rect.height || canvas.clientHeight
+      if (!containerWidth || !containerHeight) {
+        if (retryCount < 10) {
+          const self2 = this
+          requestAnimationFrame(function () { self2.drawDangerousBehavior(retryCount + 1) })
+        }
+        return
+      }
+      const tracks = this.latestBehaviorTracks
+      const hasVisible = Object.keys(tracks).some(function (k) { return !tracks[k].missing })
+      const tamperStatus = this.latestBehaviorTamperStatus
+      const modelAvailable = this.latestBehaviorModelAvailable
+      if (!hasVisible && (!tamperStatus || tamperStatus === 'normal') && !modelAvailable) return
+      const naturalWidth = img && img.naturalWidth ? img.naturalWidth : this.behaviorFrameWidth || 640
+      const naturalHeight = img && img.naturalHeight ? img.naturalHeight : this.behaviorFrameHeight || 480
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = containerWidth * dpr
+      canvas.height = containerHeight * dpr
+      const ctx = canvas.getContext('2d')
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.clearRect(0, 0, containerWidth, containerHeight)
+      const scaleX = containerWidth / naturalWidth
+      const scaleY = containerHeight / naturalHeight
+      const displayScale = Math.min(scaleX, scaleY)
+      const displayWidth = naturalWidth * displayScale
+      const displayHeight = naturalHeight * displayScale
+      const offsetX = (containerWidth - displayWidth) / 2
+      const offsetY = (containerHeight - displayHeight) / 2
+      const frameWidth = this.behaviorFrameWidth || naturalWidth
+      const frameHeight = this.behaviorFrameHeight || naturalHeight
+      const frameScaleX = displayWidth / frameWidth
+      const frameScaleY = displayHeight / frameHeight
+      const lineRatio = this.latestBehaviorLineRatio || 0.62
+      const lineY = frameHeight * lineRatio
+      const drawLineY = lineY * frameScaleY + offsetY
+      if (hasVisible) {
+        ctx.strokeStyle = 'rgba(180, 130, 70, 0.7)'
+        ctx.lineWidth = 1
+        ctx.setLineDash([10, 22])
+        ctx.beginPath()
+        ctx.moveTo(offsetX, drawLineY)
+        ctx.lineTo(offsetX + displayWidth, drawLineY)
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
+      const trackKeys = Object.keys(tracks)
+      for (let i = 0; i < trackKeys.length; i++) {
+        const track = tracks[trackKeys[i]]
+        if (track.missing) continue
+        const bx1 = track.box[0]
+        const by1 = track.box[1]
+        const bx2 = track.box[2]
+        const by2 = track.box[3]
+        const drawX = bx1 * frameScaleX + offsetX
+        const drawY = by1 * frameScaleY + offsetY
+        const drawW = (bx2 - bx1) * frameScaleX
+        const drawH = (by2 - by1) * frameScaleY
+        const cornerColor = 'rgba(180, 130, 70, 0.9)'
+        const corner = Math.max(6, Math.min(14, drawW / 4, drawH / 4))
+        ctx.strokeStyle = cornerColor
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(drawX, drawY + corner)
+        ctx.lineTo(drawX, drawY)
+        ctx.lineTo(drawX + corner, drawY)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(drawX + drawW - corner, drawY)
+        ctx.lineTo(drawX + drawW, drawY)
+        ctx.lineTo(drawX + drawW, drawY + corner)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(drawX, drawY + drawH - corner)
+        ctx.lineTo(drawX, drawY + drawH)
+        ctx.lineTo(drawX + corner, drawY + drawH)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(drawX + drawW - corner, drawY + drawH)
+        ctx.lineTo(drawX + drawW, drawY + drawH)
+        ctx.lineTo(drawX + drawW, drawY + drawH - corner)
+        ctx.stroke()
+      }
+      let statusLabel = ''
+      let statusColor = ''
+      if (tamperStatus && tamperStatus !== 'normal') {
+        const tamperLabels = {
+          tailgating: '检测到尾随',
+          device_blocked: '检测到镜头遮挡',
+          device_blurred: '检测到画面模糊',
+          device_moved: '检测到摄像头移动',
+          camera_impact: '检测到摄像头撞击',
+          open_flame: '检测到明火',
+          smoke: '检测到烟雾',
+          stream_offline: '视频流离线'
+        }
+        statusLabel = tamperLabels[tamperStatus] || tamperStatus.toUpperCase()
+        const redStatuses = ['tailgating', 'stream_offline', 'device_blocked', 'device_moved', 'camera_impact', 'open_flame']
+        statusColor = redStatuses.includes(tamperStatus) ? '#ef4444' : '#f59e0b'
+      } else if (modelAvailable) {
+        statusLabel = '行为监控'
+        statusColor = 'rgba(180,130,70,0.9)'
+      }
+      if (statusLabel) {
+        ctx.font = 'bold 13px "PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif'
+        const sMetrics = ctx.measureText(statusLabel)
+        const sPadX = 8
+        const sPadY = 4
+        const sLabelW = sMetrics.width + sPadX * 2
+        const sLabelH = 14 + sPadY * 2
+        const sLabelX = offsetX + 8
+        const sLabelY = offsetY + 8
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'
+        this.drawRoundRect(ctx, sLabelX, sLabelY, sLabelW, sLabelH, 4)
+        ctx.fill()
+        ctx.fillStyle = statusColor
+        ctx.textBaseline = 'top'
+        ctx.fillText(statusLabel, sLabelX + sPadX, sLabelY + sPadY)
+      }
+      if (this.latestBehaviorCrossingCount > 0) {
+        const crossLabel = '越线次数: ' + this.latestBehaviorCrossingCount
+        ctx.font = '11px "PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif'
+        const cMetrics = ctx.measureText(crossLabel)
+        const cPadX = 6
+        const cPadY = 3
+        const cLabelW = cMetrics.width + cPadX * 2
+        const cLabelH = 12 + cPadY * 2
+        const cLabelX = offsetX + 8
+        const cLabelY = offsetY + displayHeight - cLabelH - 8
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'
+        this.drawRoundRect(ctx, cLabelX, cLabelY, cLabelW, cLabelH, 3)
+        ctx.fill()
+        ctx.fillStyle = tamperStatus === 'tailgating' ? '#ef4444' : 'rgba(180,130,70,0.9)'
+        ctx.textBaseline = 'top'
+        ctx.fillText(crossLabel, cLabelX + cPadX, cLabelY + cPadY)
+      }
+    },
+    resetBehaviorBoxExpire () {
+      this.clearBehaviorBoxExpire()
+      const self = this
+      this.behaviorBoxExpireTimer = setTimeout(function () {
+        self.latestBehaviorTracks = {}
+        self.latestBehaviorTailgatingActive = false
+        self.clearOverlay()
+      }, 5000)
+    },
+    clearBehaviorBoxExpire () {
+      if (this.behaviorBoxExpireTimer) {
+        clearTimeout(this.behaviorBoxExpireTimer)
+        this.behaviorBoxExpireTimer = null
+      }
+    },
     cleanup () {
       this.showStream = false
       this.clearRetryTimer()
       this.clearStreamConnectTimer()
       this.stopDetectionSSE()
       this.stopDangerDistanceSSE()
+      this.stopDangerousBehaviorSSE()
       this.clearBoxExpire()
       this.clearDangerBoxExpire()
+      this.clearBehaviorBoxExpire()
       if (this.latencyTimer) {
         clearInterval(this.latencyTimer)
         this.latencyTimer = null
@@ -779,6 +1079,9 @@ export default {
       }
       if (this.dangerDistanceEnabled && this.latestDangerPersons.length > 0) {
         this.drawDangerDistance()
+      }
+      if (this.dangerousBehaviorEnabled && Object.keys(this.latestBehaviorTracks).length > 0) {
+        this.drawDangerousBehavior()
       }
     },
     async fetchLatency () {
@@ -954,6 +1257,20 @@ export default {
   height: 100%;
   object-fit: contain;
 }
+.overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+.stream-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
 .stream-error-overlay {
   position: absolute;
   top: 0;
@@ -1026,8 +1343,7 @@ export default {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+
   pointer-events: none;
   z-index: 2;
 }

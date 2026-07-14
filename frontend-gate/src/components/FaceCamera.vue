@@ -54,12 +54,18 @@ export default {
   beforeDestroy () {
     this.stopCamera()
   },
+  watch: {
+    deviceId () {
+      this.stopCamera()
+      this.startCamera()
+    }
+  },
   methods: {
     async startCamera () {
       this.cameraError = ''
       this.cameraReady = false
       try {
-        var constraints = { video: { width: { ideal: 640 }, height: { ideal: 480 } } }
+        const constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 } } }
         if (this.deviceId) {
           constraints.video.deviceId = { exact: this.deviceId }
         } else {
@@ -70,6 +76,17 @@ export default {
         await this.$refs.video.play()
         this.cameraReady = true
         this.$emit('ready')
+        const self = this
+        await new Promise(function (resolve) {
+          function checkReady () {
+            if (self.$refs.video && self.$refs.video.videoWidth > 0) {
+              resolve()
+            } else {
+              requestAnimationFrame(checkReady)
+            }
+          }
+          checkReady()
+        })
         this.startPushStream()
       } catch (err) {
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -91,17 +108,39 @@ export default {
       this.cameraReady = false
     },
     async switchCamera () {
+      if (this.deviceId) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+          stream.getTracks().forEach(function (t) { t.stop() })
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const videoDevices = devices.filter(function (d) { return d.kind === 'videoinput' })
+          if (videoDevices.length <= 1) return
+          let currentIdx = -1
+          for (let i = 0; i < videoDevices.length; i++) {
+            if (videoDevices[i].deviceId === this.deviceId) {
+              currentIdx = i
+              break
+            }
+          }
+          const nextIdx = (currentIdx + 1) % videoDevices.length
+          const nextDevice = videoDevices[nextIdx]
+          this.$store.commit('gate/SET_CAMERA', { deviceId: nextDevice.deviceId, label: nextDevice.label || '未命名摄像头' })
+        } catch (e) {
+          // ignore
+        }
+        return
+      }
       this.currentFacing = this.currentFacing === 'user' ? 'environment' : 'user'
       this.stopCamera()
       await this.startCamera()
     },
     captureFrame () {
-      var video = this.$refs.video
-      var canvas = this.$refs.canvas
+      const video = this.$refs.video
+      const canvas = this.$refs.canvas
       if (!video || !video.videoWidth) return null
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
-      var ctx = canvas.getContext('2d')
+      const ctx = canvas.getContext('2d')
       ctx.drawImage(video, 0, 0)
       return canvas.toDataURL('image/jpeg').split(',')[1]
     },
