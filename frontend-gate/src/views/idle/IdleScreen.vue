@@ -144,7 +144,7 @@
 import GateStreamPusher from '@/utils/stream-pusher'
 import { submitFacePass } from '@/api/face'
 import { gateApplyVisitorAuth } from '@/api/visitorAuth'
-import { getPublicAddresses } from '@/api/gate'
+import { getPublicAddresses, getGateDetail } from '@/api/gate'
 import { enqueue, setupOnlineHandler } from '@/utils/offline-queue'
 
 const RESULT_DISPLAY_TIME = 5000
@@ -176,7 +176,8 @@ export default {
       showUnitDrop: false,
       showRoomDrop: false,
       showUnboundDialog: false,
-      addressGatesData: []
+      addressGatesData: [],
+      gateCheckTimer: null
     }
   },
   computed: {
@@ -199,9 +200,9 @@ export default {
       return this.addressGatesData.length > 0 ? this.addressGatesData : (this.$store.getters['gate/gatesCache'] || [])
     },
     buildingOptions () {
-      var buildings = {}
+      const buildings = {}
       this.addressGates.forEach(function (g) {
-        var m = g.gate_name.match(/^(\d+栋)/)
+        const m = g.gate_name.match(/^(\d+栋)/)
         if (m) buildings[m[1]] = true
       })
       return Object.keys(buildings).sort(function (a, b) {
@@ -210,11 +211,11 @@ export default {
     },
     unitOptions () {
       if (!this.visitorForm.building) return []
-      var prefix = this.visitorForm.building
-      var units = {}
+      const prefix = this.visitorForm.building
+      const units = {}
       this.addressGates.forEach(function (g) {
         if (g.gate_name.indexOf(prefix) === 0) {
-          var m = g.gate_name.match(/^\d+栋(\d+单元)/)
+          const m = g.gate_name.match(/^\d+栋(\d+单元)/)
           if (m) units[m[1]] = true
         }
       })
@@ -224,11 +225,11 @@ export default {
     },
     roomOptions () {
       if (!this.visitorForm.building || !this.visitorForm.unit) return []
-      var prefix = this.visitorForm.building + this.visitorForm.unit
-      var rooms = []
+      const prefix = this.visitorForm.building + this.visitorForm.unit
+      const rooms = []
       this.addressGates.forEach(function (g) {
         if (g.gate_level === 'entrance_door' && g.gate_name.indexOf(prefix) === 0) {
-          var m = g.gate_name.match(/(\d+室)$/)
+          const m = g.gate_name.match(/(\d+室)$/)
           if (m) rooms.push(m[1])
         }
       })
@@ -267,12 +268,15 @@ export default {
       this.showUnboundDialog = true
     }
     this.loadAddressGates()
+    this.checkBoundGateExists()
+    this.gateCheckTimer = setInterval(this.checkBoundGateExists, 60000)
     window.addEventListener('beforeunload', this._onPageHide)
     window.addEventListener('pagehide', this._onPageHide)
   },
   beforeDestroy () {
     if (this.timeTimer) clearInterval(this.timeTimer)
     if (this.streamAliveTimer) clearInterval(this.streamAliveTimer)
+    if (this.gateCheckTimer) clearInterval(this.gateCheckTimer)
     this.stopAll()
     this.clearResultTimer()
     window.removeEventListener('beforeunload', this._onPageHide)
@@ -292,13 +296,28 @@ export default {
       this.showUnboundDialog = false
       this.$router.push('/settings').catch(function () {})
     },
+    async checkBoundGateExists () {
+      if (!this.gateId) return
+      var token = localStorage.getItem('gate_token')
+      if (!token) return
+      try {
+        await getGateDetail(this.gateId, { _skipAuthRedirect: true })
+      } catch (err) {
+        var msg = (err && err.message) || ''
+        if (msg.indexOf('不存在') !== -1) {
+          this.stopAll()
+          this.$store.commit('gate/CLEAR_GATE')
+          this.showUnboundDialog = true
+        }
+      }
+    },
     goToVisitorManage () {
       this.$router.push('/visitor-manage').catch(function () {})
     },
     async loadAddressGates () {
       try {
-        var res = await getPublicAddresses()
-        var items = (res.data && res.data.items) || []
+        const res = await getPublicAddresses()
+        const items = (res.data && res.data.items) || []
         if (items.length > 0) {
           this.addressGatesData = items
         }
@@ -360,7 +379,6 @@ export default {
         this.stream.getTracks().forEach(function (t) { t.stop() })
         this.stream = null
       }
-
     },
     async restartStream () {
       this.stopAll()
@@ -503,15 +521,15 @@ export default {
     async doSubmitVisitor () {
       this.visitorSubmitting = true
       try {
-        var unitDoorName = ''
-        var prefix = this.visitorForm.building + this.visitorForm.unit
-        var self = this
+        let unitDoorName = ''
+        const prefix = this.visitorForm.building + this.visitorForm.unit
+        const self = this
         this.addressGates.forEach(function (g) {
           if (g.gate_level === 'unit_door' && g.gate_name.indexOf(prefix) === 0) {
             unitDoorName = g.gate_name
           }
         })
-        var levels = ['社区大门']
+        const levels = ['社区大门']
         if (unitDoorName) levels.push(unitDoorName)
         await gateApplyVisitorAuth({
           visitor_name: '访客',

@@ -106,7 +106,17 @@
         </div>
         <div class="form-item">
           <label class="form-label">授权入户门</label>
-          <van-field v-model="addFormGateLabel" placeholder="请选择" readonly is-link @click="showGatePicker = true" />
+          <div class="gate-address-select" :class="{ 'is-open': showGateDrop }">
+            <div class="gate-select-trigger" @click="showGateDrop = !showGateDrop">
+              <span :class="addForm.selectedGateId ? '' : 'gate-placeholder'">{{ addFormGateLabel || '请选择' }}</span>
+              <i class="el-icon-arrow-down gate-select-arrow" :class="{ 'is-reverse': showGateDrop }"></i>
+            </div>
+            <transition name="dropdown">
+              <div v-if="showGateDrop" class="gate-select-dropdown">
+                <div v-for="door in entranceDoors" :key="door.id" class="gate-select-option" :class="{ 'is-active': addForm.selectedGateId === door.id }" @click="selectGateDoor(door)">{{ door.gate_name }}</div>
+              </div>
+            </transition>
+          </div>
         </div>
       </div>
       <div class="form-footer">
@@ -159,9 +169,6 @@
       </div>
     </el-dialog>
 
-    <van-popup v-model="showGatePicker" position="bottom" round>
-      <van-picker :columns="gateColumns" @confirm="onGateConfirm" @cancel="showGatePicker = false" show-toolbar title="选择入户门" />
-    </van-popup>
   </app-layout>
 </template>
 
@@ -183,6 +190,7 @@ export default {
       showAddDialog: false,
       showTestDialog: false,
       showGatePicker: false,
+      showGateDrop: false,
       isReRegister: false,
       reRegisterId: null,
       addLoading: false,
@@ -203,9 +211,6 @@ export default {
       if (!this.addForm.selectedGateId) return ''
       const door = this.entranceDoors.find(d => d.id === this.addForm.selectedGateId)
       return door ? door.gate_name : ''
-    },
-    gateColumns () {
-      return this.entranceDoors.map(d => ({ text: d.gate_name, value: d.id }))
     }
   },
 
@@ -356,7 +361,7 @@ export default {
     },
     resetAddForm () {
       this.addForm = { personName: '', personType: 'owner', selectedGateId: null }
-
+      this.showGateDrop = false
       this.addMode = 'camera'
       this.addPhotoPreview = null
       this.addPhotoBase64 = null
@@ -375,6 +380,10 @@ export default {
     onGateConfirm (val) {
       this.addForm.selectedGateId = val.value
       this.showGatePicker = false
+    },
+    selectGateDoor (door) {
+      this.addForm.selectedGateId = door.id
+      this.showGateDrop = false
     },
     onReRegister (item) {
       this.resetAddForm()
@@ -1215,6 +1224,76 @@ export default {
   border-color: rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
   color: var(--dark-text-muted);
+}
+
+.gate-address-select {
+  position: relative;
+}
+
+.gate-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--dark-text);
+  transition: border-color 0.2s;
+}
+
+.gate-address-select.is-open .gate-select-trigger {
+  border-color: var(--dark-accent-light);
+}
+
+.gate-placeholder {
+  color: var(--dark-text-muted);
+}
+
+.gate-select-arrow {
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.gate-select-arrow.is-reverse {
+  transform: rotate(180deg);
+}
+
+.gate-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--dark-bg-secondary);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  padding: 4px 0;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.gate-select-option {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.gate-select-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dark-text);
+}
+
+.gate-select-option.is-active {
+  color: var(--dark-accent-light);
+  background: rgba(99, 102, 241, 0.1);
 }
 
 </style>

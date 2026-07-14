@@ -237,6 +237,7 @@ export default {
         this.selectedGateId = String(item.id)
         this.$store.commit('gate/SET_GATE', item)
         this.$toast.success('已绑定：' + item.gate_name)
+        this.loadGateList()
       } catch (e) {
         this.$toast.fail('绑定失败')
       }
@@ -253,6 +254,7 @@ export default {
         this.selectedGateId = ''
         this.$store.commit('gate/CLEAR_GATE')
         this.$toast.success('已解除绑定')
+        this.loadGateList()
       } catch (e) {
         this.$toast.fail('解绑失败')
       }

@@ -60,6 +60,10 @@
         <p class="retry-text" v-if="autoRetrying">自动重连中（第{{ retryCount }}次）...</p>
         <button class="retry-button" @click="manualRefresh">立即重试</button>
       </div>
+      <div v-else-if="!connected" class="stream-loading-overlay">
+        <div class="loading-shimmer"></div>
+        <p class="loading-text">正在连接视频流...</p>
+      </div>
     </div>
 
   </div>
@@ -1104,7 +1108,7 @@ export default {
     },
     warmupStream () {
       if (!this.selectedGate) return
-      fetch('/api/v1/video-monitor/gate-warmup?gate_id=' + this.selectedGate).catch(function () {})
+      fetch('/api/v1/video-monitor/gate-warmup/gate/' + this.selectedGate).catch(function () {})
     }
 
   }
@@ -1254,6 +1258,8 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
 }
 .overlay-canvas {
@@ -1264,11 +1270,6 @@ export default {
   height: 100%;
   pointer-events: none;
   z-index: 2;
-}
-.stream-image {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
 }
 .stream-error-overlay {
   position: absolute;
@@ -1282,6 +1283,47 @@ export default {
   justify-content: center;
   background: rgba(0, 0, 0, 0.85);
   color: var(--dark-text);
+  z-index: 3;
+}
+.stream-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--dark-text-secondary);
+  z-index: 3;
+}
+.loading-shimmer {
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.loading-shimmer::after {
+  content: '';
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--dark-accent-light);
+  border-radius: 2px;
+  animation: shimmer-slide 1.5s ease-in-out infinite;
+}
+@keyframes shimmer-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.loading-text {
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+  margin: 0;
 }
 .error-text {
   margin: 8px 0 4px;
@@ -1338,14 +1380,7 @@ export default {
 .dot-gray {
   background: var(--dark-text-secondary);
 }
-.overlay-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
 
-  pointer-events: none;
-  z-index: 2;
-}
 .latency-tag {
   font-size: 10px;
   padding: 1px 4px;
@@ -1366,22 +1401,13 @@ export default {
   color: #ef4444;
 }
 .fps-tag {
-  font-size: 10px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  margin-left: 2px;
-  font-weight: 500;
-  background: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
-}
-
-.fps-tag {
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 3px;
   background: rgba(59, 130, 246, 0.15);
   color: #3b82f6;
   margin-left: 4px;
+  font-weight: 500;
 }
 
 </style>

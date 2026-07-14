@@ -6,10 +6,20 @@
     </div>
     <div class="form-area">
       <van-field v-model="personName" label="姓名" placeholder="请输入姓名" required />
-      <van-field name="selectedGateId" label="授权入户门" readonly clickable right-icon="arrow" :value="selectedGateLabel" placeholder="请选择" @click="showGatePicker = true" />
-      <van-popup v-model="showGatePicker" position="bottom" round>
-        <van-picker :columns="gateColumns" @confirm="onGateConfirm" @cancel="showGatePicker = false" />
-      </van-popup>
+      <div class="gate-form-item">
+        <label class="gate-form-label">授权入户门</label>
+        <div class="gate-address-select" :class="{ 'is-open': showGateDrop }">
+          <div class="gate-select-trigger" @click="showGateDrop = !showGateDrop">
+            <span :class="selectedGateId ? '' : 'gate-placeholder'">{{ selectedGateLabel || '请选择' }}</span>
+            <i class="el-icon-arrow-down gate-select-arrow" :class="{ 'is-reverse': showGateDrop }"></i>
+          </div>
+          <transition name="dropdown">
+            <div v-if="showGateDrop" class="gate-select-dropdown">
+              <div v-for="door in entranceDoors" :key="door.id" class="gate-select-option" :class="{ 'is-active': selectedGateId === door.id }" @click="selectGateDoor(door)">{{ door.gate_name }}</div>
+            </div>
+          </transition>
+        </div>
+      </div>
       <div class="action-area">
         <van-button type="primary" block @click="captureAndRegister" :loading="loading" loading-text="录入中...">录入</van-button>
       </div>
@@ -29,7 +39,7 @@ export default {
       personType: 'owner',
       selectedGateId: null,
       entranceDoors: [],
-      showGatePicker: false,
+      showGateDrop: false,
       loading: false,
       stream: null
     }
@@ -39,9 +49,6 @@ export default {
       if (!this.selectedGateId) return ''
       const door = this.entranceDoors.find(d => d.id === this.selectedGateId)
       return door ? door.gate_name : ''
-    },
-    gateColumns () {
-      return this.entranceDoors.map(d => ({ text: d.gate_name, value: d.id }))
     }
   },
   mounted () {
@@ -61,9 +68,9 @@ export default {
         this.entranceDoors = []
       }
     },
-    onGateConfirm (val) {
-      this.selectedGateId = val.value
-      this.showGatePicker = false
+    selectGateDoor (door) {
+      this.selectedGateId = door.id
+      this.showGateDrop = false
     },
     async startCamera () {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -116,6 +123,7 @@ export default {
           this.$message.success('录入成功')
           this.personName = ''
           this.selectedGateId = null
+          this.showGateDrop = false
         }
       } catch (err) {
         if (!err.message || err.message === '请求失败') {
@@ -157,5 +165,85 @@ export default {
 .action-area {
   margin-top: 16px;
   padding: 0 16px;
+}
+.gate-form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 16px;
+}
+.gate-form-label {
+  font-size: 14px;
+  color: var(--dark-text-secondary);
+  font-weight: 500;
+}
+.gate-address-select {
+  position: relative;
+}
+.gate-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--dark-text);
+  transition: border-color 0.2s;
+}
+.gate-address-select.is-open .gate-select-trigger {
+  border-color: var(--dark-accent-light);
+}
+.gate-placeholder {
+  color: var(--dark-text-muted);
+}
+.gate-select-arrow {
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+.gate-select-arrow.is-reverse {
+  transform: rotate(180deg);
+}
+.gate-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--dark-bg-secondary);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  padding: 4px 0;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.gate-select-option {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.gate-select-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dark-text);
+}
+.gate-select-option.is-active {
+  color: var(--dark-accent-light);
+  background: rgba(99, 102, 241, 0.1);
+}
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+.dropdown-enter,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>
