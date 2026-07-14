@@ -1,8 +1,10 @@
 """
 数据库模型 - 访客临时授权
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from app import db
+
+_CST = timezone(timedelta(hours=8))
 
 
 class VisitorAuth(db.Model):
@@ -19,7 +21,7 @@ class VisitorAuth(db.Model):
     approval_status = db.Column(db.Text, default='pending')
     approver_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     approval_time = db.Column(db.Text, default='')
-    apply_time = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
+    apply_time = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat())
     visit_address = db.Column(db.Text, default='')
 
     def to_dict(self):

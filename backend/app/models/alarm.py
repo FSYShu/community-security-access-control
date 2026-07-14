@@ -11,9 +11,8 @@ def _to_cst_str(time_str):
         return time_str
     try:
         dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        dt = dt.astimezone(_CST)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(_CST)
         return dt.strftime('%Y-%m-%d %H:%M:%S')
     except (ValueError, AttributeError):
         return time_str
@@ -36,7 +35,7 @@ class AlarmEvent(db.Model):
     handler_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     handle_time = db.Column(db.Text, nullable=True)
     handle_remark = db.Column(db.Text, nullable=True)
-    alarm_time = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
+    alarm_time = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat())
 
     def to_dict(self):
         return {

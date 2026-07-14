@@ -8,7 +8,7 @@ import json
 import logging
 import cv2
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
@@ -16,6 +16,7 @@ from app import db, limiter
 from app.models.face import FaceInfo
 from app.models.pass_record import PassRecord
 from app.models.visitor_auth import VisitorAuth
+from app.models.gate import Gate
 from utils.response import success_response, error_response
 from utils.permissions import admin_required, owner_self_required
 from core.db_lock import with_write_lock
@@ -24,29 +25,34 @@ from core.face_recognition import FaceRecognizer, load_registered_faces
 
 logger = logging.getLogger(__name__)
 
+_CST = timezone(timedelta(hours=8))
+
 face_bp = Blueprint('face', __name__)
 
 
 def _remove_visitor_access(face_info):
     """访客通过所有申请门禁后，删除其人脸记录和授权记录"""
     try:
+        visitor_name = face_info.person_name
+        face_id = face_info.id
+
         from flask import current_app
         faces_file = current_app.config.get('REGISTERED_FACES_FILE')
         if not faces_file:
-            faces_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'registered_faces.json')
+            faces_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'registered_faces.json')
 
         registered = []
         if os.path.exists(faces_file):
             with open(faces_file, 'r', encoding='utf-8') as f:
                 registered = json.load(f)
-        registered = [r for r in registered if r.get('id') != face_info.id]
+        registered = [r for r in registered if r.get('id') != face_id]
         with open(faces_file, 'w', encoding='utf-8') as f:
             json.dump(registered, f, ensure_ascii=False)
 
         db.session.delete(face_info)
-        VisitorAuth.query.filter_by(visitor_name=face_info.person_name, approval_status='approved').delete()
+        VisitorAuth.query.filter_by(visitor_name=visitor_name, approval_status='approved').delete()
         db.session.commit()
-        logger.info('Visitor access removed: %s (face_id=%d)', face_info.person_name, face_info.id)
+        logger.info('Visitor access removed: %s (face_id=%d)', visitor_name, face_id)
     except Exception as e:
         db.session.rollback()
         logger.error('Failed to remove visitor access for face_id=%d: %s', face_info.id, str(e))
@@ -196,7 +202,7 @@ def delete_face(face_id):
         except Exception:
             pass
 
-    _remove_from_registered_faces(face.person_name, face.person_type)
+    _remove_from_registered_faces(face_id)
 
     db.session.delete(face)
     db.session.commit()
@@ -262,11 +268,15 @@ def submit_face_pass():
     if face_info.person_type == 'blacklist':
         return error_response(message='黑名单：黑名单人员，禁止通行', code=403)
 
-    now = datetime.utcnow()
+    now = datetime.now(_CST)
     if face_info.auth_start_time and face_info.auth_end_time:
         try:
             start = datetime.fromisoformat(face_info.auth_start_time)
             end = datetime.fromisoformat(face_info.auth_end_time)
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=_CST)
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=_CST)
             if now < start or now > end:
                 return error_response(message='授权过期：访客授权已过期', code=403)
         except (ValueError, TypeError):
@@ -286,8 +296,10 @@ def submit_face_pass():
         pr = PassRecord(
             gate_id=gate_id_int,
             face_id=face_info.id,
+            person_name=face_info.person_name,
+            person_type=face_info.person_type,
             pass_result='pass',
-            pass_time=datetime.utcnow().isoformat()
+            pass_time=datetime.now(_CST).isoformat()
         )
         db.session.add(pr)
         db.session.commit()
@@ -298,17 +310,31 @@ def submit_face_pass():
         except Exception:
             pass
 
+    result_name = face_info.person_name
+    result_type = face_info.person_type
+
+    logger.info('VISITOR_CHECK_ENTER: person_type=%s gate_id=%s allowed_gates=%s', face_info.person_type, gate_id, face_info.allowed_gates)
+
     if face_info.person_type == 'visitor' and gate_id and face_info.allowed_gates:
         try:
             allowed = json.loads(face_info.allowed_gates) if isinstance(face_info.allowed_gates, str) else face_info.allowed_gates
-            if isinstance(allowed, list):
-                passed_gate_ids = [r.gate_id for r in PassRecord.query.filter_by(face_id=face_info.id, pass_result='pass').all()]
-                if all(gid in passed_gate_ids for gid in allowed):
-                    _remove_visitor_access(face_info)
+            if isinstance(allowed, list) and allowed:
+                no_recog_ids = {g.id for g in Gate.query.filter_by(gate_level='entrance_door').all()}
+                required_gates = [gid for gid in allowed if gid not in no_recog_ids]
+                if required_gates:
+                    since = face_info.created_at or ''
+                    query = PassRecord.query.filter_by(face_id=face_info.id, pass_result='pass')
+                    if since:
+                        query = query.filter(PassRecord.pass_time >= since)
+                    passed_gate_ids = [r.gate_id for r in query.all()]
+                    logger.info('Visitor completion check: face_id=%d, required=%s, passed=%s', face_info.id, required_gates, passed_gate_ids)
+                    if all(gid in passed_gate_ids for gid in required_gates):
+                        logger.info('All required gates passed, removing visitor access for face_id=%d', face_info.id)
+                        _remove_visitor_access(face_info)
         except Exception as e:
             logger.error('Failed to check visitor pass completion: %s', str(e))
 
-    return success_response(data={'result': 'passed', 'person_name': face_info.person_name, 'person_type': face_info.person_type, 'gate_id': gate_id}, message='通行成功')
+    return success_response(data={'result': 'passed', 'person_name': result_name, 'person_type': result_type, 'gate_id': gate_id}, message='通行成功')
 
 
 
@@ -357,7 +383,7 @@ def face_register():
 
         faces_file = current_app.config.get('REGISTERED_FACES_FILE')
         if not faces_file:
-            faces_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'registered_faces.json')
+            faces_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'registered_faces.json')
 
         registered = []
         if os.path.exists(faces_file):
@@ -397,22 +423,6 @@ def face_register():
         if duplicate_name:
             return error_response(message='该人脸已被{}使用'.format(duplicate_name), code=409)
 
-        from datetime import datetime
-        new_id = max([r.get('id', 0) for r in registered], default=0) + 1
-        new_record = {
-            'id': new_id,
-            'person_name': person_name,
-            'person_type': person_type,
-            'face_descriptor': encoding,
-            'registered_at': datetime.utcnow().isoformat()
-        }
-        registered.append(new_record)
-
-        os.makedirs(os.path.dirname(faces_file), exist_ok=True)
-        with open(faces_file, 'w', encoding='utf-8') as f:
-            json.dump(registered, f, ensure_ascii=False)
-
-        log_audit(operation_type='face_register', operation_content='人脸注册: {}({})'.format(person_name, person_type))
 
         face_image_path = _save_face_image(face_image_base64, person_type, person_name)
         face_record = FaceInfo(
@@ -426,6 +436,21 @@ def face_register():
         )
         db.session.add(face_record)
         db.session.commit()
+
+        new_record = {
+            'id': face_record.id,
+            'person_name': person_name,
+            'person_type': person_type,
+            'face_descriptor': encoding,
+            'registered_at': datetime.now(_CST).isoformat()
+        }
+        registered.append(new_record)
+
+        os.makedirs(os.path.dirname(faces_file), exist_ok=True)
+        with open(faces_file, 'w', encoding='utf-8') as f:
+            json.dump(registered, f, ensure_ascii=False)
+
+        log_audit(operation_type='face_register', operation_content='人脸注册: {}({})'.format(person_name, person_type))
 
         return success_response(data={'person_name': person_name, 'encoding_length': len(encoding)}, message='注册成功')
 
@@ -508,7 +533,7 @@ def _save_face_image(face_image_base64, person_type, person_name):
         save_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'face_images')
         os.makedirs(save_dir, exist_ok=True)
 
-        filename = f'{person_type}_{person_name}_{datetime.utcnow().strftime("%Y%m%d%H%M%S")}.jpg'
+        filename = f'{person_type}_{person_name}_{datetime.now(_CST).strftime("%Y%m%d%H%M%S")}.jpg'
         filepath = os.path.join(save_dir, filename)
 
         with open(filepath, 'wb') as f:
@@ -520,19 +545,19 @@ def _save_face_image(face_image_base64, person_type, person_name):
         return ''
 
 
-def _remove_from_registered_faces(person_name, person_type):
+def _remove_from_registered_faces(face_id):
     """从registered_faces.json中删除匹配的人脸记录"""
     try:
         from flask import current_app
         faces_file = current_app.config.get('REGISTERED_FACES_FILE')
         if not faces_file:
-            faces_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'registered_faces.json')
+            faces_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'registered_faces.json')
         if not os.path.exists(faces_file):
             return
         with open(faces_file, 'r', encoding='utf-8') as f:
             registered = json.load(f)
         original_len = len(registered)
-        registered = [r for r in registered if not (r.get('person_name') == person_name and r.get('person_type') == person_type)]
+        registered = [r for r in registered if r.get('id') != face_id]
         if len(registered) < original_len:
             with open(faces_file, 'w', encoding='utf-8') as f:
                 json.dump(registered, f, ensure_ascii=False)

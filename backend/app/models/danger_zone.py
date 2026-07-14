@@ -2,8 +2,10 @@
 数据库模型 - 禁区配置
 """
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from app import db
+
+_CST = timezone(timedelta(hours=8))
 
 
 class DangerZone(db.Model):
@@ -18,8 +20,8 @@ class DangerZone(db.Model):
     stay_duration = db.Column(db.Integer, nullable=False, default=30)
     alarm_level = db.Column(db.String(20), default='high')
     status = db.Column(db.String(20), default='active')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(_CST))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(_CST), onupdate=lambda: datetime.now(_CST))
 
     def get_polygon(self):
         if self.zone_polygon:

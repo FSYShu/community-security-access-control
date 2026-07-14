@@ -7,7 +7,7 @@ import logging
 import time
 import threading
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import cv2
 import numpy as np
@@ -165,7 +165,7 @@ def _save_capture_image(frame, zone_id):
         data_dir = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), 'data')
         alarm_dir = os.path.join(data_dir, 'alarm_captures')
         os.makedirs(alarm_dir, exist_ok=True)
-        filename = 'zone_{}_{}.jpg'.format(zone_id, datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f'))
+        filename = 'zone_{}_{}.jpg'.format(zone_id, datetime.now(timezone(timedelta(hours=8))).strftime('%Y%m%d_%H%M%S_%f'))
         filepath = os.path.join(alarm_dir, filename)
         cv2.imwrite(filepath, frame)
         return filepath
@@ -175,7 +175,7 @@ def _save_capture_image(frame, zone_id):
 
 
 def _create_alarm(zone_id, zone_name, alarm_level, description, capture_path=None):
-    now_str = datetime.utcnow().isoformat()
+    now_str = datetime.now(timezone(timedelta(hours=8))).isoformat()
     alarm = AlarmEvent(
         alarm_type='danger_zone_intrusion',
         alarm_level=alarm_level,

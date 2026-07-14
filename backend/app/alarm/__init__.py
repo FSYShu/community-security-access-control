@@ -4,7 +4,7 @@
 """
 import io
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 import openpyxl
@@ -18,6 +18,8 @@ from utils.permissions import guard_or_admin_required
 from core.audit_logger import log_audit
 
 logger = logging.getLogger(__name__)
+
+_CST = timezone(timedelta(hours=8))
 
 alarm_bp = Blueprint('alarm', __name__)
 
@@ -106,7 +108,7 @@ def handle_alarm(alarm_id):
     current_user_id = int(get_jwt_identity())
     alarm.handle_status = handle_status
     alarm.handler_id = current_user_id
-    alarm.handle_time = datetime.utcnow().isoformat()
+    alarm.handle_time = datetime.now(_CST).isoformat()
     alarm.handle_remark = handle_remark
     
     db.session.commit()

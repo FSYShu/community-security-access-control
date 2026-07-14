@@ -7,7 +7,7 @@ import threading
 import time
 import ctypes
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import cv2
 
@@ -218,7 +218,7 @@ def _save_capture(app, gate_id, frame):
     )
     os.makedirs(directory, exist_ok=True)
     filename = '{}_gate_{}_tailgating.jpg'.format(
-        datetime.utcnow().strftime('%Y%m%d_%H%M%S'), gate_id
+        datetime.now(timezone(timedelta(hours=8))).strftime('%Y%m%d_%H%M%S'), gate_id
     )
     path = os.path.join(directory, filename)
     encoded, buffer = cv2.imencode('.jpg', frame)

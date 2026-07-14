@@ -38,19 +38,16 @@ def validate_report_date(report_date):
     return parsed
 
 
-def utc_bounds_for_local_date(report_date):
+def cst_bounds_for_date(report_date):
     parsed = validate_report_date(report_date)
-    local_start = parsed.replace(tzinfo=_CST)
-    local_end = local_start + timedelta(days=1)
-    return (
-        local_start.astimezone(timezone.utc).replace(tzinfo=None).isoformat(),
-        local_end.astimezone(timezone.utc).replace(tzinfo=None).isoformat(),
-    )
+    start_str = parsed.strftime('%Y-%m-%dT00:00:00')
+    end_str = (parsed + timedelta(days=1)).strftime('%Y-%m-%dT00:00:00')
+    return start_str, end_str
 
 
 def generate_daily_report(report_date, replace=False):
     """Generate and persist one report, preserving its id when regenerated."""
-    start_time, end_time = utc_bounds_for_local_date(report_date)
+    start_time, end_time = cst_bounds_for_date(report_date)
     if not _report_lock.acquire(blocking=False):
         raise ReportGenerationInProgress()
     try:

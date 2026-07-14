@@ -1,8 +1,10 @@
 """
 数据库模型 - 审计日志
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from app import db
+
+_CST = timezone(timedelta(hours=8))
 
 
 class AuditLog(db.Model):
@@ -13,7 +15,7 @@ class AuditLog(db.Model):
     operator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     operation_type = db.Column(db.Text, nullable=False)
     operation_content = db.Column(db.Text, default='')
-    operation_time = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
+    operation_time = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat())
     ip_address = db.Column(db.Text, default='')
 
     def to_dict(self):

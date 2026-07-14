@@ -1,13 +1,16 @@
 """
 数据库模型 - 人脸信息
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from app import db
+
+_CST = timezone(timedelta(hours=8))
 
 
 class FaceInfo(db.Model):
     """人脸信息模型"""
     __tablename__ = 'face_info'
+    __table_args__ = {'sqlite_autoincrement': True}
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     person_type = db.Column(db.Text, nullable=False)
@@ -20,9 +23,9 @@ class FaceInfo(db.Model):
     allowed_gates = db.Column(db.Text, nullable=True)
     entrance_doors = db.Column(db.Text, nullable=True)
     status = db.Column(db.Text, default='active')
-    created_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
-    updated_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat(),
-                           onupdate=lambda: datetime.utcnow().isoformat())
+    created_at = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat())
+    updated_at = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat(),
+                           onupdate=lambda: datetime.now(_CST).isoformat())
 
     def to_dict(self):
         return {

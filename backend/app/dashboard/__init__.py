@@ -14,15 +14,16 @@ from utils import success_response
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
+_CST = timezone(timedelta(hours=8))
+
 
 def _format_alarm_time(time_str):
     if not time_str:
         return ''
     try:
         dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        dt = dt.astimezone(timezone(timedelta(hours=8)))
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(_CST)
         return dt.strftime('%Y-%m-%d %H:%M:%S')
     except (ValueError, AttributeError):
         return time_str[:19].replace('T', ' ') if len(time_str) >= 19 else time_str
@@ -32,7 +33,7 @@ def _format_alarm_time(time_str):
 @jwt_required()
 def get_dashboard_stats():
     """获取总览统计数据"""
-    today = datetime.utcnow().strftime('%Y-%m-%d')
+    today = datetime.now(_CST).strftime('%Y-%m-%d')
 
     pass_count = PassRecord.query.filter(
         PassRecord.pass_time.like(today + '%')

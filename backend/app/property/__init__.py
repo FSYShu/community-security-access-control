@@ -46,11 +46,7 @@ def get_pass_logs():
             query = query.filter(PassRecord.gate_id == -1)
 
     if person_type:
-        face_ids = [f.id for f in FaceInfo.query.filter_by(person_type=person_type).all()]
-        if face_ids:
-            query = query.filter(PassRecord.face_id.in_(face_ids))
-        else:
-            query = query.filter(PassRecord.face_id == -1)
+        query = query.filter_by(person_type=person_type)
 
     query = query.order_by(PassRecord.pass_time.desc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
@@ -61,7 +57,7 @@ def get_pass_logs():
         gate = Gate.query.get(r.gate_id)
         d['gate_name'] = gate.gate_name if gate else ''
         d['gate_level'] = gate.gate_level if gate else ''
-        if r.face_id:
+        if not r.person_name and r.face_id:
             face = FaceInfo.query.get(r.face_id)
             d['person_name'] = face.person_name if face else ''
             d['person_type'] = face.person_type if face else ''

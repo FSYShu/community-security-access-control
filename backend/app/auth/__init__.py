@@ -75,12 +75,10 @@ def register():
     data = request.get_json()
     username = data.get('username', '')
     password = data.get('password', '')
-    real_name = data.get('real_name', '')
     role = data.get('role', 'owner')
-    phone = data.get('phone', '')
 
-    if not username or not password or not real_name:
-        return error_response(message='用户名、密码和真实姓名不能为空', code=400)
+    if not username or not password:
+        return error_response(message='用户名和密码不能为空', code=400)
 
     if role not in ('owner', 'admin', 'guard'):
         return error_response(message='角色类型无效，仅支持 owner/admin/guard', code=400)
@@ -88,10 +86,7 @@ def register():
     if User.query.filter_by(username=username).first():
         return error_response(message='用户名已存在', code=400)
 
-    if phone and User.query.filter_by(phone=phone).first():
-        return error_response(message='手机号已被使用', code=400)
-
-    user = User(username=username, real_name=real_name, role=role, phone=phone or None)
+    user = User(username=username, role=role)
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
@@ -115,11 +110,9 @@ def list_users():
     if status_filter:
         query = query.filter_by(status=status_filter)
     if keyword:
-        query = query.filter(
-            db.or_(User.username.contains(keyword), User.real_name.contains(keyword))
-        )
+        query = query.filter(User.username.contains(keyword))
 
-    query = query.order_by(User.created_at.desc())
+    query = query.order_by(User.id.asc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     return success_response(data={
@@ -150,21 +143,16 @@ def update_user(user_id):
         return error_response(message='用户不存在', code=404)
 
     data = request.get_json()
-    if 'real_name' in data:
-        user.real_name = data['real_name']
-    if 'role' in data:
-        if data['role'] not in ('owner', 'admin', 'guard'):
-            return error_response(message='角色类型无效', code=400)
-        user.role = data['role']
-    if 'phone' in data:
-        if data['phone'] and User.query.filter(User.phone == data['phone'], User.id != user_id).first():
-            return error_response(message='手机号已被使用', code=400)
-        user.phone = data['phone'] or None
-    if 'status' in data:
-        if data['status'] not in ('active', 'disabled'):
-            return error_response(message='状态值无效', code=400)
+
+    if 'status' in data and data['status'] in ('active', 'disabled'):
         user.status = data['status']
+
     if 'password' in data and data['password']:
+        old_password = data.get('old_password', '')
+        if not old_password:
+            return error_response(message='请输入原密码', code=400)
+        if not user.check_password(old_password):
+            return error_response(message='原密码错误', code=400)
         user.set_password(data['password'])
 
     db.session.commit()
@@ -213,3 +201,36 @@ def change_password():
     log_audit(operator_id=user.id, operation_type='USER_CHANGE_PASSWORD', operation_content='修改密码', ip_address=request.remote_addr)
 
     return success_response(message='密码修改成功')
+
+
+ROLE_PERMISSIONS = {
+    'admin': {
+        'label': '管理员',
+        'permissions': [
+            '用户权限管理（新增/编辑/删除用户）',
+            '门禁终端管理（新增/编辑/删除/权限配置）',
+            '人脸信息管理',
+            '物业后台管理',
+            '安防监控日报（生成/删除）',
+            '告警处置与导出',
+            '视频监控与回放',
+            '审计日志查看',
+            '通行日志查看'
+        ]
+    },
+    'guard': {
+        'label': '安保人员',
+        'permissions': [
+            '告警处置与导出',
+            '视频监控与回放',
+            '通行日志查看'
+        ]
+    }
+}
+
+
+@auth_bp.route('/role-permissions', methods=['GET'])
+@jwt_required()
+def get_role_permissions():
+    """获取角色权限说明"""
+    return success_response(data=ROLE_PERMISSIONS)

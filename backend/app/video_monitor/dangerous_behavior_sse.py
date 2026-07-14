@@ -9,7 +9,7 @@ import shutil
 import tempfile
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import cv2
 import numpy as np
@@ -63,7 +63,7 @@ def _save_capture(app, gate_id, alarm_type, frame):
     directory = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'alarm_captures')
     os.makedirs(directory, exist_ok=True)
     filename = '{}_gate_{}_{}.jpg'.format(
-        datetime.utcnow().strftime('%Y%m%d_%H%M%S'), gate_id, alarm_type
+        datetime.now(timezone(timedelta(hours=8))).strftime('%Y%m%d_%H%M%S'), gate_id, alarm_type
     )
     path = os.path.join(directory, filename)
     encoded, buffer = cv2.imencode('.jpg', frame)

@@ -10,7 +10,7 @@ from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from sqlalchemy import inspect as sa_inspect
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -160,9 +160,7 @@ def init_database(app):
         else:
             db.create_all()
             _migrate_schema(db)
-            _migrate_danger_zone_columns()
-            _migrate_daily_report_columns()
-            _migrate_gate_columns()
+            _migrate_drop_user_columns()
     else:
         db.create_all()
         _migrate_schema(db)
@@ -171,128 +169,124 @@ def init_database(app):
 
 def _migrate_schema(database):
     """自动迁移：为已有表添加缺失的列"""
+    from sqlalchemy import inspect as sa_inspect, text
     with database.engine.connect() as conn:
         try:
-            conn.execute(db.text('ALTER TABLE gates ADD COLUMN bound INTEGER DEFAULT 0'))
+            conn.execute(text('ALTER TABLE gates ADD COLUMN bound INTEGER DEFAULT 0'))
             conn.commit()
-            logger.info('Migrated: added bound column to gates')
         except Exception:
             pass
         try:
-            conn.execute(db.text("ALTER TABLE gates ADD COLUMN last_heartbeat TEXT DEFAULT ''"))
+            conn.execute(text("ALTER TABLE gates ADD COLUMN last_heartbeat TEXT DEFAULT ''"))
             conn.commit()
-            logger.info('Migrated: added last_heartbeat column to gates')
         except Exception:
             pass
         try:
-            col_names = [col['name'] for col in sa_inspect(db.engine).get_columns('gates')]
+            col_names = [col['name'] for col in sa_inspect(database.engine).get_columns('gates')]
             if 'location' in col_names:
-                conn.execute(db.text('ALTER TABLE gates DROP COLUMN location'))
+                conn.execute(text('ALTER TABLE gates DROP COLUMN location'))
                 conn.commit()
-                logger.info('Migrated: dropped location column from gates')
         except Exception:
             pass
         try:
-            conn.execute(db.text('ALTER TABLE gates ADD COLUMN calib_near_dist REAL'))
+            conn.execute(text('ALTER TABLE gates ADD COLUMN calib_near_dist REAL'))
             conn.commit()
-            logger.info('Migrated: added calib_near_dist column to gates')
         except Exception:
             pass
         try:
-            conn.execute(db.text('ALTER TABLE gates ADD COLUMN calib_near_ratio REAL'))
+            conn.execute(text('ALTER TABLE gates ADD COLUMN calib_near_ratio REAL'))
             conn.commit()
-            logger.info('Migrated: added calib_near_ratio column to gates')
         except Exception:
             pass
         try:
-            conn.execute(db.text('ALTER TABLE gates ADD COLUMN calib_far_dist REAL'))
+            conn.execute(text('ALTER TABLE gates ADD COLUMN calib_far_dist REAL'))
             conn.commit()
-            logger.info('Migrated: added calib_far_dist column to gates')
         except Exception:
             pass
         try:
-            conn.execute(db.text('ALTER TABLE gates ADD COLUMN calib_far_ratio REAL'))
+            conn.execute(text('ALTER TABLE gates ADD COLUMN calib_far_ratio REAL'))
             conn.commit()
-            logger.info('Migrated: added calib_far_ratio column to gates')
         except Exception:
             pass
         try:
-            conn.execute(db.text("ALTER TABLE visitor_auths ADD COLUMN visit_address TEXT DEFAULT ''"))
+            conn.execute(text("ALTER TABLE visitor_auths ADD COLUMN visit_address TEXT DEFAULT ''"))
             conn.commit()
-            logger.info('Migrated: added visit_address column to visitor_auths')
         except Exception:
             pass
-
-
-def _migrate_danger_zone_columns():
-    """为已存在的danger_zones表添加新列"""
-    from sqlalchemy import text, inspect
-    try:
-        insp = inspect(db.engine)
-        if 'danger_zones' in insp.get_table_names():
-            existing = {col['name'] for col in insp.get_columns('danger_zones')}
-            if 'zone_polygon' not in existing:
-                db.session.execute(text('ALTER TABLE danger_zones ADD COLUMN zone_polygon TEXT'))
-                db.session.commit()
-                logger.info('Added zone_polygon column to danger_zones')
-            if 'alarm_level' not in existing:
-                db.session.execute(text("ALTER TABLE danger_zones ADD COLUMN alarm_level VARCHAR(20) DEFAULT 'high'"))
-                db.session.commit()
-                logger.info('Added alarm_level column to danger_zones')
-    except Exception as e:
-        logger.warning('Migration check failed (non-critical): {}'.format(str(e)))
-
-
-def _migrate_daily_report_columns():
-    """Add AI report fields to existing daily_reports tables."""
-    from sqlalchemy import inspect, text
-
-    columns = {
-        'ai_summary': "TEXT DEFAULT ''",
-        'risk_level': "TEXT DEFAULT 'low'",
-        'risk_score': 'INTEGER DEFAULT 0',
-        'recommendations': "TEXT DEFAULT '[]'",
-        'workflow_source': "TEXT DEFAULT 'local_rules'",
-    }
-    try:
-        inspector = inspect(db.engine)
-        if 'daily_reports' not in inspector.get_table_names():
-            return
-        existing = {item['name'] for item in inspector.get_columns('daily_reports')}
-        for name, definition in columns.items():
-            if name in existing:
-                continue
-            db.session.execute(text(
-                'ALTER TABLE daily_reports ADD COLUMN {} {}'.format(name, definition)
+        try:
+            conn.execute(text("ALTER TABLE pass_records ADD COLUMN person_name TEXT DEFAULT ''"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE pass_records ADD COLUMN person_type TEXT DEFAULT ''"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            result = conn.execute(text(
+                "UPDATE pass_records SET person_name = (SELECT f.person_name FROM face_info f WHERE f.id = pass_records.face_id) "
+                "WHERE pass_records.person_name = '' AND pass_records.face_id IS NOT NULL"
             ))
-            db.session.commit()
-            logger.info('Added daily_reports.%s', name)
-    except Exception as exc:
-        db.session.rollback()
-        logger.warning('Daily report migration failed (non-critical): %s', exc)
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            result = conn.execute(text(
+                "UPDATE pass_records SET person_type = (SELECT f.person_type FROM face_info f WHERE f.id = pass_records.face_id) "
+                "WHERE pass_records.person_type = '' AND pass_records.face_id IS NOT NULL"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE gates ADD COLUMN parent_gate_id INTEGER REFERENCES gates(id)"))
+            conn.commit()
+        except Exception:
+            pass
 
 
-def _migrate_gate_columns():
-    """为已存在的gates表添加新列"""
-    from sqlalchemy import text, inspect
+def _migrate_drop_user_columns():
+    """从users表移除phone和real_name列（SQLite需重建表）"""
+    from sqlalchemy import inspect, text
     try:
         insp = inspect(db.engine)
-        if 'gates' in insp.get_table_names():
-            existing = {col['name'] for col in insp.get_columns('gates')}
-            if 'parent_gate_id' not in existing:
-                db.session.execute(text('ALTER TABLE gates ADD COLUMN parent_gate_id INTEGER REFERENCES gates(id)'))
-                db.session.commit()
-                logger.info('Added parent_gate_id column to gates')
+        if 'users' not in insp.get_table_names():
+            return
+        existing = {col['name'] for col in insp.get_columns('users')}
+        if 'phone' not in existing and 'real_name' not in existing:
+            return
+        with db.engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE users_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'owner',
+                    status TEXT DEFAULT 'active',
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """))
+            conn.execute(text("""
+                INSERT INTO users_new (id, username, password_hash, role, status, created_at, updated_at)
+                SELECT id, username, password_hash, role, status, created_at, updated_at FROM users
+            """))
+            conn.execute(text("DROP TABLE users"))
+            conn.execute(text("ALTER TABLE users_new RENAME TO users"))
+            conn.commit()
+            logger.info('Migrated: dropped phone/real_name columns from users')
     except Exception as e:
-        logger.warning('Gate migration check failed (non-critical): {}'.format(str(e)))
+        logger.warning('User columns migration failed (non-critical): %s', e)
 
 
 def _seed_default_data():
+
     """插入默认数据"""
     from app.models import User, GateLevel
 
     if not User.query.filter_by(username='admin0').first():
-        admin0 = User(username='admin0', real_name='管理员', role='admin')
+        admin0 = User(username='admin0', role='admin')
         admin0.set_password('csac123456')
         db.session.add(admin0)
 
