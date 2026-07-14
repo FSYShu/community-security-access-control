@@ -1,9 +1,29 @@
 import { login, logout, getUserInfo } from '@/api/auth'
 
+function loadUserInfo () {
+  try {
+    const data = localStorage.getItem('gate_user_info')
+    if (data) return JSON.parse(data)
+  } catch (e) {
+    // ignore
+  }
+  return null
+}
+
+function loadRoles () {
+  try {
+    const data = localStorage.getItem('gate_roles')
+    if (data) return JSON.parse(data)
+  } catch (e) {
+    // ignore
+  }
+  return []
+}
+
 const state = {
   token: localStorage.getItem('gate_token') || '',
-  userInfo: null,
-  roles: []
+  userInfo: loadUserInfo(),
+  roles: loadRoles()
 }
 
 const mutations = {
@@ -12,15 +32,19 @@ const mutations = {
   },
   SET_USER_INFO (state, userInfo) {
     state.userInfo = userInfo
+    localStorage.setItem('gate_user_info', JSON.stringify(userInfo))
   },
   SET_ROLES (state, roles) {
     state.roles = roles
+    localStorage.setItem('gate_roles', JSON.stringify(roles))
   },
   CLEAR_USER (state) {
     state.token = ''
     state.userInfo = null
     state.roles = []
     localStorage.removeItem('gate_token')
+    localStorage.removeItem('gate_user_info')
+    localStorage.removeItem('gate_roles')
   }
 }
 

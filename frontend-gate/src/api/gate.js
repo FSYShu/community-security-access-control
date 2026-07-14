@@ -12,6 +12,10 @@ export function bindGate (gateId) {
   return request({ url: '/gate/' + gateId + '/bind', method: 'post' })
 }
 
+export function getGateDetail (gateId, extraConfig) {
+  return request(Object.assign({ url: '/gate/' + gateId, method: 'get', _silent: true }, extraConfig))
+}
+
 export function unbindGate (gateId) {
   return request({ url: '/gate/' + gateId + '/unbind', method: 'post' })
 }

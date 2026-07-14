@@ -184,14 +184,13 @@ export default {
     formatTime (str) {
       if (!str) return '-'
       try {
-        var s = str.endsWith('Z') ? str : str + 'Z'
-        var d = new Date(s)
-        var utc8 = new Date(d.getTime() + 8 * 3600000)
-        var y = utc8.getUTCFullYear()
-        var m = String(utc8.getUTCMonth() + 1).padStart(2, '0')
-        var day = String(utc8.getUTCDate()).padStart(2, '0')
-        var h = String(utc8.getUTCHours()).padStart(2, '0')
-        var min = String(utc8.getUTCMinutes()).padStart(2, '0')
+        var d = new Date(str)
+        if (isNaN(d.getTime())) return str
+        var y = d.getFullYear()
+        var m = String(d.getMonth() + 1).padStart(2, '0')
+        var day = String(d.getDate()).padStart(2, '0')
+        var h = String(d.getHours()).padStart(2, '0')
+        var min = String(d.getMinutes()).padStart(2, '0')
         return y + '-' + m + '-' + day + ' ' + h + ':' + min
       } catch (e) {
         return str
