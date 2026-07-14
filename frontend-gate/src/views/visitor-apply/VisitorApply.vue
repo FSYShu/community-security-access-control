@@ -13,8 +13,8 @@
         <div class="form-item">
           <label class="form-label">申请通行层级</label>
           <van-checkbox-group v-model="form.gateLevels" direction="horizontal">
-            <van-checkbox name="community_gate" shape="square">社区大门</van-checkbox>
-            <van-checkbox name="unit_door" shape="square">单元门</van-checkbox>
+            <van-checkbox name="社区大门" shape="square">社区大门</van-checkbox>
+            <van-checkbox name="单元门" shape="square">单元门</van-checkbox>
           </van-checkbox-group>
         </div>
 
@@ -122,7 +122,7 @@ export default {
           visitor_face_image: this.faceBase64,
           apply_source: 'gate_terminal'
         })
-        this.$toast.success('申请已提交，等待业主审批')
+        this.$toast.success('申请已提交，等待业主确认')
         this.$router.push('/idle')
       } catch (err) {
         // error handled by interceptor

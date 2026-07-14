@@ -23,6 +23,11 @@ export function getGateDetail (id) {
   return request({ url: `/gate/${id}`, method: 'get' })
 }
 
+/** 获取单元门列表（供入户门绑定） */
+export function getUnitDoors () {
+  return request({ url: '/gate/unit-doors', method: 'get' })
+}
+
 /** 删除门禁终端 */
 export function deleteGate (id) {
   return request({ url: `/gate/${id}`, method: 'delete' })

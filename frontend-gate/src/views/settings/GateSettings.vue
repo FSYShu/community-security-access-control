@@ -19,7 +19,7 @@
                 v-for="item in sortedList"
                 :key="item.id"
                 class="custom-select-option"
-                :class="{ 'is-bound': isCurrentBound(item) }"
+                :class="{ 'is-bound': isCurrentBound(item), 'is-occupied': isOccupied(item) }"
                 @click="onGateSelect(item)"
               >
                 <div class="option-main">
@@ -27,6 +27,7 @@
                   <span class="option-level-tag" :class="'tag-' + item.gate_level">{{ levelMap[item.gate_level] || item.gate_level }}</span>
                 </div>
                 <span v-if="isCurrentBound(item)" class="option-bound-tag">已绑定</span>
+                <span v-else-if="isOccupied(item)" class="option-bound-tag">已被绑定</span>
               </div>
               <div v-if="sortedList.length === 0" class="custom-select-empty">暂无门禁终端</div>
             </div>
@@ -52,12 +53,12 @@
           <button class="gate-btn gate-btn-danger" style="margin-top:12px;" @click="unbindGate">解除绑定</button>
         </div>
         <div v-else class="unbound-hint">
-          <i class="el-icon-info" style="font-size:24px;color:#f59e0b"></i>
+          <i class="el-icon-info" style="font-size:24px;color:var(--gate-warning)"></i>
           <p>尚未绑定门禁终端，请选择要绑定的终端</p>
         </div>
       </div>
 
-      <div class="gate-card">
+      <div v-if="gateLevel !== 'entrance_door'" class="gate-card">
         <div class="setting-section-title">功能设置</div>
         <div class="setting-row">
           <div class="setting-row-info">
@@ -86,7 +87,7 @@
                   <i class="el-icon-camera" style="font-size:16px;color:var(--gate-text-muted)"></i>
                   <span class="option-name">{{ cam.label || '未命名摄像头' }}</span>
                 </div>
-                <i v-if="cam.deviceId === selectedCameraId" class="el-icon-circle-check" style="font-size:14px;color:var(--gate-accent, #818cf8)"></i>
+                 <i v-if="cam.deviceId === selectedCameraId" class="el-icon-circle-check" style="font-size:14px;color:var(--gate-accent)"></i>
               </div>
               <div v-if="cameraList.length === 0" class="custom-select-empty">未检测到摄像头</div>
             </div>
@@ -135,7 +136,7 @@ export default {
       showDropdown: false,
       selectedGateId: '',
       faceRecognitionEnabled: false,
-      levelMap: { community_gate: '社区大门', unit_door: '单元门', dangerous_area: '危险防护区域' },
+      levelMap: { community_gate: '社区大门', unit_door: '单元门', entrance_door: '入户门', dangerous_area: '危险防护区域' },
       showCameraDropdown: false,
       cameraList: [],
       selectedCameraId: '',
@@ -215,6 +216,7 @@ export default {
         const data = res.data
         if (data && data.items) {
           this.list = data.items
+          this.$store.commit('gate/SET_GATES_CACHE', data.items)
         }
       } catch (err) {
         // ignore
@@ -222,6 +224,10 @@ export default {
     },
     async onGateSelect (item) {
       if (this.isCurrentBound(item)) return
+      if (this.isOccupied(item)) {
+        this.$toast.fail('该终端已被其他设备绑定')
+        return
+      }
       this.showDropdown = false
       try {
         if (this.gateId) {
@@ -237,6 +243,9 @@ export default {
     },
     isCurrentBound (item) {
       return String(item.id) === this.gateId
+    },
+    isOccupied (item) {
+      return item.bound && String(item.id) !== this.gateId
     },
     async unbindGate () {
       try {
@@ -425,6 +434,11 @@ export default {
 </script>
 
 <style scoped>
+.gate-content {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
 .setting-section-title {
   font-size: 14px;
   font-weight: 600;
@@ -441,14 +455,14 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--gate-border-light);
   border: 1px solid var(--gate-border);
   border-radius: var(--gate-radius-sm, 8px);
   cursor: pointer;
   transition: border-color 0.2s;
 }
 .custom-select.is-open .custom-select-trigger {
-  border-color: var(--gate-accent, #818cf8);
+  border-color: var(--gate-accent);
 }
 .custom-select-value {
   font-size: 14px;
@@ -467,7 +481,7 @@ export default {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: var(--gate-bg-secondary, #1e1e2e);
+  background: var(--gate-bg-secondary);
   border: 1px solid var(--gate-border);
   border-radius: var(--gate-radius-sm, 8px);
   padding: 4px 0;
@@ -494,6 +508,14 @@ export default {
 .custom-select-option.is-bound .option-level-tag {
   opacity: 0.7;
 }
+.custom-select-option.is-occupied {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.custom-select-option.is-occupied .option-name,
+.custom-select-option.is-occupied .option-level-tag {
+  opacity: 0.5;
+}
 .option-main {
   display: flex;
   align-items: center;
@@ -512,15 +534,15 @@ export default {
 }
 .tag-community_gate {
   background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  color: var(--gate-success);
 }
 .tag-unit_door {
   background: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
+  color: var(--gate-accent-light);
 }
 .tag-dangerous_area {
   background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  color: var(--gate-danger);
 }
 .option-bound-tag {
   font-size: 11px;
@@ -597,7 +619,7 @@ export default {
   margin: 4px 0;
 }
 .custom-select-option.is-active {
-  background: rgba(129, 140, 248, 0.1);
+  background: rgba(99, 102, 241, 0.1);
 }
 .camera-preview-wrap {
   position: relative;
@@ -659,22 +681,22 @@ export default {
   padding: 4px 14px;
   border: 1px solid var(--gate-border);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--gate-border-light);
   color: var(--gate-text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
 .calib-point-btn.is-active {
-  border-color: var(--gate-accent, #818cf8);
-  color: var(--gate-accent, #818cf8);
-  background: rgba(129, 140, 248, 0.1);
+  border-color: var(--gate-accent);
+  color: var(--gate-accent);
+  background: rgba(99, 102, 241, 0.1);
 }
 .calib-input {
   flex: 1;
   max-width: 120px;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--gate-border-light);
   border: 1px solid var(--gate-border);
   border-radius: 6px;
   color: var(--gate-text);
@@ -682,14 +704,14 @@ export default {
   outline: none;
 }
 .calib-input:focus {
-  border-color: var(--gate-accent, #818cf8);
+  border-color: var(--gate-accent);
 }
 .calib-status {
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--gate-border-light);
   border-radius: 6px;
   margin-top: 4px;
 }
@@ -697,10 +719,10 @@ export default {
   font-size: 11px;
 }
 .calib-near {
-  color: #10b981;
+  color: var(--gate-success);
 }
 .calib-far {
-  color: #f59e0b;
+  color: var(--gate-warning);
 }
 .calib-result {
   font-size: 12px;
@@ -708,9 +730,9 @@ export default {
   margin-top: 4px;
 }
 .calib-success {
-  color: #10b981;
+  color: var(--gate-success);
 }
 .calib-error {
-  color: #ef4444;
+  color: var(--gate-danger);
 }
 </style>

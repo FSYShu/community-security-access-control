@@ -3,10 +3,10 @@
     <video ref="video" class="camera-preview" autoplay playsinline></video>
     <canvas ref="canvas" style="display: none;"></canvas>
     <div v-if="!cameraReady" class="camera-loading">
-      <van-loading size="24px" color="#6366f1">摄像头启动中...</van-loading>
+      <van-loading size="24px" :color="'var(--gate-accent)'">摄像头启动中...</van-loading>
     </div>
     <div v-if="cameraError" class="camera-error">
-      <i class="el-icon-warning-outline" style="font-size:40px;color:#ef4444"></i>
+       <i class="el-icon-warning-outline" style="font-size:40px;color:var(--gate-danger)"></i>
       <p class="error-msg">{{ cameraError }}</p>
       <button class="gate-btn gate-btn-outline" style="width:auto;padding:8px 16px;margin-top:8px;" @click="startCamera">重试</button>
     </div>

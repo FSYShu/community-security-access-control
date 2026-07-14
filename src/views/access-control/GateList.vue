@@ -55,7 +55,7 @@
     <div class="dark-card list-section" ref="listSection">
       <div v-if="!perPageReady" class="probe-loading"><i class="el-icon-loading"></i><span>加载中...</span></div>
       <div class="list-content" ref="listContent" :style="{ visibility: perPageReady ? '' : 'hidden' }">
-        <van-cell v-for="item in gateList" :key="item.id" is-link @click="goToMonitor(item)">
+        <van-cell v-for="item in gateList" :key="item.id" :is-link="item.gate_level !== 'entrance_door'" @click="goToMonitor(item)">
           <template #title>
             <div class="cell-title-row">
               <span class="cell-status">
@@ -100,10 +100,6 @@
     <el-dialog :visible.sync="showDialog" :title="dialogTitle" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetForm">
       <div class="form-grid">
         <div class="form-item">
-          <label class="form-label">终端名称 <span class="form-required">*</span></label>
-          <input v-model="form.gate_name" class="form-input" placeholder="请输入终端名称" />
-        </div>
-        <div class="form-item">
           <label class="form-label">终端层级 <span class="form-required">*</span></label>
           <div class="filter-select" :class="{ 'is-open': showFormLevelDropdown }">
             <div class="select-trigger" @click="showFormLevelDropdown = !showFormLevelDropdown">
@@ -117,7 +113,37 @@
             </transition>
           </div>
         </div>
-        <div class="form-item">
+        <div v-if="form.gate_level === 'entrance_door'" class="form-item">
+          <label class="form-label">所属单元门 <span class="form-required">*</span></label>
+          <div class="filter-select" :class="{ 'is-open': showUnitDoorDropdown }">
+            <div class="select-trigger" @click="showUnitDoorDropdown = !showUnitDoorDropdown">
+              <span class="select-value">{{ selectedUnitDoorLabel || '请选择所属单元门' }}</span>
+              <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showUnitDoorDropdown }"></i>
+            </div>
+            <transition name="dropdown">
+              <div v-if="showUnitDoorDropdown" class="select-dropdown">
+                <div v-for="ud in unitDoorList" :key="ud.id" class="select-option" :class="{ 'is-active': form.parent_gate_id === ud.id }" @click="form.parent_gate_id = ud.id; showUnitDoorDropdown = false">{{ ud.gate_name }}</div>
+              </div>
+            </transition>
+          </div>
+        </div>
+        <div v-if="form.gate_level === 'unit_door'" class="form-item">
+          <label class="form-label">楼栋号 / 单元号 <span class="form-required">*</span></label>
+          <div class="form-row">
+            <input v-model="form.building_no" class="form-input" placeholder="楼栋" />
+            <span class="form-sep">/</span>
+            <input v-model="form.unit_no" class="form-input" placeholder="单元" />
+          </div>
+        </div>
+        <div v-if="form.gate_level === 'entrance_door'" class="form-item">
+          <label class="form-label">门牌号  <span class="form-required">*</span></label>
+          <input v-model="form.room_number" class="form-input" placeholder="如：501" />
+        </div>
+        <div v-if="form.gate_level !== 'unit_door' && form.gate_level !== 'entrance_door'" class="form-item">
+          <label class="form-label">{{ gateNameLabel }} <span class="form-required">*</span></label>
+          <input v-model="form.gate_name" class="form-input" :placeholder="gateNamePlaceholder" />
+        </div>
+        <div v-if="form.gate_level !== 'entrance_door'" class="form-item">
           <label class="form-label">推流码 <span class="form-required">*</span></label>
           <input v-model="form.push_key" class="form-input" placeholder="请输入推流码" />
         </div>
@@ -163,18 +189,9 @@
           <div class="zone-form-content">
             <div class="form-item">
               <label class="form-label">状态</label>
-              <div class="zone-status-field">
-                <span class="zone-status-text" :class="zoneForm.status === 'active' ? 'is-active' : 'is-inactive'">{{ zoneForm.status === 'active' ? '已启用' : '已禁用' }}</span>
-                <button
-                  v-if="zoneForm.status === 'active'"
-                  class="zone-status-btn zone-disable-btn"
-                  @click="toggleZoneStatus(selectedZone, 'inactive')"
-                >禁用</button>
-                <button
-                  v-else
-                  class="zone-status-btn zone-enable-btn"
-                  @click="toggleZoneStatus(selectedZone, 'active')"
-                >启用</button>
+              <div class="zone-status-tabs">
+                <div class="zone-status-tab" :class="{ 'is-active': zoneForm.status === 'active' }" @click="toggleZoneStatus(selectedZone, 'active')">已启用</div>
+                <div class="zone-status-tab" :class="{ 'is-active': zoneForm.status === 'inactive' }" @click="toggleZoneStatus(selectedZone, 'inactive')">已禁用</div>
               </div>
             </div>
             <div class="form-item">
@@ -182,15 +199,15 @@
               <input v-model="zoneForm.zone_name" class="form-input" placeholder="请输入禁区名称" disabled />
             </div>
             <div class="form-item">
-              <label class="form-label">安全距离 (米)</label>
+              <label class="form-label">安全距离 (米) <span class="form-required">*</span></label>
               <input v-model.number="zoneForm.safety_distance" type="number" class="form-input form-number" placeholder="请输入安全距离" />
             </div>
             <div class="form-item">
-              <label class="form-label">滞留警告时长 (秒)</label>
+              <label class="form-label">滞留警告时长 (秒) <span class="form-required">*</span></label>
               <input v-model.number="zoneForm.stay_duration" type="number" class="form-input form-number" placeholder="请输入滞留警告时长" />
             </div>
             <div class="form-item">
-              <label class="form-label">告警级别</label>
+              <label class="form-label">告警级别 <span class="form-required">*</span></label>
               <div class="filter-select" :class="{ 'is-open': showZoneLevelDropdown }">
                 <div class="select-trigger" @click="showZoneLevelDropdown = !showZoneLevelDropdown">
                   <span class="select-value">{{ zoneLevelLabel || '请选择告警级别' }}</span>
@@ -222,7 +239,7 @@
 </template>
 
 <script>
-import { getGateList, addGate, updateGate, getGateDetail, deleteGate } from '@/api/property'
+import { getGateList, addGate, updateGate, getGateDetail, deleteGate, getUnitDoors } from '@/api/property'
 import { getDangerZoneList, updateDangerZone, cleanupOrphanZones } from '@/api/dangerZone'
 
 export default {
@@ -239,19 +256,22 @@ export default {
       searchText: '',
       showLevelDropdown: false,
       showStatusDropdown: false,
-      levelOptions: ['全部', '社区大门', '单元门', '危险防护区域'],
+      levelOptions: ['全部', '社区大门', '单元门', '入户门', '危险防护区域'],
       statusOptions: ['全部', '未绑定', '在线', '离线', '维护中'],
       showDialog: false,
       isEdit: false,
       editId: null,
       submitLoading: false,
       showFormLevelDropdown: false,
-      form: { gate_name: '', gate_level: '', building_unit: '', push_key: '' },
+      form: { gate_name: '', gate_level: '', parent_gate_id: '', building_no: '', unit_no: '', room_number: '', push_key: '' },
       formLevelOptions: [
         { text: '社区大门', value: 'community_gate' },
         { text: '单元门', value: 'unit_door' },
+        { text: '入户门', value: 'entrance_door' },
         { text: '危险防护区域', value: 'dangerous_area' }
       ],
+      unitDoorList: [],
+      showUnitDoorDropdown: false,
       pollTimer: null,
       showZoneDialog: false,
       zoneList: [],
@@ -275,6 +295,24 @@ export default {
     formLevelLabel () {
       const opt = this.formLevelOptions.find(o => o.value === this.form.gate_level)
       return opt ? opt.text : ''
+    },
+    selectedUnitDoorLabel () {
+      const ud = this.unitDoorList.find(u => u.id === this.form.parent_gate_id)
+      return ud ? ud.gate_name : ''
+    },
+    gateNamePlaceholder () {
+      const map = {
+        community_gate: '如：东1门、西南2门',
+        dangerous_area: '请输入区域名称'
+      }
+      return map[this.form.gate_level] || '请输入终端名称'
+    },
+    gateNameLabel () {
+      const map = {
+        community_gate: '大门编号',
+        dangerous_area: '区域名称'
+      }
+      return map[this.form.gate_level] || '终端名称'
     },
     zoneLevelLabel () {
       const opt = this.zoneLevelOptions.find(o => o.value === this.zoneForm.alarm_level)
@@ -382,7 +420,7 @@ export default {
     async loadData () {
       try {
         this.loading = true
-        const levelMap = { 社区大门: 'community_gate', 单元门: 'unit_door', 危险防护区域: 'dangerous_area' }
+        const levelMap = { 社区大门: 'community_gate', 单元门: 'unit_door', 入户门: 'entrance_door', 危险防护区域: 'dangerous_area' }
         const statusMap = { 未绑定: 'unbound', 在线: 'online', 离线: 'offline', 维护中: 'maintenance' }
         const params = { page: this.page, per_page: this.perPage }
         if (this.searchText) params.keyword = this.searchText
@@ -421,10 +459,11 @@ export default {
       this.loadData()
     },
     goToMonitor (item) {
+      if (item.gate_level === 'entrance_door') return
       this.$router.push({ path: '/video-monitor', query: { gate_id: item.id } })
     },
     levelTagClass (level) {
-      const map = { community_gate: 'tag-community', unit_door: 'tag-unit', dangerous_area: 'tag-danger' }
+      const map = { community_gate: 'tag-community', unit_door: 'tag-unit', entrance_door: 'tag-entrance', dangerous_area: 'tag-danger' }
       return map[level] || ''
     },
     displayStatusText (item) {
@@ -459,41 +498,92 @@ export default {
       }
     },
     resetForm () {
-      this.form = { gate_name: '', gate_level: '', building_unit: '', push_key: '' }
+      this.form = { gate_name: '', gate_level: '', parent_gate_id: '', building_no: '', unit_no: '', room_number: '', push_key: '' }
       this.isEdit = false
       this.editId = null
       this.showFormLevelDropdown = false
+      this.showUnitDoorDropdown = false
+    },
+    async loadUnitDoors () {
+      try {
+        const res = await getUnitDoors()
+        this.unitDoorList = res.data || []
+      } catch (e) {
+        this.unitDoorList = []
+      }
     },
     openAddDialog () {
       this.resetForm()
+      this.loadUnitDoors()
       this.showDialog = true
     },
     async openEditDialog (item) {
       this.resetForm()
       this.isEdit = true
       this.editId = item.id
+      this.loadUnitDoors()
       try {
         const res = await getGateDetail(item.id)
         const d = res.data
         this.form.gate_name = d.gate_name || ''
         this.form.gate_level = d.gate_level || ''
-        this.form.building_unit = d.building_unit || ''
+        this.form.parent_gate_id = d.parent_gate_id || ''
+        if (d.gate_level === 'unit_door' && d.gate_name) {
+          const m = d.gate_name.match(/^(\d+)栋(\d+)单元$/)
+          if (m) { this.form.building_no = m[1]; this.form.unit_no = m[2] }
+        }
+        this.form.room_number = d.gate_level === 'entrance_door' && d.gate_name ? d.gate_name.replace(/^.*单元/, '').replace('室', '') : ''
         this.form.push_key = d.push_key || ''
       } catch (e) {
         this.$message.error('加载终端信息失败')
       }
       this.showDialog = true
     },
+    validateGateName (name, level) {
+      if (!name) return false
+      if (level === 'community_gate') return /^(东|南|西|北|东南|东北|西南|西北)\d+门$/.test(name)
+      if (level === 'unit_door') return /^\d+栋\d+单元$/.test(name)
+      if (level === 'entrance_door') return /^\d+栋\d+单元\d+室$/.test(name)
+      return true
+    },
     async onSubmit () {
-      if (!this.form.gate_name || !this.form.gate_level || !this.form.push_key) {
-        return this.$message.warning('请填写必填项')
+      const isEntrance = this.form.gate_level === 'entrance_door'
+      const isUnit = this.form.gate_level === 'unit_door'
+      if (isEntrance) {
+        if (!this.form.parent_gate_id || !this.form.room_number) {
+          return this.$message.warning('请填写必填项')
+        }
+        if (!/^\d+$/.test(this.form.room_number)) {
+          return this.$message.warning('门牌号 请输入数字，如501')
+        }
+      } else if (isUnit) {
+        if (!this.form.building_no || !this.form.unit_no) {
+          return this.$message.warning('请填写必填项')
+        }
+        if (!/^\d+$/.test(this.form.building_no) || !/^\d+$/.test(this.form.unit_no)) {
+          return this.$message.warning('楼栋号和单元号请输入数字')
+        }
+      } else {
+        if (!this.form.gate_name || !this.form.gate_level || !this.form.push_key) {
+          return this.$message.warning('请填写必填项')
+        }
+        if (!this.validateGateName(this.form.gate_name, this.form.gate_level)) {
+          return this.$message.warning('名称格式不正确')
+        }
       }
       this.submitLoading = true
       try {
+        let gateName = this.form.gate_name
+        if (isUnit) {
+          gateName = this.form.building_no + '栋' + this.form.unit_no + '单元'
+        } else if (isEntrance) {
+          const ud = this.unitDoorList.find(u => u.id === this.form.parent_gate_id)
+          gateName = (ud ? ud.gate_name : '') + this.form.room_number + '室'
+        }
         const data = {
-          gate_name: this.form.gate_name,
+          gate_name: gateName,
           gate_level: this.form.gate_level,
-          building_unit: this.form.building_unit,
+          parent_gate_id: isEntrance ? this.form.parent_gate_id : undefined,
           push_key: this.form.push_key
         }
         if (this.isEdit) {
@@ -551,6 +641,7 @@ export default {
       return map[level] || level
     },
     async toggleZoneStatus (item, status) {
+      if (!item) return
       try {
         await updateDangerZone(item.id, { status })
         this.$message.success(status === 'active' ? '启用成功' : '禁用成功')
@@ -844,6 +935,24 @@ export default {
   font-size: 13px;
   outline: none;
   transition: border-color 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-row .form-input {
+  flex: 1;
+}
+
+.form-sep {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 .form-input::placeholder {
@@ -962,6 +1071,12 @@ export default {
   color: var(--dark-success-green);
   border-color: rgba(16, 185, 129, 0.3);
   background: rgba(16, 185, 129, 0.08);
+}
+
+.tag-entrance {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
 }
 
 .tag-danger {
@@ -1214,59 +1329,35 @@ export default {
   margin-bottom: 8px;
 }
 
-.zone-status-btn {
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  border: none;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-
-.zone-enable-btn {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-}
-
-.zone-enable-btn:hover {
-  background: rgba(16, 185, 129, 0.25);
-}
-
-.zone-disable-btn {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-}
-
-.zone-disable-btn:hover {
-  background: rgba(239, 68, 68, 0.25);
-}
-
-.zone-status-field {
+.zone-status-tabs {
   display: flex;
-  align-items: center;
+  gap: 0;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  padding: 8px 12px;
-  gap: 12px;
+  border-radius: 8px;
+  padding: 3px;
+  border: 1px solid var(--dark-border-field);
 }
 
-.zone-status-field .zone-status-text {
+.zone-status-tab {
   flex: 1;
-  font-size: 14px;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  text-align: center;
+  transition: background 0.2s, color 0.2s;
+  user-select: none;
 }
 
-.zone-status-text {
-  font-size: 13px;
+.zone-status-tab:hover {
+  color: var(--dark-text);
 }
 
-.zone-status-text.is-active {
-  color: #10b981;
-}
-
-.zone-status-text.is-inactive {
-  color: #ef4444;
+.zone-status-tab.is-active {
+  background: var(--dark-accent);
+  color: #fff;
 }
 
 .zone-empty {

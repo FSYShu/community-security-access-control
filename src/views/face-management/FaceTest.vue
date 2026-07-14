@@ -64,11 +64,21 @@ export default {
   },
   methods: {
     async startCamera () {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.$message.error('当前环境不支持摄像头，请使用HTTPS或localhost访问')
+        return
+      }
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({ video: true })
         this.$refs.video.srcObject = this.stream
       } catch (err) {
-        this.$message.warning('无法访问摄像头，请检查权限设置')
+        if (err.name === 'NotAllowedError') {
+          this.$message.error('摄像头权限被拒绝，请在浏览器设置中允许访问摄像头')
+        } else if (err.name === 'NotFoundError') {
+          this.$message.error('未检测到摄像头设备')
+        } else {
+          this.$message.error('无法访问摄像头：' + err.message)
+        }
       }
     },
     stopCamera () {

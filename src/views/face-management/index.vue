@@ -29,10 +29,14 @@
                 <span class="status-label">{{ item.status === 'active' ? '启用' : '停用' }}</span>
               </span>
               <span class="cell-name">{{ item.person_name }}</span>
-              <span class="type-tag" :class="item.person_type === 'owner' ? 'tag-owner' : 'tag-blacklist'">{{ typeMap[item.person_type] || item.person_type }}</span>
+              <span class="gate-tag" :class="getGateNames(item.entrance_doors) ? '' : 'gate-tag-empty'">{{ getGateNames(item.entrance_doors) || '未分配入户门' }}</span>
             </div>
           </template>
           <template #right-icon>
+            <button class="re-register-btn" @click="onReRegister(item)">
+              <i class="el-icon-refresh-right"></i>
+              <span>重新录入</span>
+            </button>
             <button class="delete-btn" @click="onDelete(item)">
               <i class="el-icon-delete"></i>
               <span>删除</span>
@@ -56,7 +60,7 @@
       </div>
     </div>
 
-    <el-dialog :visible.sync="showAddDialog" title="新增人脸" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetAddForm">
+    <el-dialog :visible.sync="showAddDialog" :title="isReRegister ? '重新录入' : '新增人脸'" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog dark-dialog-center" @close="resetAddForm">
       <div class="form-grid">
         <div class="form-item">
           <label class="form-label">录入方式</label>
@@ -98,21 +102,11 @@
         </div>
         <div class="form-item">
           <label class="form-label">姓名 <span class="form-required">*</span></label>
-          <input v-model="addForm.personName" class="form-input" placeholder="请输入姓名" />
+          <input v-model="addForm.personName" class="form-input" placeholder="请输入姓名" :disabled="isReRegister" />
         </div>
         <div class="form-item">
-          <label class="form-label">人员类型 <span class="form-required">*</span></label>
-          <div class="filter-select" :class="{ 'is-open': showTypeDropdown }">
-            <div class="select-trigger" @click="showTypeDropdown = !showTypeDropdown">
-              <span class="select-value">{{ addFormTypeLabel || '请选择' }}</span>
-              <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showTypeDropdown }"></i>
-            </div>
-            <transition name="dropdown">
-              <div v-if="showTypeDropdown" class="select-dropdown">
-                <div v-for="opt in typeOptions" :key="opt.value" class="select-option" :class="{ 'is-active': addForm.personType === opt.value }" @click="addForm.personType = opt.value; showTypeDropdown = false">{{ opt.text }}</div>
-              </div>
-            </transition>
-          </div>
+          <label class="form-label">授权入户门</label>
+          <van-field v-model="addFormGateLabel" placeholder="请选择" readonly is-link @click="showGatePicker = true" />
         </div>
       </div>
       <div class="form-footer">
@@ -124,7 +118,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog :visible.sync="showTestDialog" title="人脸测试" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="stopTestCamera">
+    <el-dialog :visible.sync="showTestDialog" title="人脸测试" width="480px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @open="startTestCamera" @close="stopTestCamera">
       <div class="form-grid">
         <div class="form-item">
           <label class="form-label">摄像头画面</label>
@@ -164,11 +158,16 @@
         </button>
       </div>
     </el-dialog>
+
+    <van-popup v-model="showGatePicker" position="bottom" round>
+      <van-picker :columns="gateColumns" @confirm="onGateConfirm" @cancel="showGatePicker = false" show-toolbar title="选择入户门" />
+    </van-popup>
   </app-layout>
 </template>
 
 <script>
 import { getFaceList, deleteFace, registerFace, testFace } from '@/api/face'
+import { getGateList } from '@/api/property'
 
 export default {
   name: 'FaceManagementPage',
@@ -180,10 +179,12 @@ export default {
       perPage: 10,
       total: 0,
       searchText: '',
-      typeMap: { owner: '业主', blacklist: '黑名单' },
+      typeMap: { owner: '业主', visitor: '访客', blacklist: '黑名单' },
       showAddDialog: false,
       showTestDialog: false,
-      showTypeDropdown: false,
+      showGatePicker: false,
+      isReRegister: false,
+      reRegisterId: null,
       addLoading: false,
       testLoading: false,
       testResult: null,
@@ -192,18 +193,19 @@ export default {
       addMode: 'camera',
       addPhotoPreview: null,
       addPhotoBase64: null,
-      addForm: { personName: '', personType: 'owner' },
-      typeOptions: [
-        { text: '业主', value: 'owner' },
-        { text: '黑名单', value: 'blacklist' }
-      ],
+      addForm: { personName: '', personType: 'owner', selectedGateId: null },
+      entranceDoors: [],
       perPageReady: false
     }
   },
   computed: {
-    addFormTypeLabel () {
-      const opt = this.typeOptions.find(o => o.value === this.addForm.personType)
-      return opt ? opt.text : ''
+    addFormGateLabel () {
+      if (!this.addForm.selectedGateId) return ''
+      const door = this.entranceDoors.find(d => d.id === this.addForm.selectedGateId)
+      return door ? door.gate_name : ''
+    },
+    gateColumns () {
+      return this.entranceDoors.map(d => ({ text: d.gate_name, value: d.id }))
     }
   },
 
@@ -211,7 +213,6 @@ export default {
 
   },
   mounted () {
-    document.addEventListener('click', this.closeDropdowns)
     window.addEventListener('resize', this.handleResize)
     if (window.ResizeObserver && this.$refs.listContent) {
       this._resizeObserver = new ResizeObserver(this.handleResize)
@@ -220,7 +221,6 @@ export default {
     this.initData()
   },
   beforeDestroy () {
-    document.removeEventListener('click', this.closeDropdowns)
     window.removeEventListener('resize', this.handleResize)
     if (this._resizeObserver) {
       this._resizeObserver.disconnect()
@@ -230,11 +230,7 @@ export default {
     this.stopTestCamera()
   },
   methods: {
-    closeDropdowns (e) {
-      if (!e.target.closest('.filter-select')) {
-        this.showTypeDropdown = false
-      }
-    },
+
     handleResize () {
       clearTimeout(this._resizeTimer)
       this._resizeTimer = setTimeout(() => {
@@ -244,10 +240,38 @@ export default {
         })
       }, 200)
     },
-    initData () {
+    async loadEntranceDoors (preselectId) {
+      try {
+        const res = await getGateList({ gate_level: 'entrance_door', per_page: 999 })
+        const data = res.data
+        this.entranceDoors = (data && data.items) ? data.items : []
+        if (preselectId) {
+          this.addForm.selectedGateId = preselectId
+        }
+      } catch (err) {
+        this.entranceDoors = []
+      }
+    },
+    getGateNames (entranceDoors) {
+      if (!entranceDoors) return ''
+      let ids = []
+      try {
+        ids = typeof entranceDoors === 'string' ? JSON.parse(entranceDoors) : entranceDoors
+      } catch (e) {
+        return ''
+      }
+      if (!Array.isArray(ids) || ids.length === 0) return ''
+      const names = []
+      for (let i = 0; i < ids.length; i++) {
+        const door = this.entranceDoors.find(function (d) { return String(d.id) === String(ids[i]) })
+        if (door) names.push(door.gate_name)
+      }
+      return names.length > 0 ? names.join('、') : ''
+    },
+    async initData () {
       this.perPageReady = false
-
       this.perPage = 2
+      await this.loadEntranceDoors()
       this.loadData()
     },
     calcPerPage () {
@@ -331,16 +355,44 @@ export default {
       }
     },
     resetAddForm () {
-      this.addForm = { personName: '', personType: 'owner' }
-      this.showTypeDropdown = false
+      this.addForm = { personName: '', personType: 'owner', selectedGateId: null }
+
       this.addMode = 'camera'
       this.addPhotoPreview = null
       this.addPhotoBase64 = null
+      this.isReRegister = false
+      this.reRegisterId = null
       this.stopAddCamera()
     },
     openAddDialog () {
       this.resetAddForm()
       this.showAddDialog = true
+      this.loadEntranceDoors()
+      this.$nextTick(() => {
+        if (this.addMode === 'camera') this.startAddCamera()
+      })
+    },
+    onGateConfirm (val) {
+      this.addForm.selectedGateId = val.value
+      this.showGatePicker = false
+    },
+    onReRegister (item) {
+      this.resetAddForm()
+      this.isReRegister = true
+      this.reRegisterId = item.id
+      this.addForm.personName = item.person_name
+      let preselectId = null
+      if (item.entrance_doors) {
+        let ids = []
+        try {
+          ids = typeof item.entrance_doors === 'string' ? JSON.parse(item.entrance_doors) : item.entrance_doors
+        } catch (e) { /* ignore */ }
+        if (Array.isArray(ids) && ids.length > 0) {
+          preselectId = ids[0]
+        }
+      }
+      this.showAddDialog = true
+      this.loadEntranceDoors(preselectId)
       this.$nextTick(() => {
         if (this.addMode === 'camera') this.startAddCamera()
       })
@@ -379,11 +431,21 @@ export default {
       e.target.value = ''
     },
     async startAddCamera () {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.$message.error('当前环境不支持摄像头，请使用HTTPS或localhost访问')
+        return
+      }
       try {
         this.addStream = await navigator.mediaDevices.getUserMedia({ video: true })
         if (this.$refs.addVideo) this.$refs.addVideo.srcObject = this.addStream
       } catch (err) {
-        this.$message.warning('无法访问摄像头')
+        if (err.name === 'NotAllowedError') {
+          this.$message.error('摄像头权限被拒绝，请在浏览器设置中允许访问摄像头')
+        } else if (err.name === 'NotFoundError') {
+          this.$message.error('未检测到摄像头设备')
+        } else {
+          this.$message.error('无法访问摄像头：' + err.message)
+        }
       }
     },
     stopAddCamera () {
@@ -414,15 +476,20 @@ export default {
         }
         base64Image = this.addPhotoBase64
       }
+      const allowedGates = this.addForm.selectedGateId ? [this.addForm.selectedGateId] : []
       this.addLoading = true
       try {
+        if (this.isReRegister && this.reRegisterId) {
+          await deleteFace(this.reRegisterId)
+        }
         const res = await registerFace({
           face_image: base64Image,
           person_name: this.addForm.personName,
-          person_type: this.addForm.personType
+          person_type: this.addForm.personType,
+          allowed_gates: allowedGates
         })
         if (res.code === 0) {
-          this.$message.success('录入成功')
+          this.$message.success(this.isReRegister ? '重新录入成功' : '录入成功')
           this.showAddDialog = false
           this.onRefresh()
         }
@@ -433,11 +500,21 @@ export default {
       }
     },
     async startTestCamera () {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.$message.error('当前环境不支持摄像头，请使用HTTPS或localhost访问')
+        return
+      }
       try {
         this.testStream = await navigator.mediaDevices.getUserMedia({ video: true })
         if (this.$refs.testVideo) this.$refs.testVideo.srcObject = this.testStream
       } catch (err) {
-        this.$message.warning('无法访问摄像头')
+        if (err.name === 'NotAllowedError') {
+          this.$message.error('摄像头权限被拒绝，请在浏览器设置中允许访问摄像头')
+        } else if (err.name === 'NotFoundError') {
+          this.$message.error('未检测到摄像头设备')
+        } else {
+          this.$message.error('无法访问摄像头：' + err.message)
+        }
       }
     },
     stopTestCamera () {
@@ -732,6 +809,28 @@ export default {
   background: rgba(239, 68, 68, 0.1);
   border-color: #ef4444;
   color: #ef4444;
+}
+
+.re-register-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 6px;
+  color: var(--dark-text-secondary);
+  font-size: 13px;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  margin-right: 6px;
+}
+
+.re-register-btn:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--dark-accent-light);
+  color: var(--dark-accent-light);
 }
 
 .form-grid {
@@ -1048,6 +1147,76 @@ export default {
   font-size: 13px;
   color: var(--dark-text-secondary);
 }
+
+.gate-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.gate-checkbox-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--dark-text-secondary);
+  transition: all 0.2s;
+}
+
+.gate-checkbox-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--dark-text);
+}
+
+.gate-checkbox-item.is-checked {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--dark-accent-light);
+  color: var(--dark-accent-light);
+}
+
+.gate-checkbox-input {
+  display: none;
+}
+
+.gate-checkbox-label {
+  white-space: nowrap;
+}
+
+.gate-empty-tip {
+  font-size: 12px;
+  color: var(--dark-text-muted);
+  padding: 8px 0;
+}
+
+.gate-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-left: 8px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  white-space: nowrap;
+}
+
+.gate-tag-empty {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--dark-text-muted);
+}
+
 </style>
 
 <style>
@@ -1055,6 +1224,22 @@ export default {
   background: #0A0A0A !important;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
+}
+
+.dark-dialog-center {
+  margin-top: 50vh !important;
+  transform: translateY(-50%);
+}
+
+.el-dialog__wrapper:has(.dark-dialog-center) {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.dark-dialog-center.el-dialog {
+  margin: 0 auto !important;
+  transform: none;
 }
 
 .dark-dialog .el-dialog__header {
