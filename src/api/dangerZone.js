@@ -12,23 +12,6 @@ export function getDangerZoneList (params) {
   })
 }
 
-/** 获取禁区详情 */
-export function getDangerZoneDetail (id) {
-  return request({
-    url: `/danger-zone/${id}`,
-    method: 'get'
-  })
-}
-
-/** 新增禁区 */
-export function addDangerZone (data) {
-  return request({
-    url: '/danger-zone/add',
-    method: 'post',
-    data
-  })
-}
-
 /** 更新禁区配置 */
 export function updateDangerZone (id, data) {
   return request({
@@ -38,18 +21,10 @@ export function updateDangerZone (id, data) {
   })
 }
 
-/** 删除禁区 */
-export function deleteDangerZone (id) {
+/** 清理孤立禁区 */
+export function cleanupOrphanZones () {
   return request({
-    url: `/danger-zone/${id}`,
-    method: 'delete'
-  })
-}
-
-/** 获取可用摄像头列表 */
-export function getAvailableCameras () {
-  return request({
-    url: '/danger-zone/cameras',
-    method: 'get'
+    url: '/danger-zone/cleanup',
+    method: 'post'
   })
 }

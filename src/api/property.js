@@ -58,11 +58,6 @@ export function getPassLogs (params) {
   return request({ url: '/property/pass-logs', method: 'get', params })
 }
 
-/** 历史告警日志 */
-export function getAlarmLogs (params) {
-  return request({ url: '/property/alarm-logs', method: 'get', params })
-}
-
 /** 批量导入业主 */
 export function importOwners (data) {
   return request({ url: '/property/import-owners', method: 'post', data })
