@@ -35,7 +35,7 @@
           </template>
         </van-field>
         <div class="login-action">
-          <van-button round block type="primary" native-type="submit">登 录</van-button>
+          <button class="login-btn" type="submit">登 录</button>
         </div>
       </van-form>
     </div>
@@ -171,5 +171,27 @@ export default {
 
 .login-action {
   margin-top: 24px;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 12px 20px;
+  background: var(--dark-accent);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  letter-spacing: 0.1em;
+}
+
+.login-btn:hover {
+  background: var(--dark-accent-light);
+}
+
+.login-btn:active {
+  opacity: 0.9;
 }
 </style>

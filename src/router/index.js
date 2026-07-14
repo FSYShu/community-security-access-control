@@ -46,13 +46,7 @@ const routes = [
     component: () => import('@/views/access-control/GatePermission.vue'),
     meta: { title: '门禁权限配置', requiresAuth: true, roles: ['admin'] }
   },
-  // 禁区入侵检测模块
-  {
-    path: '/danger-zone',
-    name: 'DangerZone',
-    component: () => import('@/views/danger-zone/index.vue'),
-    meta: { title: '禁区入侵检测', requiresAuth: true, roles: ['admin', 'guard'] }
-  },
+
   // 实时视频监控模块
   {
     path: '/video-monitor',
@@ -85,12 +79,6 @@ const routes = [
     name: 'PassLogList',
     component: () => import('@/views/property-admin/PassLogList.vue'),
     meta: { title: '历史通行日志', requiresAuth: true, roles: ['admin', 'guard'] }
-  },
-  {
-    path: '/property-admin/alarm-logs',
-    name: 'AlarmLogList',
-    component: () => import('@/views/property-admin/AlarmLogList.vue'),
-    meta: { title: '历史告警日志', requiresAuth: true, roles: ['admin', 'guard'] }
   },
 
   // 安防监控日报模块

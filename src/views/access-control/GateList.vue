@@ -37,6 +37,10 @@
           </transition>
         </div>
         <div class="filter-spacer"></div>
+        <button class="zone-btn" @click="openZoneDialog">
+          <i class="el-icon-warning-outline"></i>
+          <span>禁区管理</span>
+        </button>
         <button class="add-btn" @click="openAddDialog">
           <i class="el-icon-plus"></i>
           <span>新增终端</span>
@@ -118,11 +122,92 @@
         </button>
       </div>
     </el-dialog>
+
+    <el-dialog :visible.sync="showZoneDialog" title="禁区管理" width="650px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="resetZoneForm">
+      <div class="zone-container">
+        <div class="zone-list">
+          <div class="zone-list-content">
+            <div
+              v-for="item in zoneList"
+              :key="item.id"
+              class="zone-item"
+              :class="{ 'is-active': selectedZoneId === item.id }"
+              @click="selectZone(item)"
+            >
+              <div class="zone-item-body">
+                <div class="zone-item-header">
+                  <span class="zone-name">{{ item.zone_name }}</span>
+                  <span class="zone-tag" :class="zoneTagClass(item.alarm_level)">{{ zoneAlarmText(item.alarm_level) }}</span>
+                </div>
+                <div class="zone-item-info">
+                  <span>安全距离: {{ item.safety_distance }}m</span>
+                  <span>滞留时长: {{ item.stay_duration }}s</span>
+                </div>
+              </div>
+              <button
+                v-if="item.status === 'active'"
+                class="zone-status-btn zone-disable-btn"
+                @click.stop="toggleZoneStatus(item, 'inactive')"
+              >禁用</button>
+              <button
+                v-else
+                class="zone-status-btn zone-enable-btn"
+                @click.stop="toggleZoneStatus(item, 'active')"
+              >启用</button>
+            </div>
+            <div v-if="zoneList.length === 0 && !zoneLoading" class="zone-empty">
+              <p>暂无禁区数据</p>
+            </div>
+          </div>
+        </div>
+        <div class="zone-form">
+          <div class="zone-form-content">
+            <div class="form-item">
+              <label class="form-label">禁区名称</label>
+              <input v-model="zoneForm.zone_name" class="form-input" placeholder="请输入禁区名称" disabled />
+            </div>
+            <div class="form-item">
+              <label class="form-label">安全距离 (米)</label>
+              <input v-model.number="zoneForm.safety_distance" type="number" class="form-input form-number" placeholder="请输入安全距离" />
+            </div>
+            <div class="form-item">
+              <label class="form-label">滞留警告时长 (秒)</label>
+              <input v-model.number="zoneForm.stay_duration" type="number" class="form-input form-number" placeholder="请输入滞留警告时长" />
+            </div>
+            <div class="form-item">
+              <label class="form-label">告警级别</label>
+              <div class="filter-select" :class="{ 'is-open': showZoneLevelDropdown }">
+                <div class="select-trigger" @click="showZoneLevelDropdown = !showZoneLevelDropdown">
+                  <span class="select-value">{{ zoneLevelLabel || '请选择告警级别' }}</span>
+                  <i class="el-icon-arrow-down select-arrow" :class="{ 'is-reverse': showZoneLevelDropdown }"></i>
+                </div>
+                <transition name="dropdown">
+                  <div v-if="showZoneLevelDropdown" class="select-dropdown">
+                    <div v-for="opt in zoneLevelOptions" :key="opt.value" class="select-option" :class="{ 'is-active': zoneForm.alarm_level === opt.value }" @click="zoneForm.alarm_level = opt.value; showZoneLevelDropdown = false">{{ opt.text }}</div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="zone-footer">
+        <span class="zone-tip"><i class="el-icon-info"></i> 禁区由门禁管理中"危险防护区域"类型的终端自动创建</span>
+        <div class="zone-footer-btns">
+          <button class="form-btn form-btn-cancel" @click="showZoneDialog = false">取消</button>
+          <button class="form-btn form-btn-primary" @click="onZoneSubmit">
+            <i v-if="zoneSubmitLoading" class="el-icon-loading"></i>
+            保存
+          </button>
+        </div>
+      </div>
+    </el-dialog>
   </app-layout>
 </template>
 
 <script>
 import { getGateList, addGate, updateGate, getGateDetail, deleteGate } from '@/api/property'
+import { getDangerZoneList, updateDangerZone, cleanupOrphanZones } from '@/api/dangerZone'
 
 export default {
   name: 'GateListPage',
@@ -150,7 +235,19 @@ export default {
         { text: '单元门', value: 'unit_door' },
         { text: '危险防护区域', value: 'dangerous_area' }
       ],
-      pollTimer: null
+      pollTimer: null,
+      showZoneDialog: false,
+      zoneList: [],
+      zoneLoading: false,
+      selectedZoneId: null,
+      zoneForm: { zone_name: '', safety_distance: 0, stay_duration: 0, alarm_level: '' },
+      zoneLevelOptions: [
+        { text: '低告警级别', value: 'low' },
+        { text: '中告警级别', value: 'medium' },
+        { text: '高告警级别', value: 'high' }
+      ],
+      showZoneLevelDropdown: false,
+      zoneSubmitLoading: false
     }
   },
   computed: {
@@ -159,6 +256,10 @@ export default {
     },
     formLevelLabel () {
       const opt = this.formLevelOptions.find(o => o.value === this.form.gate_level)
+      return opt ? opt.text : ''
+    },
+    zoneLevelLabel () {
+      const opt = this.zoneLevelOptions.find(o => o.value === this.zoneForm.alarm_level)
       return opt ? opt.text : ''
     }
   },
@@ -180,6 +281,7 @@ export default {
         this.showLevelDropdown = false
         this.showStatusDropdown = false
         this.showFormLevelDropdown = false
+        this.showZoneLevelDropdown = false
       }
     },
     toggleLevelDropdown () {
@@ -316,6 +418,81 @@ export default {
         this.$message.error(this.isEdit ? '保存失败' : '新增失败')
       }
       this.submitLoading = false
+    },
+    async openZoneDialog () {
+      this.showZoneDialog = true
+      try {
+        await cleanupOrphanZones()
+      } catch (e) {
+        console.error(e)
+      }
+      this.loadZoneList()
+    },
+    async loadZoneList () {
+      try {
+        this.zoneLoading = true
+        const res = await getDangerZoneList()
+        if (res.code === 0 && res.data) {
+          this.zoneList = res.data.items || res.data || []
+          if (this.zoneList.length > 0) {
+            this.selectZone(this.zoneList[0])
+          }
+        }
+      } catch (e) {
+        console.error(e)
+      }
+      this.zoneLoading = false
+    },
+    selectZone (item) {
+      this.selectedZoneId = item.id
+      this.zoneForm.zone_name = item.zone_name || ''
+      this.zoneForm.safety_distance = item.safety_distance || 0
+      this.zoneForm.stay_duration = item.stay_duration || 0
+      this.zoneForm.alarm_level = item.alarm_level || ''
+    },
+    zoneTagClass (level) {
+      const map = { low: 'zone-tag-low', medium: 'zone-tag-medium', high: 'zone-tag-high' }
+      return map[level] || ''
+    },
+    zoneAlarmText (level) {
+      const map = { low: '低告警级别', medium: '中告警级别', high: '高告警级别' }
+      return map[level] || level
+    },
+    async toggleZoneStatus (item, status) {
+      try {
+        await updateDangerZone(item.id, { status })
+        this.$message.success(status === 'active' ? '启用成功' : '禁用成功')
+        this.loadZoneList()
+      } catch (e) {
+        this.$message.error('操作失败')
+      }
+    },
+    resetZoneForm () {
+      this.zoneForm = { zone_name: '', safety_distance: 0, stay_duration: 0, alarm_level: '' }
+      this.selectedZoneId = null
+      this.showZoneLevelDropdown = false
+    },
+    async onZoneSubmit () {
+      if (!this.selectedZoneId) {
+        return this.$message.warning('请选择要编辑的禁区')
+      }
+      if (!this.zoneForm.safety_distance || !this.zoneForm.stay_duration || !this.zoneForm.alarm_level) {
+        return this.$message.warning('请填写完整信息')
+      }
+      this.zoneSubmitLoading = true
+      try {
+        const data = {
+          safety_distance: this.zoneForm.safety_distance,
+          stay_duration: this.zoneForm.stay_duration,
+          alarm_level: this.zoneForm.alarm_level
+        }
+        await updateDangerZone(this.selectedZoneId, data)
+        this.$message.success('保存成功')
+        this.showZoneDialog = false
+      } catch (e) {
+        this.$message.error('保存失败')
+      }
+      this.zoneSubmitLoading = false
     }
   }
 }
@@ -733,5 +910,230 @@ export default {
 
 .dark-dialog .el-dialog__body {
   padding: 20px;
+}
+
+.zone-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.zone-btn:hover {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.zone-btn i {
+  font-size: 14px;
+}
+
+.zone-container {
+  display: flex;
+  gap: 20px;
+  min-height: 400px;
+}
+
+.zone-list {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 400px;
+}
+
+.zone-list-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.zone-list-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.zone-list-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 3px;
+}
+
+.zone-list-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.zone-list-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.zone-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.zone-item:last-child {
+  margin-bottom: 0;
+}
+
+.zone-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.zone-item.is-active {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--dark-accent-light);
+}
+
+.zone-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.zone-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.zone-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dark-text);
+}
+
+.zone-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.zone-tag-low {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.zone-tag-medium {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.zone-tag-high {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.zone-item-info {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--dark-text-secondary);
+  margin-bottom: 8px;
+}
+
+.zone-status-btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.zone-enable-btn {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.zone-enable-btn:hover {
+  background: rgba(16, 185, 129, 0.25);
+}
+
+.zone-disable-btn {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.zone-disable-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.zone-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--dark-text-muted);
+  font-size: 13px;
+}
+
+.zone-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.zone-form-content {
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-number {
+  -moz-appearance: textfield;
+}
+
+.form-number::-webkit-inner-spin-button,
+.form-number::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.zone-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 0;
+}
+
+.zone-tip {
+  font-size: 12px;
+  color: var(--dark-text-muted);
+  margin-left: 0;
+}
+
+.zone-footer-btns {
+  display: flex;
+  gap: 8px;
 }
 </style>

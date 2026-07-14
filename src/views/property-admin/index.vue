@@ -7,7 +7,7 @@
       </van-cell-group>
       <van-cell-group title="历史日志查询">
         <van-cell title="通行日志" is-link to="/property-admin/pass-logs" />
-        <van-cell title="告警日志" is-link to="/property-admin/alarm-logs" />
+
       </van-cell-group>
 
     </div>
