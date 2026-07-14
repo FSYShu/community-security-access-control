@@ -7,8 +7,11 @@ import threading
 import time
 
 import cv2
+import numpy as np
 
-from .device_tamper_stream import _draw_status, _multipart, _placeholder, _open_capture
+from .device_tamper_stream import _draw_status, _multipart, _placeholder
+from core.rtmp_relay import start_rtmp_pull, read_cv2_frame_from_pull, stop_rtmp_pull
+from core.shared_frame_store import get_frame_with_info as _get_shared_frame_with_info
 from .tailgating_stream import (
     _opencv_compatible_path,
     _record_tailgating_alarm,
@@ -30,9 +33,9 @@ def generate_frames_with_dangerous_behavior(
     When *monitor* is available and has a snapshot for *gate_id*, frames are
     read from the background tamper monitor (device-tamper + fire/smoke
     status included).  When the monitor is unavailable or has no data, the
-    function falls back to pulling directly from *stream_url* via
-    cv2.VideoCapture so the stream is never left showing only "STREAM
-    OFFLINE".
+    function first checks the shared frame store for recent frames, then
+    falls back to pulling from *stream_url* via the shared FFmpeg relay
+    (rtmp_relay) so the stream is never left showing only "STREAM OFFLINE".
     """
     model_available = (
         os.path.isfile(prototxt_path)
@@ -63,23 +66,26 @@ def generate_frames_with_dangerous_behavior(
     tracks = {}
     crossing_count = 0
 
-    fallback_cap = None
+    fallback_pull = None
     fallback_alive = {'flag': True}
     fallback_latest = {'frame': None, 'updated_at': 0.0}
     fallback_lock = threading.Lock()
 
     def _start_fallback_reader(url):
-        nonlocal fallback_cap
-        cap = _open_capture(url, timeout=open_timeout)
-        if cap is None:
+        nonlocal fallback_pull
+        pull = start_rtmp_pull(url, fps=25, max_width=max_width)
+        if pull is None:
+            logger.warning('FFmpeg pull unavailable for gate %s fallback', gate_id)
             return
-        fallback_cap = cap
+        fallback_pull = pull
 
         def reader():
             while fallback_alive['flag']:
+                if pull['process'].poll() is not None:
+                    break
                 try:
-                    ok, frame = cap.read()
-                except cv2.error:
+                    ok, frame = read_cv2_frame_from_pull(pull)
+                except Exception:
                     break
                 if not ok or frame is None:
                     time.sleep(0.05)
@@ -100,18 +106,69 @@ def generate_frames_with_dangerous_behavior(
                 and now - snapshot['updated_at'] <= offline_timeout
             )
 
-            if not monitor_ok and stream_url and fallback_cap is None:
-                logger.info('Monitor unavailable for gate %s, starting fallback RTMP pull', gate_id)
-                _start_fallback_reader(stream_url)
+            if not monitor_ok and stream_url and fallback_pull is None:
+                shared_jpeg, shared_ts = _get_shared_frame_with_info(stream_url)
+                if shared_jpeg is not None and shared_ts is not None and time.time() - shared_ts <= offline_timeout:
+                    pass
+                else:
+                    logger.info('Monitor unavailable for gate %s, starting shared RTMP pull', gate_id)
+                    _start_fallback_reader(stream_url)
 
             if monitor_ok:
                 frame = snapshot['frame']
                 base_status = snapshot['status']
-            elif fallback_cap is not None:
+            elif fallback_pull is not None:
                 with fallback_lock:
                     frame = fallback_latest['frame']
                     fb_updated = fallback_latest['updated_at']
                 if frame is None or now - fb_updated > offline_timeout:
+                    shared_jpeg, shared_ts = _get_shared_frame_with_info(stream_url) if stream_url else (None, None)
+                    if shared_jpeg is not None and shared_ts is not None and time.time() - shared_ts <= offline_timeout:
+                        arr = np.frombuffer(shared_jpeg, dtype=np.uint8)
+                        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                        if frame is not None:
+                            base_status = 'normal'
+                            shared_jpeg = None
+                        else:
+                            if tailgating is not None:
+                                tailgating.reset()
+                            tracks = {}
+                            crossing_count = 0
+                            last_event_at = -math.inf
+                            output = _placeholder('STREAM OFFLINE', (max_width, int(max_width * 9 / 16)))
+                            yield _multipart(output)
+                            time.sleep(0.1)
+                            continue
+                    else:
+                        if tailgating is not None:
+                            tailgating.reset()
+                        tracks = {}
+                        crossing_count = 0
+                        last_event_at = -math.inf
+                        output = _placeholder('STREAM OFFLINE', (max_width, int(max_width * 9 / 16)))
+                        yield _multipart(output)
+                        time.sleep(0.1)
+                        continue
+                else:
+                    base_status = 'normal'
+            else:
+                shared_jpeg, shared_ts = _get_shared_frame_with_info(stream_url) if stream_url else (None, None)
+                if shared_jpeg is not None and shared_ts is not None and time.time() - shared_ts <= offline_timeout:
+                    arr = np.frombuffer(shared_jpeg, dtype=np.uint8)
+                    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    if frame is not None:
+                        base_status = 'normal'
+                    else:
+                        if tailgating is not None:
+                            tailgating.reset()
+                        tracks = {}
+                        crossing_count = 0
+                        last_event_at = -math.inf
+                        output = _placeholder('STREAM OFFLINE', (max_width, int(max_width * 9 / 16)))
+                        yield _multipart(output)
+                        time.sleep(0.1)
+                        continue
+                else:
                     if tailgating is not None:
                         tailgating.reset()
                     tracks = {}
@@ -121,17 +178,6 @@ def generate_frames_with_dangerous_behavior(
                     yield _multipart(output)
                     time.sleep(0.1)
                     continue
-                base_status = 'normal'
-            else:
-                if tailgating is not None:
-                    tailgating.reset()
-                tracks = {}
-                crossing_count = 0
-                last_event_at = -math.inf
-                output = _placeholder('STREAM OFFLINE', (max_width, int(max_width * 9 / 16)))
-                yield _multipart(output)
-                time.sleep(0.1)
-                continue
 
             if detector is not None and now - last_detection_at >= detection_interval:
                 boxes = detector.detect(frame)
@@ -173,9 +219,9 @@ def generate_frames_with_dangerous_behavior(
             time.sleep(0.02)
     finally:
         fallback_alive['flag'] = False
-        if fallback_cap is not None:
+        if fallback_pull is not None:
             try:
-                fallback_cap.release()
+                stop_rtmp_pull(fallback_pull['url'])
             except Exception:
                 pass
 

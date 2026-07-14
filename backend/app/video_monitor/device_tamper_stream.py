@@ -12,7 +12,7 @@ import numpy as np
 from app import db
 from app.models.alarm import AlarmEvent
 from core.alarm_dedup import alarm_write_transaction, has_pending_alarm
-from core.device_tamper import BLOCKED, BLURRED, IMPACT, MOVED, NORMAL, DeviceTamperDetector
+from core.device_tamper import BLOCKED, BLURRED, FLAME, IMPACT, MOVED, NORMAL, OFFLINE, SMOKE, TAILGATING, DeviceTamperDetector
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +24,11 @@ STATUS_LABELS = {
     BLOCKED: ('LENS BLOCKED', (0, 0, 255)),
     BLURRED: ('IMAGE BLURRED', (0, 165, 255)),
     MOVED: ('CAMERA MOVED', (0, 0, 255)),
+    TAILGATING: ('TAILGATING DETECTED', (0, 165, 255)),
     IMPACT: ('CAMERA IMPACT', (0, 0, 255)),
-    'open_flame': ('OPEN FLAME', (0, 0, 255)),
-    'smoke': ('SMOKE DETECTED', (0, 165, 255)),
-    'stream_offline': ('STREAM OFFLINE', (0, 0, 255)),
+    FLAME: ('OPEN FLAME', (0, 0, 255)),
+    SMOKE: ('SMOKE DETECTED', (0, 165, 255)),
+    OFFLINE: ('STREAM OFFLINE', (0, 0, 255)),
 }
 
 

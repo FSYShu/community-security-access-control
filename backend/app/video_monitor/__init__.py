@@ -43,41 +43,6 @@ def _extract_push_key_from_url(stream_url):
     return parts[-1] if parts else ''
 
 
-LATENCY_OVERLAY_INTERVAL = 0.5
-
-
-def _overlay_latency_on_jpeg(jpeg_bytes, latency_ms, cached=None):
-    if latency_ms < 0:
-        return jpeg_bytes, None
-    if cached and cached.get('latency_ms') == latency_ms:
-        return cached.get('jpeg') or jpeg_bytes, cached
-    arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
-    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    if frame is None:
-        return jpeg_bytes, None
-    if latency_ms > 2000:
-        color = (0, 0, 255)
-    elif latency_ms > 800:
-        color = (0, 165, 255)
-    else:
-        color = (0, 200, 0)
-    text = 'LATENCY: {}ms'.format(latency_ms)
-    h, w = frame.shape[:2]
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = max(0.4, min(w, h) / 800)
-    thickness = max(1, int(scale * 2))
-    (tw, th), _ = cv2.getTextSize(text, font, scale, thickness)
-    cv2.rectangle(frame, (8, h - th - 18), (8 + tw + 12, h - 6), (0, 0, 0), -1)
-    cv2.putText(frame, text, (14, h - 14), font, scale, color, thickness, cv2.LINE_AA)
-    ret, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
-    result = buf.tobytes() if ret else jpeg_bytes
-    new_cache = {'latency_ms': latency_ms, 'jpeg': result}
-    return result, new_cache
-
-
-BUFFER_DELAY_SECONDS = 5.0
-WARMUP_FRAME_RATIO = 0.5
-
 
 def generate_frames_ffmpeg(stream_url, fps=20, max_width=640):
     entry = _try_connect_rtmp_ffmpeg(stream_url, fps=fps, max_width=max_width)
@@ -135,40 +100,6 @@ def generate_frames_ffmpeg(stream_url, fps=20, max_width=640):
     finally:
         alive['flag'] = False
         stop_rtmp_pull(stream_url)
-
-
-def generate_cv2_frames_ffmpeg(stream_url, fps=20, max_width=640):
-    from core.rtmp_relay import read_cv2_frame_from_pull
-    entry = _try_connect_rtmp_ffmpeg(stream_url, fps=fps, max_width=max_width)
-    if entry is None:
-        return None
-
-    slot = {'frame': None, 'alive': True}
-
-    def reader():
-        while slot['alive']:
-            if entry['process'].poll() is not None:
-                break
-            ok, f = read_cv2_frame_from_pull(entry)
-            if not ok or f is None:
-                time.sleep(0.01)
-                continue
-            slot['frame'] = f
-
-    reader_thread = threading.Thread(target=reader, daemon=True)
-    reader_thread.start()
-
-    class FrameSource:
-        def __init__(self):
-            self.entry = entry
-            self.stream_url = stream_url
-        def read_latest(self):
-            return slot['frame']
-        def stop(self):
-            slot['alive'] = False
-            stop_rtmp_pull(stream_url)
-
-    return FrameSource()
 
 
 
@@ -600,10 +531,54 @@ def danger_distance_sse(gate_id):
         return jsonify({'error': 'Failed to process danger distance stream'}), 500
 
 
-@video_monitor_bp.route('/list', methods=['GET'])
-def get_monitor_list():
-    """获取监控区域列表"""
-    return error_response(message='监控区域列表接口开发中', code=-1)
+@video_monitor_bp.route('/dangerous-behavior/<int:gate_id>/stream')
+@limiter.exempt
+def dangerous_behavior_sse(gate_id):
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': 'Gate not found or push key is missing'}), 404
+
+    config = current_app.config
+    app = current_app._get_current_object()
+    monitor = app.extensions.get('device_tamper_monitor')
+    stream_url = 'rtmp://{}:{}/live/{}'.format(
+        config.get('RTMP_SERVER_HOST', '20.214.147.223'),
+        config.get('RTMP_SERVER_PORT', 9090),
+        gate.push_key,
+    )
+    try:
+        from .dangerous_behavior_sse import generate_dangerous_behavior_sse
+        from flask import stream_with_context
+
+        def generate():
+            for event in generate_dangerous_behavior_sse(
+                app, monitor, gate_id, stream_url,
+                prototxt_path=config.get('TAILGATING_PROTOTXT_PATH'),
+                model_path=config.get('TAILGATING_MODEL_PATH'),
+                fps=config.get('VIDEO_FPS', 20),
+                max_width=config.get('VIDEO_MAX_WIDTH', 640),
+                confidence=config.get('TAILGATING_CONFIDENCE', 0.25),
+                detection_interval=config.get('TAILGATING_DETECTION_INTERVAL', 0.10),
+                line_ratio=config.get('TAILGATING_LINE_RATIO', 0.62),
+                crossing_window=config.get('TAILGATING_CROSSING_WINDOW', 5.0),
+                max_horizontal_gap_ratio=config.get('TAILGATING_MAX_HORIZONTAL_GAP_RATIO', 0.28),
+                authorized_entries=config.get('TAILGATING_AUTHORIZED_ENTRIES', 1),
+                direction=config.get('TAILGATING_DIRECTION', 'both'),
+                status_hold_seconds=config.get('TAILGATING_STATUS_HOLD_SECONDS', 3.0),
+                alarm_cooldown=config.get('TAILGATING_ALARM_COOLDOWN', 60),
+                offline_timeout=config.get('DEVICE_OFFLINE_TIMEOUT', 5),
+            ):
+                yield event
+
+        resp = Response(stream_with_context(generate()), mimetype='text/event-stream')
+        resp.headers['Cache-Control'] = 'no-cache'
+        resp.headers['X-Accel-Buffering'] = 'no'
+        resp.headers['Connection'] = 'keep-alive'
+        return resp
+    except Exception:
+        logger.exception('Failed to start dangerous behavior SSE for gate %s', gate_id)
+        return jsonify({'error': 'Failed to process dangerous behavior stream'}), 500
+
 
 
 @video_monitor_bp.route('/detect-distance/<int:gate_id>', methods=['POST'])
@@ -913,19 +888,6 @@ def get_recording_file(filename):
     )
 
 
-@video_monitor_bp.route('/<int:monitor_id>/playback', methods=['GET'])
-def get_video_playback(monitor_id):
-    """获取视频回放地址"""
-    return error_response(message='视频回放接口开发中', code=-1)
-
-
-def _generate_placeholder(text, resolution=(480, 480)):
-    import numpy as np
-    img = np.zeros((resolution[1], resolution[0], 3), dtype=np.uint8)
-    cv2.putText(img, text, (10, resolution[1] // 2),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    ret, buffer = cv2.imencode('.jpg', img)
-    return buffer.tobytes() if ret else b''
 
 
 def _parse_size(size_str):

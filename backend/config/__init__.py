@@ -41,7 +41,7 @@ class BaseConfig:
     PUSH_SERVICE_URL = os.getenv('PUSH_SERVICE_URL', 'http://localhost:8002')
 
     VIDEO_FRAME_SKIP = int(os.getenv('VIDEO_FRAME_SKIP', '5'))
-    VIDEO_MAX_WIDTH = int(os.getenv('VIDEO_MAX_WIDTH', '640'))
+    VIDEO_MAX_WIDTH = int(os.getenv('VIDEO_MAX_WIDTH', '1280'))
     VIDEO_DETECT_WIDTH = int(os.getenv('VIDEO_DETECT_WIDTH', '320'))
     DEVICE_TAMPER_CONFIRM_FRAMES = int(os.getenv('DEVICE_TAMPER_CONFIRM_FRAMES', '3'))
     DEVICE_BLOCKED_CONFIRM_FRAMES = int(os.getenv('DEVICE_BLOCKED_CONFIRM_FRAMES', '8'))

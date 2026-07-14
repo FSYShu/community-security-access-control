@@ -17,6 +17,10 @@ BLOCKED = 'device_blocked'
 BLURRED = 'device_blurred'
 MOVED = 'device_moved'
 IMPACT = 'camera_impact'
+TAILGATING = 'tailgating'
+FLAME = 'open_flame'
+SMOKE ='smoke'
+OFFLINE = 'stream_offline'
 
 
 @dataclass
