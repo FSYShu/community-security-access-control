@@ -49,8 +49,11 @@ def get_gate_list():
     per_page = request.args.get('per_page', 20, type=int)
     gate_level = request.args.get('gate_level', '')
     status = request.args.get('status', '')
+    keyword = request.args.get('keyword', '')
 
     query = Gate.query
+    if keyword:
+        query = query.filter(Gate.gate_name.contains(keyword))
     if gate_level:
         query = query.filter_by(gate_level=gate_level)
     if status == 'unbound':
