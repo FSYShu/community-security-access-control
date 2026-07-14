@@ -318,7 +318,13 @@ def unbind_gate(gate_id):
     gate.bound = 0
     db.session.commit()
     if push_key:
-        from core.rtmp_relay import stop_ffmpeg
-        stop_ffmpeg(push_key)
-        logger.info('Stopped FFmpeg push for unbound gate {} (push_key={})'.format(gate_id, push_key))
-    return success_response(data=gate.to_dict(), message='解绑成功')
+        try:
+            from core.rtmp_relay import stop_ffmpeg
+            stop_ffmpeg(push_key)
+        except Exception:
+            pass
+    try:
+        gate_data = gate.to_dict()
+    except Exception:
+        gate_data = {'id': gate.id, 'gate_name': gate.gate_name, 'bound': False}
+    return success_response(data=gate_data, message='解绑成功')

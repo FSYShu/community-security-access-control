@@ -21,7 +21,9 @@ _detect_thread = None
 _detect_stop_event = threading.Event()
 DETECT_LOOP_INTERVAL = 2.0
 MAX_WIDTH = 480
-_pull_entries = {}
+_capture_entries = {}
+_CAPTURE_OPEN_TIMEOUT = 45
+_CAPTURE_RECONNECT_INTERVAL = 5
 
 
 def start_danger_zone_detector(app):

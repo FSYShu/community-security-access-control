@@ -155,7 +155,7 @@ def _detect_persons(frame, zone_id, gate_id=None):
 
     has_motion = _detect_motion(frame, zone_id)
     if has_motion:
-        return [{'rect': (0, 0, frame.shape[1], frame.shape[0]), 'confidence': 0.5, 'method': 'motion', 'distance': float('inf')}]
+        return [{'rect': (0, 0, frame.shape[1], frame.shape[0]), 'confidence': 0.5, 'method': 'motion', 'distance': 0.0}]
 
     return []
 
