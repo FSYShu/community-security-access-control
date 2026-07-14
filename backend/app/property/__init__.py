@@ -75,43 +75,6 @@ def get_pass_logs():
     })
 
 
-@property_bp.route('/alarm-logs', methods=['GET'])
-@jwt_required()
-def get_alarm_logs():
-    """历史告警日志查询"""
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-    start_time = request.args.get('start_time', '')
-    end_time = request.args.get('end_time', '')
-    alarm_type = request.args.get('alarm_type', '')
-    alarm_level = request.args.get('alarm_level', '')
-    gate_level = request.args.get('gate_level', '')
-
-    query = AlarmEvent.query
-    if start_time:
-        query = query.filter(AlarmEvent.alarm_time >= start_time)
-    if end_time:
-        query = query.filter(AlarmEvent.alarm_time <= end_time)
-    if alarm_type:
-        query = query.filter_by(alarm_type=alarm_type)
-    if alarm_level:
-        query = query.filter_by(alarm_level=alarm_level)
-
-    if gate_level:
-        gate_ids = [g.id for g in Gate.query.filter_by(gate_level=gate_level).all()]
-        if gate_ids:
-            query = query.filter(AlarmEvent.source_id.in_(gate_ids), AlarmEvent.source_type == 'gate')
-
-    query = query.order_by(AlarmEvent.alarm_time.desc())
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-
-    return success_response(data={
-        'items': [a.to_dict() for a in pagination.items],
-        'total': pagination.total,
-        'page': pagination.page,
-        'per_page': pagination.per_page
-    })
-
 
 @property_bp.route('/import-owners', methods=['POST'])
 @admin_required

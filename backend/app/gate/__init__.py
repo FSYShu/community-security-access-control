@@ -242,6 +242,12 @@ def delete_gate(gate_id):
     if related_count > 0:
         return error_response(message=f'该终端存在{related_count}条关联通行记录，无法删除', code=400)
 
+    if gate.gate_level == 'dangerous_area':
+        from app.models.danger_zone import DangerZone
+        zone = DangerZone.query.filter_by(camera_ids=str(gate_id)).first()
+        if zone:
+            db.session.delete(zone)
+
     db.session.delete(gate)
     db.session.commit()
     log_audit(operation_type='delete_gate', operation_content=f'删除门禁终端: {gate_id}')
