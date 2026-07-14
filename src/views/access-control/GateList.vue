@@ -66,6 +66,7 @@
               <i class="el-icon-edit"></i>
               <span>编辑</span>
             </button>
+
             <button class="delete-btn" @click.stop="onDelete(item)">
               <i class="el-icon-delete"></i>
               <span>删除</span>
@@ -202,6 +203,7 @@
         </div>
       </div>
     </el-dialog>
+
   </app-layout>
 </template>
 
@@ -493,6 +495,7 @@ export default {
         this.$message.error('保存失败')
       }
       this.zoneSubmitLoading = false
+
     }
   }
 }
@@ -1136,4 +1139,5 @@ export default {
   display: flex;
   gap: 8px;
 }
+
 </style>

@@ -30,10 +30,7 @@
         <span v-if="latencyMs !== null" class="latency-tag" :class="latencyClass">{{ latencyText }}</span>
         <span v-if="currentFps !== null" class="fps-tag">{{ currentFps }}fps</span>
       </div>
-      <button v-if="dangerDistanceEnabled && selectedGate" class="calib-btn" @click="openCalibDialog">
-        <i class="el-icon-aim"></i>
-        <span>校准</span>
-      </button>
+
     </div>
     <div class="stream-container">
       <div class="stream-wrapper">
@@ -64,31 +61,7 @@
         <button class="retry-button" @click="manualRefresh">立即重试</button>
       </div>
     </div>
-    <el-dialog :visible.sync="showCalibDialog" title="距离校准（两点法）" width="380px" :close-on-click-modal="false" append-to-body custom-class="dark-dialog" @close="calibDistance = 1.0">
-      <div class="calib-content">
-        <p class="calib-hint">分别在近处和远处各校准一次，两点校准更准确。先站在近处（如1米），再站在远处（如3米）。</p>
-        <div class="calib-form">
-          <label class="calib-label">校准点</label>
-          <div class="calib-point-select">
-            <button class="calib-point-btn" :class="{ 'is-active': calibPoint === 'near' }" @click="calibPoint = 'near'">近点</button>
-            <button class="calib-point-btn" :class="{ 'is-active': calibPoint === 'far' }" @click="calibPoint = 'far'">远点</button>
-          </div>
-        </div>
-        <div class="calib-form">
-          <label class="calib-label">实际距离(米)</label>
-          <input v-model.number="calibDistance" class="calib-input" type="number" step="0.1" min="0.5" max="20" />
-        </div>
-        <div v-if="calibNearDist || calibFarDist" class="calib-status">
-          <span v-if="calibNearDist" class="calib-status-item calib-near">近点: {{ calibNearDist }}m (比例{{ calibNearRatio }})</span>
-          <span v-if="calibFarDist" class="calib-status-item calib-far">远点: {{ calibFarDist }}m (比例{{ calibFarRatio }})</span>
-        </div>
-        <p v-if="calibResult" class="calib-result" :class="calibSuccess ? 'calib-success' : 'calib-error'">{{ calibResult }}</p>
-      </div>
-      <div class="form-footer">
-        <button class="form-btn form-btn-cancel" @click="showCalibDialog = false">关闭</button>
-        <button class="form-btn form-btn-primary" :disabled="calibLoading" @click="doCalibrate">{{ calibLoading ? '校准中...' : '校准此点' }}</button>
-      </div>
-    </el-dialog>
+
   </div>
 </template>
 
@@ -149,17 +122,8 @@ export default {
       dangerSafetyDistance: 2.0,
       dangerBoxExpireTimer: null,
       dangerSseErrorCount: 0,
-      dangerSseConnectTimer: null,
-      showCalibDialog: false,
-      calibDistance: 1.0,
-      calibPoint: 'near',
-      calibLoading: false,
-      calibResult: '',
-      calibSuccess: false,
-      calibNearDist: null,
-      calibNearRatio: null,
-      calibFarDist: null,
-      calibFarRatio: null
+      dangerSseConnectTimer: null
+
     }
   },
   computed: {
@@ -839,59 +803,8 @@ export default {
     warmupStream () {
       if (!this.selectedGate) return
       fetch('/api/v1/video-monitor/gate-warmup?gate_id=' + this.selectedGate).catch(function () {})
-    },
-    openCalibDialog () {
-      this.calibResult = ''
-      this.calibSuccess = false
-      const gate = this.gateList.find(g => String(g.id) === this.selectedGate)
-      if (gate) {
-        this.calibNearDist = gate.calib_near_dist || null
-        this.calibNearRatio = gate.calib_near_ratio || null
-        this.calibFarDist = gate.calib_far_dist || null
-        this.calibFarRatio = gate.calib_far_ratio || null
-      }
-      this.showCalibDialog = true
-    },
-    async doCalibrate () {
-      if (!this.calibDistance || this.calibDistance <= 0) {
-        this.$message.warning('请输入有效距离')
-        return
-      }
-      this.calibLoading = true
-      this.calibResult = ''
-      const self = this
-      try {
-        const ssePort = window.location.port === '8080' ? '5000' : window.location.port
-        const url = window.location.protocol + '//' + window.location.hostname + ':' + ssePort + '/api/v1/video-monitor/calibrate-distance/' + this.selectedGate
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ distance: this.calibDistance, point: this.calibPoint })
-        })
-        const data = await res.json()
-        if (data.code === 0) {
-          this.calibSuccess = true
-          const label = this.calibPoint === 'near' ? '近点' : '远点'
-          this.calibResult = label + '校准成功！' + data.data[this.calibPoint === 'near' ? 'calib_near_dist' : 'calib_far_dist'] + '米'
-          this.calibNearDist = data.data.calib_near_dist
-          this.calibNearRatio = data.data.calib_near_ratio
-          this.calibFarDist = data.data.calib_far_dist
-          this.calibFarRatio = data.data.calib_far_ratio
-          this.stopDangerDistanceSSE()
-          setTimeout(function () {
-            self.startDangerDistanceSSE()
-          }, 500)
-        } else {
-          this.calibSuccess = false
-          this.calibResult = data.error || '校准失败'
-        }
-      } catch (e) {
-        this.calibSuccess = false
-        this.calibResult = '请求失败: ' + e.message
-      } finally {
-        this.calibLoading = false
-      }
     }
+
   }
 }
 </script>
@@ -921,9 +834,6 @@ export default {
 .status-indicator {
   order: 2;
 }
-.calib-btn {
-  order: 3;
-}
 
 @media (max-width: 767px) {
   .status-indicator {
@@ -931,9 +841,7 @@ export default {
     flex: 0 0 100%;
     justify-content: center;
   }
-  .calib-btn {
-    order: 2;
-  }
+
 }
 
 @media (min-width: 768px) {
@@ -1152,119 +1060,6 @@ export default {
   color: #818cf8;
 }
 
-.calib-btn {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 8px;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 4px;
-  color: #f59e0b;
-  font-size: 11px;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.calib-btn:hover {
-  background: rgba(245, 158, 11, 0.2);
-}
-
-.calib-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.calib-hint {
-  font-size: 12px;
-  color: var(--dark-text-secondary);
-  line-height: 1.6;
-}
-
-.calib-form {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.calib-label {
-  font-size: 13px;
-  color: var(--dark-text-secondary);
-  white-space: nowrap;
-}
-
-.calib-input {
-  flex: 1;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  color: var(--dark-text);
-  font-size: 13px;
-  outline: none;
-}
-
-.calib-input:focus {
-  border-color: var(--dark-accent-light);
-}
-
-.calib-result {
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.calib-success {
-  color: var(--dark-success-green);
-}
-
-.calib-error {
-  color: #ef4444;
-}
-
-.calib-point-select {
-  display: flex;
-  gap: 6px;
-}
-
-.calib-point-btn {
-  padding: 4px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--dark-text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.calib-point-btn.is-active {
-  border-color: var(--dark-accent-light);
-  color: var(--dark-accent-light);
-  background: rgba(99, 102, 241, 0.1);
-}
-
-.calib-status {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
-}
-
-.calib-status-item {
-  font-size: 11px;
-}
-
-.calib-near {
-  color: var(--dark-success-green);
-}
-
-.calib-far {
-  color: #f59e0b;
-}
 .fps-tag {
   font-size: 11px;
   padding: 2px 6px;

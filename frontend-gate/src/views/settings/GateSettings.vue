@@ -95,7 +95,30 @@
         <div v-if="previewStream" class="camera-preview-wrap">
           <video ref="previewVideo" class="camera-preview" autoplay playsinline muted></video>
           <div class="camera-preview-badge">预览</div>
+          <div v-if="liveDistance !== null" class="camera-dist-live">{{ liveDistance }}m</div>
         </div>
+        <template v-if="isBound">
+          <div class="setting-divider" style="margin-top:12px;"></div>
+          <div class="setting-section-title" style="margin-top:4px;">距离校准</div>
+          <p class="calib-hint">分别在近处和远处各校准一次，两点校准更准确。先站在近处（如1米），再站在远处（如3米）。</p>
+          <div class="calib-form-row">
+            <span class="calib-form-label">校准点</span>
+            <div class="calib-point-select">
+              <button class="calib-point-btn" :class="{ 'is-active': calibPoint === 'near' }" @click="calibPoint = 'near'">近点</button>
+              <button class="calib-point-btn" :class="{ 'is-active': calibPoint === 'far' }" @click="calibPoint = 'far'">远点</button>
+            </div>
+          </div>
+          <div class="calib-form-row">
+            <span class="calib-form-label">实际距离(米)</span>
+            <input v-model.number="calibDistance" class="calib-input" type="number" step="0.1" min="0.5" max="20" />
+          </div>
+          <div v-if="calibNearDist || calibFarDist" class="calib-status">
+            <span v-if="calibNearDist" class="calib-status-item calib-near">近点: {{ calibNearDist }}m (比例{{ calibNearRatio }})</span>
+            <span v-if="calibFarDist" class="calib-status-item calib-far">远点: {{ calibFarDist }}m (比例{{ calibFarRatio }})</span>
+          </div>
+          <p v-if="calibResult" class="calib-result" :class="calibSuccess ? 'calib-success' : 'calib-error'">{{ calibResult }}</p>
+          <button class="gate-btn gate-btn-primary" style="margin-top:12px;" :disabled="calibLoading" @click="doCalibrate">{{ calibLoading ? '校准中...' : '校准此点' }}</button>
+        </template>
       </div>
     </div>
   </div>
@@ -116,7 +139,19 @@ export default {
       showCameraDropdown: false,
       cameraList: [],
       selectedCameraId: '',
-      previewStream: null
+      previewStream: null,
+      calibDistance: 1.0,
+      calibPoint: 'near',
+      calibLoading: false,
+      calibResult: '',
+      calibSuccess: false,
+      calibNearDist: null,
+      calibNearRatio: null,
+      calibFarDist: null,
+      calibFarRatio: null,
+      liveDistance: null,
+      distDetectTimer: null,
+      distFailCount: 0
     }
   },
   computed: {
@@ -128,13 +163,13 @@ export default {
     currentCameraLabel () { return this.$store.getters['gate/cameraLabel'] },
     selectedLabel () {
       if (!this.selectedGateId) return ''
-      var item = this.list.find(function (g) { return String(g.id) === this.selectedGateId }.bind(this))
+      const item = this.list.find(function (g) { return String(g.id) === this.selectedGateId }.bind(this))
       return item ? item.gate_name : ''
     },
     sortedList () {
-      var boundId = this.gateId
-      var unbound = []
-      var bound = []
+      const boundId = this.gateId
+      const unbound = []
+      const bound = []
       this.list.forEach(function (item) {
         if (String(item.id) === boundId) {
           bound.push(item)
@@ -157,6 +192,7 @@ export default {
     this.$store.commit('user/CLEAR_USER')
     document.removeEventListener('click', this.onDocumentClick)
     this.stopPreview()
+    this.stopDistDetect()
   },
   methods: {
     onDocumentClick (e) {
@@ -175,8 +211,8 @@ export default {
     },
     async loadGateList () {
       try {
-        var res = await getGateList({ page: 1, per_page: 200 })
-        var data = res.data
+        const res = await getGateList({ page: 1, per_page: 200 })
+        const data = res.data
         if (data && data.items) {
           this.list = data.items
         }
@@ -214,9 +250,9 @@ export default {
     },
     async refreshCameras () {
       try {
-        var stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
         stream.getTracks().forEach(function (t) { t.stop() })
-        var devices = await navigator.mediaDevices.enumerateDevices()
+        const devices = await navigator.mediaDevices.enumerateDevices()
         this.cameraList = devices.filter(function (d) { return d.kind === 'videoinput' })
       } catch (e) {
         this.cameraList = []
@@ -232,12 +268,12 @@ export default {
     async startPreview (deviceId) {
       this.stopPreview()
       try {
-        var constraints = { video: { width: { ideal: 320 }, height: { ideal: 240 } } }
+        const constraints = { video: { width: { ideal: 320 }, height: { ideal: 240 } } }
         if (deviceId) {
           constraints.video.deviceId = { exact: deviceId }
         }
         this.previewStream = await navigator.mediaDevices.getUserMedia(constraints)
-        var self = this
+        const self = this
         this.$nextTick(function () {
           if (self.$refs.previewVideo) {
             self.$refs.previewVideo.srcObject = self.previewStream
@@ -252,6 +288,113 @@ export default {
         this.previewStream.getTracks().forEach(function (t) { t.stop() })
         this.previewStream = null
       }
+      this.stopDistDetect()
+    },
+    startDistDetect () {
+      this.stopDistDetect()
+      if (!this.isBound) return
+      var self = this
+      this.distDetectTimer = setInterval(function () {
+        self.detectDistance()
+      }, 2000)
+    },
+    stopDistDetect () {
+      if (this.distDetectTimer) {
+        clearInterval(this.distDetectTimer)
+        this.distDetectTimer = null
+      }
+      this.liveDistance = null
+    },
+    async detectDistance () {
+      if (!this.$refs.previewVideo || !this.previewStream || !this.gateId) return
+      try {
+        var canvas = document.createElement('canvas')
+        var video = this.$refs.previewVideo
+        var w = Math.min(video.videoWidth || 320, 320)
+        var h = Math.min(video.videoHeight || 240, 240)
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d').drawImage(video, 0, 0, w, h)
+        var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.5) })
+        if (!blob) return
+        var formData = new FormData()
+        formData.append('frame', blob, 'frame.jpg')
+        var url = '/api/v1/video-monitor/detect-distance/' + this.gateId
+        var headers = {}
+        var token = localStorage.getItem('gate_token')
+        if (token) { headers['Authorization'] = 'Bearer ' + token }
+        var res = await fetch(url, { method: 'POST', headers: headers, body: formData })
+        var data = await res.json()
+        if (data.code === 0 && data.data && data.data.persons && data.data.persons.length > 0) {
+          var d = data.data.persons[0].distance
+          if (d !== null && d !== undefined) {
+            this.liveDistance = d
+            this.distFailCount = 0
+          } else {
+            this.distFailCount++
+            if (this.distFailCount >= 3) { this.liveDistance = null }
+          }
+        } else {
+          this.distFailCount++
+          if (this.distFailCount >= 3) { this.liveDistance = null }
+        }
+      } catch (e) {
+        this.distFailCount++
+        if (this.distFailCount >= 3) { this.liveDistance = null }
+      }
+    },
+    async doCalibrate () {
+      if (!this.calibDistance || this.calibDistance <= 0) {
+        this.$toast.fail('请输入有效距离')
+        return
+      }
+      var formData = new FormData()
+      formData.append('distance', String(parseFloat(this.calibDistance)))
+      formData.append('point', this.calibPoint)
+      if (this.$refs.previewVideo && this.previewStream) {
+        try {
+          var canvas = document.createElement('canvas')
+          var video = this.$refs.previewVideo
+          var w = Math.min(video.videoWidth || 320, 320)
+          var h = Math.min(video.videoHeight || 240, 240)
+          canvas.width = w
+          canvas.height = h
+          canvas.getContext('2d').drawImage(video, 0, 0, w, h)
+          var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.7) })
+          if (blob) { formData.append('frame', blob, 'frame.jpg') }
+        } catch (e) { /* ignore */ }
+      }
+      this.calibLoading = true
+      this.calibResult = ''
+      try {
+        var url = '/api/v1/video-monitor/calibrate-distance/' + this.gateId
+        var headers = {}
+        var token = localStorage.getItem('gate_token')
+        if (token) { headers['Authorization'] = 'Bearer ' + token }
+        var res = await fetch(url, {
+          method: 'POST',
+          headers: headers,
+          body: formData
+        })
+        var data = await res.json()
+        if (data.code === 0) {
+          this.calibSuccess = true
+          var label = this.calibPoint === 'near' ? '近点' : '远点'
+          this.calibResult = label + '校准成功！' + data.data[this.calibPoint === 'near' ? 'calib_near_dist' : 'calib_far_dist'] + '米'
+          this.calibNearDist = data.data.calib_near_dist
+          this.calibNearRatio = data.data.calib_near_ratio
+          this.calibFarDist = data.data.calib_far_dist
+          this.calibFarRatio = data.data.calib_far_ratio
+        } else {
+          this.calibSuccess = false
+          this.calibResult = data.error || '校准失败'
+        }
+      } catch (e) {
+        this.calibSuccess = false
+        this.calibResult = '请求失败: ' + e.message
+      } finally {
+        this.calibLoading = false
+      }
     }
   },
   watch: {
@@ -261,6 +404,20 @@ export default {
         if (val) {
           this.startPreview(val)
         }
+      }
+    },
+    isBound (val) {
+      if (val && this.previewStream) {
+        this.startDistDetect()
+      } else {
+        this.stopDistDetect()
+      }
+    },
+    previewStream (val) {
+      if (val && this.isBound) {
+        this.startDistDetect()
+      } else {
+        this.stopDistDetect()
       }
     }
   }
@@ -465,5 +622,95 @@ export default {
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
   font-size: 11px;
+}
+.camera-dist-live {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.85);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+.calib-hint {
+  font-size: 12px;
+  color: var(--gate-text-muted);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.calib-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+.calib-form-label {
+  font-size: 13px;
+  color: var(--gate-text-secondary);
+  white-space: nowrap;
+}
+.calib-point-select {
+  display: flex;
+  gap: 6px;
+}
+.calib-point-btn {
+  padding: 4px 14px;
+  border: 1px solid var(--gate-border);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--gate-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.calib-point-btn.is-active {
+  border-color: var(--gate-accent, #818cf8);
+  color: var(--gate-accent, #818cf8);
+  background: rgba(129, 140, 248, 0.1);
+}
+.calib-input {
+  flex: 1;
+  max-width: 120px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--gate-border);
+  border-radius: 6px;
+  color: var(--gate-text);
+  font-size: 13px;
+  outline: none;
+}
+.calib-input:focus {
+  border-color: var(--gate-accent, #818cf8);
+}
+.calib-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  margin-top: 4px;
+}
+.calib-status-item {
+  font-size: 11px;
+}
+.calib-near {
+  color: #10b981;
+}
+.calib-far {
+  color: #f59e0b;
+}
+.calib-result {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.calib-success {
+  color: #10b981;
+}
+.calib-error {
+  color: #ef4444;
 }
 </style>
