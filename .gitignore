@@ -23,6 +23,9 @@ backend/.env
 # 上传文件
 uploads/
 
+# 测试文件
+test_assets/
+
 # dlib模型文件
 backend/dat/*.dat
 

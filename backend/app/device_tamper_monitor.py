@@ -8,7 +8,7 @@ from app.models.gate import Gate
 from core.fire_smoke_detector import FireSmokeDetector
 from core.device_tamper import NORMAL, DeviceTamperDetector
 
-from .video_monitor.device_tamper_stream import (
+from .video_monitor.dangerous_behavior_sse import (
     _clear_alarm_states,
     _open_capture,
     _placeholder,

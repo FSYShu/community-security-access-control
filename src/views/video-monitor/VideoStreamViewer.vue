@@ -168,8 +168,7 @@ export default {
     },
     videoFeedUrl () {
       if (!this.selectedGate) return ''
-      const suffix = this.dangerousBehaviorEnabled ? '/dangerous-behavior' : ''
-      return '/api/v1/video-monitor/video_feed/gate/' + this.selectedGate + suffix + '?t=' + this.urlVersion
+      return '/api/v1/video-monitor/video_feed/gate/' + this.selectedGate + '?t=' + this.urlVersion
     },
     statusText () {
       if (this.autoRetrying) return '视频流连接失败'

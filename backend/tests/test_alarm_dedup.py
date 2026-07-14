@@ -9,12 +9,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app import db
 from app.models import AlarmEvent
-from app.video_monitor.device_tamper_stream import (
+from app.video_monitor.dangerous_behavior_sse import (
     _active_alarm_states,
     _record_alarm,
-)
-from app.video_monitor.tailgating_stream import (
-    _last_alarm_at,
+    _tailgating_last_alarm_at,
     _record_tailgating_alarm,
 )
 
@@ -38,10 +36,10 @@ def alarm_app():
 @pytest.fixture(autouse=True)
 def reset_alarm_state():
     _active_alarm_states.clear()
-    _last_alarm_at.clear()
+    _tailgating_last_alarm_at.clear()
     yield
     _active_alarm_states.clear()
-    _last_alarm_at.clear()
+    _tailgating_last_alarm_at.clear()
 
 
 def _frame():

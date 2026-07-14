@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core.device_tamper import BLOCKED, IMPACT, MOVED, NORMAL, DeviceTamperDetector
 from app.device_tamper_monitor import DeviceTamperMonitor, start_device_tamper_monitor
-from app.video_monitor.device_tamper_stream import (
+from app.video_monitor.dangerous_behavior_sse import (
     _active_alarm_states,
     _clear_alarm_states,
 )

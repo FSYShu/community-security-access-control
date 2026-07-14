@@ -8,7 +8,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core.fire_smoke_detector import FireSmokeDetector
 from core.tailgating_detector import TailgatingDetector
-from app.video_monitor.dangerous_behavior_stream import _draw_people_and_line
 
 
 def test_close_people_crossing_line_triggers_tailgating():
@@ -50,27 +49,6 @@ def test_far_apart_people_do_not_trigger_tailgating():
 
     assert result.event is False
 
-
-def test_single_track_does_not_draw_tailgating_helpers():
-    frame = np.zeros((200, 300, 3), dtype=np.uint8)
-    tracks = {1: {'box': (80, 30, 120, 150), 'missing': 0}}
-
-    _draw_people_and_line(frame, tracks, line_ratio=0.5, scale=1.0, crossing_count=0)
-
-    assert not np.any(frame)
-
-
-def test_two_tracks_draw_subtle_tailgating_helpers():
-    frame = np.zeros((200, 300, 3), dtype=np.uint8)
-    tracks = {
-        1: {'box': (80, 30, 120, 150), 'missing': 0},
-        2: {'box': (125, 35, 165, 155), 'missing': 0},
-    }
-
-    _draw_people_and_line(frame, tracks, line_ratio=0.5, scale=1.0, crossing_count=0)
-
-    assert np.any(frame)
-    assert np.count_nonzero(frame[100]) < frame.shape[1] * frame.shape[2] // 2
 
 
 def test_tailgating_survives_a_short_person_detection_gap():
