@@ -2,6 +2,11 @@
   <app-layout page-title="人脸信息管理" :no-scroll="true">
     <div class="dark-card">
       <div class="filter-row">
+        <div class="search-box">
+          <i class="el-icon-search"></i>
+          <input v-model="searchText" placeholder="搜索人员姓名" class="search-input" @input="debouncedSearch" />
+          <i v-if="searchText" class="el-icon-circle-close search-clear" @click="searchText = ''; onSearch()"></i>
+        </div>
         <div class="filter-spacer"></div>
         <button class="action-btn test-btn" @click="showTestDialog = true">
           <i class="el-icon-camera"></i>
@@ -13,8 +18,9 @@
         </button>
       </div>
     </div>
-    <div class="dark-card list-section">
-      <div class="list-content">
+    <div class="dark-card list-section" ref="listSection">
+      <div v-if="!perPageReady" class="probe-loading"><i class="el-icon-loading"></i><span>加载中...</span></div>
+      <div class="list-content" ref="listContent" :style="{ visibility: perPageReady ? '' : 'hidden' }">
         <van-cell v-for="item in list" :key="item.id">
           <template #title>
             <div class="cell-title-row">
@@ -38,7 +44,7 @@
           <p style="color:var(--dark-text-muted);margin-top:12px">暂无人脸信息</p>
         </div>
       </div>
-      <div class="pagination-wrapper">
+      <div class="pagination-wrapper" v-show="perPageReady">
         <el-pagination
           background
           layout="prev, pager, next"
@@ -171,8 +177,9 @@ export default {
       list: [],
       loading: false,
       page: 1,
-      perPage: 20,
+      perPage: 10,
       total: 0,
+      searchText: '',
       typeMap: { owner: '业主', blacklist: '黑名单' },
       showAddDialog: false,
       showTestDialog: false,
@@ -189,7 +196,8 @@ export default {
       typeOptions: [
         { text: '业主', value: 'owner' },
         { text: '黑名单', value: 'blacklist' }
-      ]
+      ],
+      perPageReady: false
     }
   },
   computed: {
@@ -198,12 +206,26 @@ export default {
       return opt ? opt.text : ''
     }
   },
+
+  watch: {
+
+  },
   mounted () {
     document.addEventListener('click', this.closeDropdowns)
-    this.loadData()
+    window.addEventListener('resize', this.handleResize)
+    if (window.ResizeObserver && this.$refs.listContent) {
+      this._resizeObserver = new ResizeObserver(this.handleResize)
+      this._resizeObserver.observe(this.$refs.listContent)
+    }
+    this.initData()
   },
   beforeDestroy () {
     document.removeEventListener('click', this.closeDropdowns)
+    window.removeEventListener('resize', this.handleResize)
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect()
+      this._resizeObserver = null
+    }
     this.stopAddCamera()
     this.stopTestCamera()
   },
@@ -213,10 +235,48 @@ export default {
         this.showTypeDropdown = false
       }
     },
+    handleResize () {
+      clearTimeout(this._resizeTimer)
+      this._resizeTimer = setTimeout(() => {
+        requestAnimationFrame(() => {
+          this.calcPerPage()
+          this.loadData()
+        })
+      }, 200)
+    },
+    initData () {
+      this.perPageReady = false
+
+      this.perPage = 2
+      this.loadData()
+    },
+    calcPerPage () {
+      const content = this.$refs.listContent
+      if (!content || content.clientHeight <= 0) return false
+      const cells = content.querySelectorAll('.van-cell')
+      if (!cells.length) return false
+      let totalH = 0
+      for (let i = 0; i < cells.length; i++) totalH += cells[i].offsetHeight
+      const avgCellH = totalH / cells.length
+      const newPerPage = Math.max(5, Math.round(content.clientHeight / avgCellH))
+      if (newPerPage > this.perPage) {
+        this.perPage = newPerPage
+        return true
+      }
+      return false
+    },
+    debouncedSearch () {
+      clearTimeout(this._searchTimer)
+      this._searchTimer = setTimeout(() => {
+        this.page = 1
+        this.loadData()
+      }, 300)
+    },
+
     async loadData () {
       try {
         this.loading = true
-        const res = await getFaceList({ page: this.page, per_page: this.perPage })
+        const res = await getFaceList({ page: this.page, per_page: this.perPage, keyword: this.searchText })
         const data = res.data
         if (data && data.items) {
           this.list = data.items
@@ -224,7 +284,19 @@ export default {
         }
       } catch (err) {
         console.error(err)
-      } finally {
+      }
+      if (!this.perPageReady) {
+        this.$nextTick(() => {
+          setTimeout(() => {
+            if (this.calcPerPage()) {
+              this.loadData()
+            } else {
+              this.perPageReady = true
+              this.loading = false
+            }
+          }, 150)
+        })
+      } else {
         this.loading = false
       }
     },
@@ -233,6 +305,10 @@ export default {
       this.loadData()
     },
     onRefresh () {
+      this.page = 1
+      this.loadData()
+    },
+    onSearch () {
       this.page = 1
       this.loadData()
     },
@@ -397,13 +473,7 @@ export default {
         this.testLoading = false
       }
     }
-  },
-  watch: {
-    showTestDialog (val) {
-      if (val) {
-        this.$nextTick(() => this.startTestCamera())
-      }
-    }
+
   }
 }
 </script>
@@ -418,10 +488,25 @@ export default {
 }
 
 .list-section {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.probe-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--dark-text-secondary);
+  font-size: 14px;
 }
 
 .list-content {
@@ -429,6 +514,26 @@ export default {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.probe-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: var(--dark-text-secondary);
+  font-size: 14px;
+}
+
+.probe-loading i {
+  font-size: 18px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .pagination-wrapper {
@@ -450,10 +555,57 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .filter-spacer {
   flex: 1;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--dark-border-field);
+  border-radius: 8px;
+  height: 36px;
+  min-width: 180px;
+  transition: border-color 0.2s;
+}
+
+.search-box:focus-within {
+  border-color: var(--dark-accent-light);
+}
+
+.search-box i {
+  font-size: 14px;
+  color: var(--dark-text-secondary);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--dark-text);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.search-input::placeholder {
+  color: var(--dark-text-secondary);
+}
+
+.search-clear {
+  cursor: pointer;
+  font-size: 14px !important;
+}
+
+.search-clear:hover {
+  color: var(--dark-text) !important;
 }
 
 .action-btn {

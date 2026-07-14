@@ -20,7 +20,7 @@
           v-for="item in navItems"
           :key="item.path"
           class="nav-item"
-          :class="{ 'nav-item-active': isActive(item.path) }"
+          :class="{ 'nav-item-active': isNavActive(item.path) }"
           @click="$router.push(item.path); sidebarOpen = false"
         >
           <div class="nav-icon-wrap">
@@ -149,7 +149,11 @@ export default {
       this.currentDate = `${year}年${month}月${day}日 周${weekDay}`
     },
     isActive (path) {
-      return this.$route.path === path
+      return this.$route.path.startsWith(path)
+    },
+    isNavActive (path) {
+      if (path === '/video-monitor' && this.$route.path === '/video-monitor/playback') return false
+      return this.$route.path.startsWith(path)
     },
     checkWidth () {
       if (window.innerWidth <= 768) {

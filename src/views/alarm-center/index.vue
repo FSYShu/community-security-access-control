@@ -3,19 +3,19 @@
     <div class="alarm-center">
       <div class="alarm-stats">
         <div class="stat-item">
-          <span class="stat-value">{{ stats.total }}</span>
+          <span class="stat-value">{{ stats.total === null ? '--' : stats.total }}</span>
           <span class="stat-label">总告警</span>
         </div>
         <div class="stat-item stat-pending">
-          <span class="stat-value">{{ stats.pending }}</span>
+          <span class="stat-value">{{ stats.pending === null ? '--' : stats.pending }}</span>
           <span class="stat-label">待处理</span>
         </div>
         <div class="stat-item stat-handled">
-          <span class="stat-value">{{ stats.handled }}</span>
+          <span class="stat-value">{{ stats.handled === null ? '--' : stats.handled }}</span>
           <span class="stat-label">已处理</span>
         </div>
         <div class="stat-item stat-today">
-          <span class="stat-value">{{ stats.today }}</span>
+          <span class="stat-value">{{ stats.today === null ? '--' : stats.today }}</span>
           <span class="stat-label">今日告警</span>
         </div>
       </div>
@@ -227,8 +227,9 @@
         </div>
       </div>
 
-      <div class="alarm-list-section">
-        <div class="alarm-list">
+      <div class="alarm-list-section" ref="listSection">
+        <div v-if="!perPageReady" class="probe-loading"><i class="el-icon-loading"></i><span>加载中...</span></div>
+        <div class="alarm-list" ref="listContent" :style="{ visibility: perPageReady ? '' : 'hidden' }">
           <van-cell v-for="alarm in alarmList" :key="alarm.id" is-link @click="showAlarmDetail(alarm)">
             <template #title>
               <div class="cell-title-row">
@@ -264,7 +265,7 @@
             <p style="color:var(--dark-text-muted);margin-top:12px">暂无告警记录</p>
           </div>
         </div>
-        <div class="pagination-wrapper">
+        <div class="pagination-wrapper" v-show="perPageReady">
           <el-pagination
             background
             layout="prev, pager, next"
@@ -362,7 +363,7 @@ export default {
       alarmList: [],
       loading: false,
       page: 1,
-      perPage: 20,
+      perPage: 10,
       total: 0,
       refreshing: false,
       openSelect: null,
@@ -372,10 +373,10 @@ export default {
       endPickerDate: new Date(),
       weekdays: ['日', '一', '二', '三', '四', '五', '六'],
       stats: {
-        today: 0,
-        total: 0,
-        pending: 0,
-        handled: 0
+        today: null,
+        total: null,
+        pending: null,
+        handled: null
       },
       filter: {
         alarmType: 0,
@@ -409,16 +410,26 @@ export default {
       handleForm: {
         handle_status: '已处置',
         handle_remark: ''
-      }
+      },
+      perPageReady: false
     }
   },
   mounted () {
-    this.loadData()
-    this.loadStats()
     document.addEventListener('click', this.handleClickOutside)
+    window.addEventListener('resize', this.handleResize)
+    if (window.ResizeObserver && this.$refs.listContent) {
+      this._resizeObserver = new ResizeObserver(this.handleResize)
+      this._resizeObserver.observe(this.$refs.listContent)
+    }
+    this.initData()
   },
   beforeDestroy () {
     document.removeEventListener('click', this.handleClickOutside)
+    window.removeEventListener('resize', this.handleResize)
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect()
+      this._resizeObserver = null
+    }
   },
   methods: {
     handleClickOutside (event) {
@@ -426,6 +437,38 @@ export default {
         this.openSelect = null
         this.openDatePicker = null
       }
+    },
+    initData () {
+      this.perPageReady = false
+
+      this.perPage = 2
+      this.loadData()
+      this.loadStats()
+    },
+    calcPerPage () {
+      const content = this.$refs.listContent
+      if (!content || content.clientHeight <= 0) return false
+      const cells = content.querySelectorAll('.van-cell')
+      if (!cells.length) return false
+      let totalH = 0
+      for (let i = 0; i < cells.length; i++) totalH += cells[i].offsetHeight
+      const avgCellH = totalH / cells.length
+      const newPerPage = Math.max(5, Math.round(content.clientHeight / avgCellH))
+      if (newPerPage > this.perPage) {
+        this.perPage = newPerPage
+        return true
+      }
+      return false
+    },
+    handleResize () {
+      clearTimeout(this._resizeTimer)
+      this._resizeTimer = setTimeout(() => {
+        requestAnimationFrame(() => {
+          this.calcPerPage()
+          this.loadData()
+          this.loadStats()
+        })
+      }, 200)
     },
     toggleDatePicker (type) {
       this.openDatePicker = this.openDatePicker === type ? null : type
@@ -604,7 +647,21 @@ export default {
       } catch (e) {
         console.error(e)
       }
-      this.loading = false
+      if (!this.perPageReady) {
+        this.$nextTick(() => {
+          setTimeout(() => {
+            if (this.calcPerPage()) {
+              this.loadData()
+              this.loadStats()
+            } else {
+              this.perPageReady = true
+              this.loading = false
+            }
+          }, 150)
+        })
+      } else {
+        this.loading = false
+      }
     },
     onPageChange (newPage) {
       this.page = newPage
@@ -742,6 +799,7 @@ export default {
         })
         if (res.code === 0) {
           this.$message.success('处置成功')
+          this.showHandle = false
           this.showDetail = false
           this.onRefresh()
         }
@@ -1281,6 +1339,7 @@ export default {
   font-size: 28px;
   font-weight: 700;
   color: var(--dark-text);
+  transition: opacity 0.2s;
 }
 
 .stat-label {
@@ -1302,6 +1361,7 @@ export default {
 }
 
 .alarm-list-section {
+  position: relative;
   background: var(--dark-card);
   border-radius: 16px;
   border: 1px solid var(--dark-border);
@@ -1311,11 +1371,45 @@ export default {
   flex-direction: column;
   overflow: hidden;
 }
+
+.probe-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--dark-text-secondary);
+  font-size: 14px;
+}
 .alarm-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.probe-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: var(--dark-text-secondary);
+  font-size: 14px;
+}
+
+.probe-loading i {
+  font-size: 18px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 .pagination-wrapper {
   padding-top: 16px;
