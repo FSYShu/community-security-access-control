@@ -42,10 +42,6 @@ def guard_or_admin_required(fn):
     return role_required('admin', 'guard')(fn)
 
 
-def owner_required(fn):
-    """业主权限校验"""
-    return role_required('owner')(fn)
-
 
 def owner_self_required(fn):
     """业主自身资源权限校验：owner角色且只能操作自己的资源"""

@@ -27,6 +27,14 @@ def get_frame(stream_url):
     return None
 
 
+def get_frame_with_info(stream_url):
+    with _LOCK:
+        entry = _STORE.get(stream_url)
+    if entry:
+        return entry['jpeg'], entry['timestamp']
+    return None, None
+
+
 def remove_frame(stream_url):
     with _LOCK:
         _STORE.pop(stream_url, None)

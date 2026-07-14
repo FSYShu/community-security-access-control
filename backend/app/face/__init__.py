@@ -229,12 +229,6 @@ def submit_face_pass():
     return success_response(data={'result': 'passed', 'person_name': face_info.person_name, 'person_type': face_info.person_type, 'gate_id': gate_id}, message='通行成功')
 
 
-@face_bp.route('/records', methods=['GET'])
-@jwt_required()
-def get_pass_records():
-    """获取通行记录列表"""
-    return success_response(data={'items': [], 'total': 0, 'page': 1, 'per_page': 20})
-
 
 @face_bp.route('/face-register', methods=['POST'])
 @jwt_required()

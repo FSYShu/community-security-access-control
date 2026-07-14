@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 DETECT_INTERVAL = 1.0
 DETECT_WIDTH = 320
-BUFFER_DELAY_SECONDS = 5.0
+
 DESCRIPTOR_CACHE_TTL = 3.0
 DESCRIPTOR_CACHE_MAX_SIZE = 50
 
@@ -24,38 +24,6 @@ def _extract_push_key_from_url(stream_url):
     parts = stream_url.rstrip('/').split('/')
     return parts[-1] if parts else ''
 
-
-def _overlay_latency_on_frame(frame, latency_ms):
-    if latency_ms < 0:
-        return frame
-    if latency_ms > 2000:
-        color = (0, 0, 255)
-    elif latency_ms > 800:
-        color = (0, 165, 255)
-    else:
-        color = (0, 200, 0)
-    text = 'LATENCY: {}ms'.format(latency_ms)
-    h, w = frame.shape[:2]
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = max(0.4, min(w, h) / 800)
-    thickness = max(1, int(scale * 2))
-    (tw, th), _ = cv2.getTextSize(text, font, scale, thickness)
-    cv2.rectangle(frame, (8, h - th - 18), (8 + tw + 12, h - 6), (0, 0, 0), -1)
-    cv2.putText(frame, text, (14, h - 14), font, scale, color, thickness, cv2.LINE_AA)
-    return frame
-
-
-def generate_frames_with_detection(stream_id):
-    config = current_app.config
-    rtmp_host = config.get('RTMP_SERVER_HOST', '127.0.0.1')
-    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
-    stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, stream_id)
-    max_width = config.get('VIDEO_MAX_WIDTH', 640)
-    return generate_frames_with_detection_ffmpeg(stream_url, fps=20, max_width=max_width)
-
-
-def generate_frames_with_detection_url(stream_url, frame_skip=5, max_width=640, detect_width=320, cap=None, first_frame=None):
-    return generate_frames_with_detection_ffmpeg(stream_url, fps=20, max_width=max_width, detect_width=detect_width)
 
 
 def generate_frames_with_detection_ffmpeg(stream_url, fps=20, max_width=640, detect_width=320):
