@@ -183,9 +183,12 @@ export default {
     },
     toggleDangerousBehavior () {
       this.dangerousBehaviorEnabled = !this.dangerousBehaviorEnabled
-      if (this.dangerousBehaviorEnabled) this.faceDetectionEnabled = false
+      if (this.dangerousBehaviorEnabled) {
+        this.faceDetectionEnabled = false
+        this.dangerDistanceEnabled = false
+      }
       this.$message({
-        message: this.dangerousBehaviorEnabled ? '异常行为检测已开启' : '异常行为检测已关闭',
+        message: this.dangerousBehaviorEnabled ? '异常行为检测已开启：检测尾随、设备篡改、烟火等异常' : '异常行为检测已关闭',
         type: this.dangerousBehaviorEnabled ? 'success' : 'warning'
       })
     },
