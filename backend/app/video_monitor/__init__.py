@@ -9,7 +9,7 @@ import base64
 import threading
 from collections import deque
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import cv2
 import numpy as np
@@ -22,6 +22,8 @@ from app import db
 from app.models.gate import Gate
 from utils import error_response
 from utils.response import success_response
+
+_CST = timezone(timedelta(hours=8))
 from core.audit_logger import log_audit
 from core.rtmp_relay import start_rtmp_pull, read_jpeg_frame_from_pull, stop_rtmp_pull, get_push_latency_ms
 from core.shared_frame_store import update_frame as _update_shared_frame
@@ -127,7 +129,7 @@ def gate_push_frame():
     push_jpeg_frame(push_key, jpeg_bytes, rtmp_url)
     gate = Gate.query.filter_by(push_key=push_key).first()
     if gate:
-        gate.last_heartbeat = datetime.utcnow().isoformat()
+        gate.last_heartbeat = datetime.now(_CST).isoformat()
         gate.status = 'online'
         db.session.commit()
     return jsonify({'code': 0, 'message': 'ok'})

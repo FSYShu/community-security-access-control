@@ -5,6 +5,7 @@ import json
 import os
 import base64
 import logging
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -17,6 +18,8 @@ from utils.response import success_response, error_response
 from utils.permissions import admin_required
 from core.db_lock import with_write_lock
 from core.audit_logger import log_audit
+
+_CST = timezone(timedelta(hours=8))
 
 visitor_auth_bp = Blueprint('visitor_auth', __name__)
 logger = logging.getLogger(__name__)
@@ -70,9 +73,13 @@ def _register_visitor_face(auth, gate):
         encoding = face_descriptor.tolist()
 
         allowed_gate_ids = []
+        community_gates = Gate.query.filter_by(gate_level='community_gate').all()
+        for cg in community_gates:
+            allowed_gate_ids.append(cg.id)
         current = gate
         while current:
-            allowed_gate_ids.append(current.id)
+            if current.gate_level != 'entrance_door' and current.id not in allowed_gate_ids:
+                allowed_gate_ids.append(current.id)
             if current.parent_gate_id:
                 current = Gate.query.get(current.parent_gate_id)
             else:
@@ -90,6 +97,8 @@ def _register_visitor_face(auth, gate):
             face_image_path=auth.visitor_face_image_path,
             face_feature=json.dumps(encoding),
             allowed_gates=json.dumps(allowed_gate_ids, ensure_ascii=False),
+
+            owner_id=auth.owner_id,
             status='active'
         )
         db.session.add(face_record)
@@ -104,13 +113,13 @@ def _register_visitor_face(auth, gate):
             with open(faces_file, 'r', encoding='utf-8') as f:
                 registered = json.load(f)
 
-        from datetime import datetime
+
         new_record = {
             'id': face_record.id,
             'person_name': auth.visitor_name,
             'person_type': 'visitor',
             'face_descriptor': encoding,
-            'registered_at': datetime.utcnow().isoformat()
+            'registered_at': datetime.now(_CST).isoformat()
         }
         registered.append(new_record)
 
@@ -203,8 +212,8 @@ def approve_visitor_auth(auth_id):
     current_user = get_jwt_identity()
     auth.approval_status = approval_status
     auth.approver_id = int(get_jwt_identity())
-    from datetime import datetime
-    auth.approval_time = datetime.utcnow().isoformat()
+
+    auth.approval_time = datetime.now(_CST).isoformat()
 
     db.session.commit()
 
@@ -245,10 +254,12 @@ def gate_apply_visitor_auth():
                 current = Gate.query.get(current.parent_gate_id)
             else:
                 current = None
+        community_gates = Gate.query.filter_by(gate_level='community_gate').all()
+        for cg in community_gates:
+            if cg.gate_name not in gate_names:
+                gate_names.insert(0, cg.gate_name)
 
-    from datetime import datetime, timedelta, timezone
-    cst = timezone(timedelta(hours=8))
-    now_cst = datetime.now(cst)
+    now_cst = datetime.now(_CST)
 
     auth = VisitorAuth(
         visitor_name=visitor_name,
@@ -348,8 +359,8 @@ def gate_approve_visitor_auth(auth_id):
         return error_response(message='审批状态无效', code=400)
 
     auth.approval_status = approval_status
-    from datetime import datetime
-    auth.approval_time = datetime.utcnow().isoformat()
+
+    auth.approval_time = datetime.now(_CST).isoformat()
 
     db.session.commit()
 

@@ -1,8 +1,10 @@
 """
 数据库模型 - 门禁终端
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from app import db
+
+_CST = timezone(timedelta(hours=8))
 
 
 class Gate(db.Model):
@@ -29,9 +31,9 @@ class Gate(db.Model):
     calib_near_ratio = db.Column(db.Float, nullable=True, default=None)
     calib_far_dist = db.Column(db.Float, nullable=True, default=None)
     calib_far_ratio = db.Column(db.Float, nullable=True, default=None)
-    created_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
-    updated_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat(),
-                           onupdate=lambda: datetime.utcnow().isoformat())
+    created_at = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat())
+    updated_at = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat(),
+                           onupdate=lambda: datetime.now(_CST).isoformat())
 
     def to_dict(self):
         return {

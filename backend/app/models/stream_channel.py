@@ -1,8 +1,10 @@
 """
 数据库模型 - 视频推流通道
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from app import db
+
+_CST = timezone(timedelta(hours=8))
 
 
 class StreamChannel(db.Model):
@@ -19,7 +21,7 @@ class StreamChannel(db.Model):
     play_protocols = db.Column(db.Text, default='["rtmp","hls","flv"]')
     push_status = db.Column(db.Text, default='offline')
     record_storage_path = db.Column(db.Text, default='')
-    created_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
+    created_at = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat())
 
     def to_dict(self):
         return {

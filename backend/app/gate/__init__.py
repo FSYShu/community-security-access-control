@@ -4,7 +4,7 @@
 """
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -20,11 +20,12 @@ from core.audit_logger import log_audit
 gate_bp = Blueprint('gate', __name__)
 
 HEARTBEAT_TIMEOUT_SECONDS = 30
+_CST = timezone(timedelta(hours=8))
 
 
 def _update_offline_status():
     """将心跳超时的已绑定终端标记为离线"""
-    now = datetime.utcnow()
+    now = datetime.now(_CST)
     timeout = (now - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS)).isoformat()
     gates = Gate.query.filter(
         Gate.bound == 1,

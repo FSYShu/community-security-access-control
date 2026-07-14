@@ -2,7 +2,7 @@
 审计日志写入工具
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import request
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 
@@ -11,6 +11,8 @@ from app.models.audit_log import AuditLog
 from core.db_lock import with_write_lock
 
 logger = logging.getLogger(__name__)
+
+_CST = timezone(timedelta(hours=8))
 
 
 def log_audit(operation_type, operation_content='', operator_id=None, ip_address=None):
@@ -31,7 +33,7 @@ def log_audit(operation_type, operation_content='', operator_id=None, ip_address
             operator_id=operator_id,
             operation_type=operation_type,
             operation_content=operation_content,
-            operation_time=datetime.utcnow().isoformat(),
+            operation_time=datetime.now(_CST).isoformat(),
             ip_address=ip_address or ''
         )
         db.session.add(log)

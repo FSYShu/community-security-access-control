@@ -1,9 +1,11 @@
 """
 数据库模型 - 用户
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
+
+_CST = timezone(timedelta(hours=8))
 
 
 class User(db.Model):
@@ -13,13 +15,13 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.Text, unique=True, nullable=False, index=True)
     password_hash = db.Column(db.Text, nullable=False)
-    real_name = db.Column(db.Text, nullable=False)
+
     role = db.Column(db.Text, nullable=False, default='owner')
-    phone = db.Column(db.Text, unique=True, nullable=True)
+
     status = db.Column(db.Text, default='active')
-    created_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
-    updated_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat(),
-                           onupdate=lambda: datetime.utcnow().isoformat())
+    created_at = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat())
+    updated_at = db.Column(db.Text, default=lambda: datetime.now(_CST).isoformat(),
+                           onupdate=lambda: datetime.now(_CST).isoformat())
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -31,9 +33,7 @@ class User(db.Model):
         return {
             'id': self.id,
             'username': self.username,
-            'real_name': self.real_name,
             'role': self.role,
-            'phone': self.phone,
             'status': self.status,
             'created_at': self.created_at
         }
