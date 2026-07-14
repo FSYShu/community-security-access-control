@@ -157,6 +157,8 @@ def init_database(app):
             db.create_all()
             _migrate_schema(db)
             _migrate_danger_zone_columns()
+            _migrate_daily_report_columns()
+            _migrate_gate_columns()
     else:
         db.create_all()
         _migrate_schema(db)
@@ -209,6 +211,12 @@ def _migrate_schema(database):
             logger.info('Migrated: added calib_far_ratio column to gates')
         except Exception:
             pass
+        try:
+            conn.execute(db.text("ALTER TABLE visitor_auths ADD COLUMN visit_address TEXT DEFAULT ''"))
+            conn.commit()
+            logger.info('Migrated: added visit_address column to visitor_auths')
+        except Exception:
+            pass
 
 
 def _migrate_danger_zone_columns():
@@ -230,6 +238,50 @@ def _migrate_danger_zone_columns():
         logger.warning('Migration check failed (non-critical): {}'.format(str(e)))
 
 
+def _migrate_daily_report_columns():
+    """Add AI report fields to existing daily_reports tables."""
+    from sqlalchemy import inspect, text
+
+    columns = {
+        'ai_summary': "TEXT DEFAULT ''",
+        'risk_level': "TEXT DEFAULT 'low'",
+        'risk_score': 'INTEGER DEFAULT 0',
+        'recommendations': "TEXT DEFAULT '[]'",
+        'workflow_source': "TEXT DEFAULT 'local_rules'",
+    }
+    try:
+        inspector = inspect(db.engine)
+        if 'daily_reports' not in inspector.get_table_names():
+            return
+        existing = {item['name'] for item in inspector.get_columns('daily_reports')}
+        for name, definition in columns.items():
+            if name in existing:
+                continue
+            db.session.execute(text(
+                'ALTER TABLE daily_reports ADD COLUMN {} {}'.format(name, definition)
+            ))
+            db.session.commit()
+            logger.info('Added daily_reports.%s', name)
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning('Daily report migration failed (non-critical): %s', exc)
+
+
+def _migrate_gate_columns():
+    """为已存在的gates表添加新列"""
+    from sqlalchemy import text, inspect
+    try:
+        insp = inspect(db.engine)
+        if 'gates' in insp.get_table_names():
+            existing = {col['name'] for col in insp.get_columns('gates')}
+            if 'parent_gate_id' not in existing:
+                db.session.execute(text('ALTER TABLE gates ADD COLUMN parent_gate_id INTEGER REFERENCES gates(id)'))
+                db.session.commit()
+                logger.info('Added parent_gate_id column to gates')
+    except Exception as e:
+        logger.warning('Gate migration check failed (non-critical): {}'.format(str(e)))
+
+
 def _seed_default_data():
     """插入默认数据"""
     from app.models import User, GateLevel
@@ -244,6 +296,8 @@ def _seed_default_data():
                   default_pass_policy='{"allow_owner": true, "allow_visitor": true, "allow_stranger": false}'),
         GateLevel(level_code='unit_door', level_name='单元门', security_level='一般',
                   default_pass_policy='{"allow_owner": true, "allow_visitor": true, "allow_stranger": false}'),
+        GateLevel(level_code='entrance_door', level_name='入户门', security_level='较高',
+                  default_pass_policy='{"allow_owner": true, "allow_visitor": false, "allow_stranger": false}'),
         GateLevel(level_code='dangerous_area', level_name='危险防护区域', security_level='最高',
                   default_pass_policy='{"allow_owner": false, "allow_visitor": false, "allow_stranger": false}')
     ]

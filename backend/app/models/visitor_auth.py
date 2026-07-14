@@ -20,6 +20,7 @@ class VisitorAuth(db.Model):
     approver_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     approval_time = db.Column(db.Text, default='')
     apply_time = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
+    visit_address = db.Column(db.Text, default='')
 
     def to_dict(self):
         return {
@@ -33,5 +34,6 @@ class VisitorAuth(db.Model):
             'approval_status': self.approval_status,
             'approver_id': self.approver_id,
             'approval_time': self.approval_time,
-            'apply_time': self.apply_time
+            'apply_time': self.apply_time,
+            'visit_address': self.visit_address
         }

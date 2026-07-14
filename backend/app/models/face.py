@@ -18,6 +18,7 @@ class FaceInfo(db.Model):
     auth_start_time = db.Column(db.Text, nullable=True)
     auth_end_time = db.Column(db.Text, nullable=True)
     allowed_gates = db.Column(db.Text, nullable=True)
+    entrance_doors = db.Column(db.Text, nullable=True)
     status = db.Column(db.Text, default='active')
     created_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat())
     updated_at = db.Column(db.Text, default=lambda: datetime.utcnow().isoformat(),
@@ -33,6 +34,7 @@ class FaceInfo(db.Model):
             'auth_start_time': self.auth_start_time,
             'auth_end_time': self.auth_end_time,
             'allowed_gates': self.allowed_gates,
+            'entrance_doors': self.entrance_doors,
             'status': self.status,
             'created_at': self.created_at
         }

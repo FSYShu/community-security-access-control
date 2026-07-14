@@ -3,6 +3,7 @@
 提供门禁终端管理、权限配置等接口
 """
 import json
+import re
 from datetime import datetime, timedelta
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -61,7 +62,7 @@ def get_gate_list():
     elif status:
         query = query.filter_by(bound=1, status=status)
 
-    query = query.order_by(Gate.created_at.desc())
+    query = query.order_by(Gate.created_at.asc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     items = []
@@ -70,6 +71,9 @@ def get_gate_list():
         level = GateLevel.query.get(g.gate_level)
         d['level_name'] = level.level_name if level else g.gate_level
         d['security_level'] = level.security_level if level else ''
+        if g.parent_gate_id:
+            pg = Gate.query.get(g.parent_gate_id)
+            d['parent_gate_name'] = pg.gate_name if pg else ''
         if g.stream_channel_id:
             from app.models.stream_channel import StreamChannel
             ch = StreamChannel.query.get(g.stream_channel_id)
@@ -86,12 +90,36 @@ def get_gate_list():
     })
 
 
+@gate_bp.route('/unit-doors', methods=['GET'])
+@jwt_required()
+@limiter.exempt
+def get_unit_doors():
+    """获取单元门列表（供入户门绑定选择）"""
+    gates = Gate.query.filter_by(gate_level='unit_door').order_by(Gate.created_at.desc()).all()
+    items = [{'id': g.id, 'gate_name': g.gate_name} for g in gates]
+    return success_response(data=items)
+
+
+@gate_bp.route('/public-addresses', methods=['GET'])
+@limiter.exempt
+def get_public_addresses():
+    """获取门禁地址数据（公开接口，无需认证）"""
+    unit_doors = Gate.query.filter_by(gate_level='unit_door').order_by(Gate.created_at.asc()).all()
+    entrance_doors = Gate.query.filter_by(gate_level='entrance_door').order_by(Gate.created_at.asc()).all()
+    items = []
+    for g in unit_doors:
+        items.append({'gate_name': g.gate_name, 'gate_level': g.gate_level})
+    for g in entrance_doors:
+        items.append({'gate_name': g.gate_name, 'gate_level': g.gate_level})
+    return success_response(data={'items': items})
+
+
 @gate_bp.route('/with-stream', methods=['GET'])
 @limiter.exempt
 @jwt_required()
 def get_gates_with_stream():
     """获取绑定了视频流的门禁终端列表"""
-    gates = Gate.query.filter(Gate.push_key != '', Gate.push_key.isnot(None)).order_by(Gate.created_at.desc()).all()
+    gates = Gate.query.filter(Gate.push_key != '', Gate.push_key.isnot(None), Gate.gate_level != 'entrance_door').order_by(Gate.created_at.desc()).all()
     items = []
     for g in gates:
         d = g.to_dict()
@@ -111,6 +139,9 @@ def get_gate_detail(gate_id):
     d = gate.to_dict()
     level = GateLevel.query.get(gate.gate_level)
     d['level_name'] = level.level_name if level else gate.gate_level
+    if gate.parent_gate_id:
+        pg = Gate.query.get(gate.parent_gate_id)
+        d['parent_gate_name'] = pg.gate_name if pg else ''
     return success_response(data=d)
 
 
@@ -126,12 +157,31 @@ def add_gate():
     if not gate_name or not gate_level:
         return error_response(message='终端名称和层级不能为空', code=400)
 
+    GATE_NAME_PATTERNS = {
+        'community_gate': r'^(东|南|西|北|东南|东北|西南|西北)\d+门$',
+        'unit_door': r'^\d+栋\d+单元$',
+        'entrance_door': r'^\d+栋\d+单元\d+室$',
+    }
+    pattern = GATE_NAME_PATTERNS.get(gate_level)
+    if pattern and not re.match(pattern, gate_name):
+        name_tips = {
+            'community_gate': '社区大门名称格式：方位+数字+门，如东1门、西南2门',
+            'unit_door': '单元门名称格式：数字+栋+数字+单元，如3栋2单元',
+            'entrance_door': '入户门名称格式：数字+栋+数字+单元+数字+室，如3栋2单元501室',
+        }
+        return error_response(message=name_tips.get(gate_level, '名称格式不正确'), code=400)
+
     level = GateLevel.query.get(gate_level)
     if not level:
         return error_response(message='终端层级不存在', code=400)
 
-    if gate_level == 'unit_door' and not data.get('building_unit'):
-        return error_response(message='单元门层级必须填写楼栋/单元', code=400)
+    parent_gate_id = data.get('parent_gate_id')
+    if gate_level == 'entrance_door':
+        if not parent_gate_id:
+            return error_response(message='入户门必须绑定对应的单元门', code=400)
+        parent_gate = Gate.query.get(parent_gate_id)
+        if not parent_gate or parent_gate.gate_level != 'unit_door':
+            return error_response(message='绑定的上级终端必须是单元门', code=400)
 
     require_secondary_auth = 1 if gate_level == 'dangerous_area' else 0
 
@@ -146,6 +196,7 @@ def add_gate():
 
         gate_level=gate_level,
         building_unit=data.get('building_unit', ''),
+        parent_gate_id=parent_gate_id if gate_level == 'entrance_door' else None,
         camera_id=data.get('camera_id'),
         stream_channel_id=data.get('stream_channel_id'),
         push_key=data.get('push_key', ''),
@@ -190,9 +241,35 @@ def update_gate(gate_id):
     if 'gate_name' in data:
         gate.gate_name = data['gate_name']
 
+    effective_level = data.get('gate_level', gate.gate_level)
+    effective_name = data.get('gate_name', gate.gate_name)
+    GATE_NAME_PATTERNS = {
+        'community_gate': r'^(东|南|西|北|东南|东北|西南|西北)\d+门$',
+        'unit_door': r'^\d+栋\d+单元$',
+        'entrance_door': r'^\d+栋\d+单元\d+室$',
+    }
+    pattern = GATE_NAME_PATTERNS.get(effective_level)
+    if pattern and not re.match(pattern, effective_name):
+        name_tips = {
+            'community_gate': '社区大门名称格式：方位+数字+门，如东1门、西南2门',
+            'unit_door': '单元门名称格式：数字+栋+数字+单元，如3栋2单元',
+            'entrance_door': '入户门名称格式：数字+栋+数字+单元+数字+室，如3栋2单元501室',
+        }
+        return error_response(message=name_tips.get(effective_level, '名称格式不正确'), code=400)
+
     if 'gate_level' in data:
         old_level = gate.gate_level
         gate.gate_level = data['gate_level']
+        if data['gate_level'] == 'entrance_door':
+            parent_id = data.get('parent_gate_id')
+            if not parent_id:
+                return error_response(message='入户门必须绑定对应的单元门', code=400)
+            parent_gate = Gate.query.get(parent_id)
+            if not parent_gate or parent_gate.gate_level != 'unit_door':
+                return error_response(message='绑定的上级终端必须是单元门', code=400)
+            gate.parent_gate_id = parent_id
+        else:
+            gate.parent_gate_id = None
         if old_level == 'dangerous_area' and data['gate_level'] != 'dangerous_area':
             from app.models.danger_zone import DangerZone
             zones = DangerZone.query.all()
