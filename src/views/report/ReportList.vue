@@ -21,6 +21,7 @@
       <div class="actions">
         <van-button type="primary" size="small" @click="onSearch">查询</van-button>
         <van-button icon="description" size="small" @click="showGenerate = true">AI生成日报</van-button>
+        <van-button icon="setting-o" size="small" @click="openApiConfig">API配置</van-button>
       </div>
     </section>
 
@@ -45,11 +46,33 @@
     <van-dialog v-model="showGenerate" title="生成AI安防日报" show-cancel-button @confirm="onGenerate">
       <van-field v-model="generateDate" label="日期" placeholder="YYYY-MM-DD" />
     </van-dialog>
+
+    <van-dialog
+      v-model="showApiConfig"
+      title="配置硅基流动API"
+      show-cancel-button
+      :before-close="beforeApiConfigClose"
+      :confirm-button-loading="savingApiKey"
+    >
+      <van-field
+        v-model.trim="apiKey"
+        type="password"
+        label="API密钥"
+        :placeholder="apiKeyPlaceholder"
+        clearable
+        autocomplete="new-password"
+      />
+    </van-dialog>
   </app-layout>
 </template>
 
 <script>
-import { getReportList, generateReport, getReportWorkflowStatus } from '@/api/property'
+import {
+  getReportList,
+  generateReport,
+  getReportWorkflowStatus,
+  saveReportApiKey
+} from '@/api/property'
 
 export default {
   name: 'ReportListPage',
@@ -63,13 +86,21 @@ export default {
       startDate: '',
       endDate: '',
       showGenerate: false,
-      generateDate: ''
+      generateDate: '',
+      showApiConfig: false,
+      savingApiKey: false,
+      apiKey: ''
     }
   },
   computed: {
     workflowStateLabel () {
       if (!this.workflowStatus || !this.workflowStatus.ai_enabled) return '本地规则兜底'
       return this.workflowStatus.ai_configured ? '硅基流动API' : '硅基流动待配置'
+    },
+    apiKeyPlaceholder () {
+      return this.workflowStatus && this.workflowStatus.ai_configured
+        ? '已配置，输入新密钥可替换'
+        : '请输入 sk- 开头的密钥'
     }
   },
   created () {
@@ -110,6 +141,39 @@ export default {
     },
     goDetail (item) {
       this.$router.push(`/report/detail/${item.id}`)
+    },
+    openApiConfig () {
+      this.apiKey = ''
+      this.showApiConfig = true
+    },
+    beforeApiConfigClose (action, done) {
+      if (action !== 'confirm') {
+        this.apiKey = ''
+        done()
+        return
+      }
+      this.saveApiConfig(done)
+    },
+    async saveApiConfig (done) {
+      const apiKey = this.apiKey.trim()
+      if (!apiKey) {
+        this.$message.warning('请输入硅基流动 API 密钥')
+        done(false)
+        return
+      }
+      this.savingApiKey = true
+      try {
+        await saveReportApiKey(apiKey)
+        this.apiKey = ''
+        await this.loadWorkflowStatus()
+        this.$message.success('API 密钥保存成功，现在可以生成 AI 日报')
+        done()
+      } catch (e) {
+        if (!e.__messageShown) this.$message.error(e.message || 'API 密钥保存失败')
+        done(false)
+      } finally {
+        this.savingApiKey = false
+      }
     },
     async onGenerate () {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(this.generateDate)) {
@@ -184,6 +248,7 @@ export default {
 .filter-panel { padding: 12px; }
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }

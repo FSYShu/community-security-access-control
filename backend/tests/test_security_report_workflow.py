@@ -5,12 +5,17 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from flask import Flask
+from dotenv import dotenv_values
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app import db
 from app.daily_report_scheduler import DailyReportScheduler
 from app.models import AlarmEvent, DailyReport, Gate, PassRecord
+from app.report.ai_config import (
+    save_siliconflow_api_key,
+    validate_siliconflow_api_key,
+)
 from app.report.service import (
     ReportAlreadyExists,
     ReportGenerationInProgress,
@@ -212,3 +217,30 @@ def test_siliconflow_without_api_key_uses_local_rules(monkeypatch):
 
     assert result['workflow_source'] == 'local_rules'
     assert called == []
+
+
+def test_siliconflow_api_key_is_persisted_and_applied(tmp_path):
+    app = Flask(__name__)
+    app.config.update(
+        AI_REPORT_PROVIDER='local',
+        AI_REPORT_ENABLED=False,
+        SILICONFLOW_API_KEY='',
+    )
+    env_path = tmp_path / '.env'
+    api_key = 'sk-' + ('a' * 40)
+
+    save_siliconflow_api_key(app, api_key, str(env_path))
+
+    values = dotenv_values(str(env_path))
+    assert values['AI_REPORT_PROVIDER'] == 'siliconflow'
+    assert values['SILICONFLOW_API_KEY'] == api_key
+    assert values['AI_REPORT_ENABLED'] == 'true'
+    assert app.config['AI_REPORT_PROVIDER'] == 'siliconflow'
+    assert app.config['SILICONFLOW_API_KEY'] == api_key
+    assert app.config['AI_REPORT_ENABLED'] is True
+
+
+@pytest.mark.parametrize('api_key', ['', 'not-a-key', 'sk-short', 'sk-good\nBAD'])
+def test_invalid_siliconflow_api_key_is_rejected(api_key):
+    with pytest.raises(ValueError):
+        validate_siliconflow_api_key(api_key)

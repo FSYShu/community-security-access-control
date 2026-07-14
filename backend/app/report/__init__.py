@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, request
 from flask_jwt_extended import jwt_required
 
 from app.models.report import DailyReport
+from app.report.ai_config import save_siliconflow_api_key
 from app.report.service import (
     ReportAlreadyExists,
     ReportGenerationInProgress,
@@ -66,6 +67,28 @@ def get_workflow_status():
         ),
         'fallback_enabled': True,
     })
+
+
+@report_bp.route('/workflow/api-key', methods=['PUT'])
+@admin_required
+def update_workflow_api_key():
+    data = request.get_json(silent=True) or {}
+    try:
+        save_siliconflow_api_key(current_app, data.get('api_key'))
+    except ValueError as exc:
+        return error_response(message=str(exc), code=400)
+    except OSError:
+        current_app.logger.exception('Unable to persist SiliconFlow API key')
+        return error_response(message='API 密钥保存失败，请检查后端文件权限', code=500)
+
+    log_audit(
+        operation_type='update_report_ai_config',
+        operation_content='更新AI安防日报硅基流动API配置',
+    )
+    return success_response(
+        data={'ai_configured': True, 'ai_provider': 'siliconflow'},
+        message='硅基流动 API 密钥保存成功',
+    )
 
 
 @report_bp.route('/<int:report_id>', methods=['GET'])

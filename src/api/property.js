@@ -63,6 +63,15 @@ export function getReportWorkflowStatus () {
   return request({ url: '/report/workflow/status', method: 'get' })
 }
 
+/** 保存AI日报硅基流动API密钥 */
+export function saveReportApiKey (apiKey) {
+  return request({
+    url: '/report/workflow/api-key',
+    method: 'put',
+    data: { api_key: apiKey }
+  })
+}
+
 /** 历史通行日志 */
 export function getPassLogs (params) {
   return request({ url: '/property/pass-logs', method: 'get', params })
