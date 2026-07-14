@@ -28,6 +28,12 @@ const routes = [
     meta: { title: '访客申请' }
   },
   {
+    path: '/visitor-manage',
+    name: 'VisitorManage',
+    component: function () { return import('@/views/visitor-manage/VisitorManage.vue') },
+    meta: { title: '访客管理' }
+  },
+  {
     path: '/settings',
     name: 'GateSettings',
     component: function () { return import('@/views/settings/GateSettings.vue') },

@@ -20,9 +20,9 @@ function handleUnauthorized () {
   if (window.gateStore) {
     window.gateStore.commit('user/CLEAR_USER')
   }
-  if (!isRedirecting && window.location.hash !== '#/login') {
+  if (!isRedirecting && window.location.hash !== '#/settings/login') {
     isRedirecting = true
-    window.location.hash = '#/login'
+    window.location.hash = '#/settings/login'
     setTimeout(function () { isRedirecting = false }, 500)
   }
 }
@@ -60,7 +60,7 @@ service.interceptors.response.use(
       if (!silent) {
         Toast.fail(res.message || '请求失败')
       }
-      if (res.code === 401) {
+      if (res.code === 401 && !(response.config && response.config._skipAuthRedirect)) {
         handleUnauthorized()
       }
       return Promise.reject(new Error(res.message || '请求失败'))
@@ -87,7 +87,7 @@ service.interceptors.response.use(
     if (!silent) {
       Toast.fail(message)
     }
-    if (status === 401) {
+    if (status === 401 && !(error.config && error.config._skipAuthRedirect)) {
       handleUnauthorized()
     }
     return Promise.reject(error)

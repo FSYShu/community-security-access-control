@@ -4,6 +4,10 @@ export function getGateList (params) {
   return request({ url: '/gate/list', method: 'get', params })
 }
 
+export function getPublicAddresses () {
+  return request({ url: '/gate/public-addresses', method: 'get' })
+}
+
 export function bindGate (gateId) {
   return request({ url: '/gate/' + gateId + '/bind', method: 'post' })
 }

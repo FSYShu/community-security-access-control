@@ -7,12 +7,12 @@
       <div class="top-row">
         <div class="community-name">{{ communityName }}</div>
         <div class="top-right">
-          <button v-if="isBound" class="gate-badge" @click="$router.push('/settings')">
+          <button v-if="isBound" class="gate-badge" @click="goToSettings">
             <span class="badge-dot" :class="{ 'dot-pulse': streaming }"></span>
             <span class="badge-text">{{ gateName }}{{ streaming ? ' · 推流中' : '' }}</span>
             <i class="el-icon-setting badge-settings-icon" style="font-size:14px"></i>
           </button>
-          <button v-else class="gate-badge badge-unbound" @click="$router.push('/settings')">
+          <button v-else class="gate-badge badge-unbound" @click="goToSettings">
             <i class="el-icon-warning-outline" style="font-size:14px"></i>
             <span class="badge-text">未绑定终端，点击设置</span>
             <i class="el-icon-setting badge-settings-icon" style="font-size:14px"></i>
@@ -36,12 +36,12 @@
       </div>
     </transition>
 
-    <van-popup v-model="showVisitorPopup" position="bottom" round :style="{ maxHeight: '85vh', overflow: 'hidden' }">
-      <div class="visitor-popup-center">
-        <div class="visitor-popup">
+    <van-popup v-model="showVisitorPopup" position="bottom" round close-on-click-overlay :style="{ maxHeight: '85vh', overflow: 'hidden' }">
+      <div class="visitor-popup-center" @click="closeVisitorPopup">
+        <div class="visitor-popup" @click.stop>
           <div class="visitor-popup-header">
             <span class="visitor-popup-title">访客临时通行申请</span>
-            <i class="el-icon-close" style="font-size:20px;color:#9ca3af" @click="showVisitorPopup = false"></i>
+            <i class="el-icon-close" style="font-size:20px;color:var(--gate-text-secondary)" @click="closeVisitorPopup"></i>
           </div>
           <div class="visitor-popup-body">
             <div class="v-form-grid">
@@ -107,6 +107,7 @@
 
     <div v-if="isBound" class="idle-bottom-bar">
       <button
+        v-if="!isEntranceDoor"
         class="gate-btn gate-btn-primary idle-btn"
         :disabled="faceLoading || !streaming"
         @click="doFacePass"
@@ -117,17 +118,21 @@
           <span>刷脸通行</span>
         </template>
       </button>
-      <button class="gate-btn gate-btn-outline idle-btn" @click="openVisitorApply">
+      <button v-if="isCommunityGate" class="gate-btn gate-btn-outline idle-btn" @click="openVisitorApply">
         <i class="el-icon-user" style="font-size:24px"></i>
         <span>访客申请</span>
+      </button>
+      <button v-if="isEntranceDoor" class="gate-btn gate-btn-outline idle-btn" @click="goToVisitorManage">
+        <i class="el-icon-s-custom" style="font-size:24px"></i>
+        <span>访客管理</span>
       </button>
     </div>
 
     <transition name="fade">
-      <div v-if="showUnboundDialog" class="unbound-overlay" @click.prevent>
+      <div v-if="showUnboundDialog" class="unbound-overlay" @click="showUnboundDialog = false">
         <div class="unbound-dialog">
           <div class="unbound-dialog-title">终端未绑定</div>
-          <div class="unbound-dialog-message">请先绑定门禁终端后再使用刷脸通行和访客申请功能</div>
+          <div class="unbound-dialog-message">请先绑定门禁终端后再使用相关功能</div>
           <button class="unbound-dialog-btn" @click="goToSettings">前往设置</button>
         </div>
       </div>
@@ -138,7 +143,8 @@
 <script>
 import GateStreamPusher from '@/utils/stream-pusher'
 import { submitFacePass } from '@/api/face'
-import { applyVisitorAuth } from '@/api/visitorAuth'
+import { gateApplyVisitorAuth } from '@/api/visitorAuth'
+import { getPublicAddresses } from '@/api/gate'
 import { enqueue, setupOnlineHandler } from '@/utils/offline-queue'
 
 const RESULT_DISPLAY_TIME = 5000
@@ -153,7 +159,7 @@ export default {
       timeTimer: null,
       stream: null,
       streamPusher: null,
-      streaming: false,
+      streamAliveTick: 0,
       faceLoading: false,
       faceResult: null,
       resultTimer: null,
@@ -169,7 +175,8 @@ export default {
       showBuildingDrop: false,
       showUnitDrop: false,
       showRoomDrop: false,
-      showUnboundDialog: false
+      showUnboundDialog: false,
+      addressGatesData: []
     }
   },
   computed: {
@@ -177,28 +184,57 @@ export default {
     gateName () { return this.$store.getters['gate/gateName'] },
     pushKey () { return this.$store.getters['gate/pushKey'] },
     gateId () { return this.$store.getters['gate/gateId'] || '' },
+    gateLevel () { return this.$store.getters['gate/gateLevel'] },
     cameraDeviceId () { return this.$store.getters['gate/cameraDeviceId'] },
+    isEntranceDoor () { return this.gateLevel === 'entrance_door' },
+    isCommunityGate () { return this.gateLevel === 'community_gate' },
+    streaming () {
+      void this.streamAliveTick
+      return this.streamPusher && this.streamPusher.isAlive && this.streamPusher.isAlive()
+    },
     canSubmitVisitor () {
       return this.visitorForm.building && this.visitorForm.unit && this.visitorForm.room && this.visitorFaceCaptured
     },
+    addressGates () {
+      return this.addressGatesData.length > 0 ? this.addressGatesData : (this.$store.getters['gate/gatesCache'] || [])
+    },
     buildingOptions () {
-      const list = []
-      for (let i = 1; i <= 20; i++) list.push(i + '栋')
-      return list
+      var buildings = {}
+      this.addressGates.forEach(function (g) {
+        var m = g.gate_name.match(/^(\d+栋)/)
+        if (m) buildings[m[1]] = true
+      })
+      return Object.keys(buildings).sort(function (a, b) {
+        return parseInt(a) - parseInt(b)
+      })
     },
     unitOptions () {
-      const list = []
-      for (let i = 1; i <= 6; i++) list.push(i + '单元')
-      return list
+      if (!this.visitorForm.building) return []
+      var prefix = this.visitorForm.building
+      var units = {}
+      this.addressGates.forEach(function (g) {
+        if (g.gate_name.indexOf(prefix) === 0) {
+          var m = g.gate_name.match(/^\d+栋(\d+单元)/)
+          if (m) units[m[1]] = true
+        }
+      })
+      return Object.keys(units).sort(function (a, b) {
+        return parseInt(a) - parseInt(b)
+      })
     },
     roomOptions () {
-      const list = []
-      for (let f = 1; f <= 33; f++) {
-        for (let r = 1; r <= 4; r++) {
-          list.push(f + '0' + r)
+      if (!this.visitorForm.building || !this.visitorForm.unit) return []
+      var prefix = this.visitorForm.building + this.visitorForm.unit
+      var rooms = []
+      this.addressGates.forEach(function (g) {
+        if (g.gate_level === 'entrance_door' && g.gate_name.indexOf(prefix) === 0) {
+          var m = g.gate_name.match(/(\d+室)$/)
+          if (m) rooms.push(m[1])
         }
-      }
-      return list
+      })
+      return rooms.sort(function (a, b) {
+        return parseInt(a) - parseInt(b)
+      })
     }
   },
   watch: {
@@ -219,7 +255,8 @@ export default {
   mounted () {
     this.updateTime()
     this.timeTimer = setInterval(this.updateTime, 1000)
-    if (this.pushKey) {
+    this.streamAliveTimer = setInterval(function () { this.streamAliveTick++ }.bind(this), 3000)
+    if (this.pushKey && !this.isEntranceDoor) {
       this.startCamera()
     }
     const self = this
@@ -229,10 +266,13 @@ export default {
     if (!this.isBound) {
       this.showUnboundDialog = true
     }
+    this.loadAddressGates()
     window.addEventListener('beforeunload', this._onPageHide)
     window.addEventListener('pagehide', this._onPageHide)
   },
   beforeDestroy () {
+    if (this.timeTimer) clearInterval(this.timeTimer)
+    if (this.streamAliveTimer) clearInterval(this.streamAliveTimer)
     this.stopAll()
     this.clearResultTimer()
     window.removeEventListener('beforeunload', this._onPageHide)
@@ -250,7 +290,21 @@ export default {
     },
     goToSettings () {
       this.showUnboundDialog = false
-      this.$router.push('/settings')
+      this.$router.push('/settings').catch(function () {})
+    },
+    goToVisitorManage () {
+      this.$router.push('/visitor-manage').catch(function () {})
+    },
+    async loadAddressGates () {
+      try {
+        var res = await getPublicAddresses()
+        var items = (res.data && res.data.items) || []
+        if (items.length > 0) {
+          this.addressGatesData = items
+        }
+      } catch (err) {
+        // API 失败时降级使用 store 缓存
+      }
     },
     updateTime () {
       const now = new Date()
@@ -293,9 +347,8 @@ export default {
         })
         this.streamPusher = new GateStreamPusher(video, this.pushKey)
         this.streamPusher.start()
-        this.streaming = true
       } catch (err) {
-        this.streaming = false
+        this.streamPusher = null
       }
     },
     stopAll () {
@@ -307,11 +360,11 @@ export default {
         this.stream.getTracks().forEach(function (t) { t.stop() })
         this.stream = null
       }
-      this.streaming = false
+
     },
     async restartStream () {
       this.stopAll()
-      if (this.pushKey) {
+      if (this.pushKey && !this.isEntranceDoor) {
         await this.startCamera()
       }
     },
@@ -403,6 +456,10 @@ export default {
       }
       this.showVisitorPopup = true
     },
+    closeVisitorPopup () {
+      this.showVisitorPopup = false
+      this.resetVisitorForm()
+    },
     captureVisitorFace () {
       const base64 = this.captureFrame()
       if (base64) {
@@ -430,10 +487,13 @@ export default {
     },
     selectBuilding (val) {
       this.visitorForm.building = val
+      this.visitorForm.unit = ''
+      this.visitorForm.room = ''
       this.showBuildingDrop = false
     },
     selectUnit (val) {
       this.visitorForm.unit = val
+      this.visitorForm.room = ''
       this.showUnitDrop = false
     },
     selectRoom (val) {
@@ -443,13 +503,26 @@ export default {
     async doSubmitVisitor () {
       this.visitorSubmitting = true
       try {
-        await applyVisitorAuth({
-          visitor_face_image: this.visitorFaceBase64,
-          apply_gate_levels: JSON.stringify(['community_gate', 'unit_door']),
-          visit_address: this.visitorForm.building + this.visitorForm.unit + this.visitorForm.room,
-          apply_source: 'gate_terminal'
+        var unitDoorName = ''
+        var prefix = this.visitorForm.building + this.visitorForm.unit
+        var self = this
+        this.addressGates.forEach(function (g) {
+          if (g.gate_level === 'unit_door' && g.gate_name.indexOf(prefix) === 0) {
+            unitDoorName = g.gate_name
+          }
         })
-        this.$toast.success('申请已提交，可通行小区大门和单元门')
+        var levels = ['社区大门']
+        if (unitDoorName) levels.push(unitDoorName)
+        await gateApplyVisitorAuth({
+          visitor_name: '访客',
+          visitor_face_image_path: this.visitorFaceBase64,
+          apply_gate_levels: levels,
+          visit_address: this.visitorForm.building + this.visitorForm.unit + this.visitorForm.room,
+          apply_source: 'gate_terminal',
+          gate_id: this.gateId,
+          push_key: this.pushKey
+        })
+        this.$toast.success('申请已提交')
         this.showVisitorPopup = false
         this.resetVisitorForm()
       } catch (err) {
@@ -548,6 +621,8 @@ export default {
   background: rgba(16, 185, 129, 0.15);
   border: 1px solid rgba(16, 185, 129, 0.35);
   cursor: pointer;
+  position: relative;
+  z-index: 10000;
   -webkit-tap-highlight-color: transparent;
   font-size: inherit;
   font-family: inherit;
@@ -569,7 +644,7 @@ export default {
 }
 .badge-text {
   font-size: 12px;
-  color: rgba(16, 185, 129, 0.9);
+  color: var(--gate-success-light);
 }
 .badge-settings-icon {
   opacity: 0.6;
@@ -649,9 +724,10 @@ export default {
 .visitor-popup-center {
   display: flex;
   justify-content: center;
+  min-height: 100%;
 }
 .visitor-popup {
-  background: var(--gate-bg-card);
+  background: var(--gate-bg-secondary);
   border-radius: 16px 16px 0 0;
   overflow: hidden;
   width: 100%;
@@ -710,7 +786,7 @@ export default {
   gap: 6px;
   padding: 10px 18px;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--gate-border-field);
   border-radius: 8px;
   color: var(--gate-text-secondary);
   font-size: 15px;
@@ -720,7 +796,7 @@ export default {
   box-sizing: border-box;
 }
 .v-capture-btn:active {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.2);
 }
 .v-form-hint {
@@ -742,8 +818,8 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 12px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--gate-border-light);
+  border: 1px solid var(--gate-border-field);
   border-radius: 8px;
   cursor: pointer;
   font-size: 15px;
@@ -771,7 +847,7 @@ export default {
   left: 0;
   right: 0;
   background: var(--gate-bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--gate-border-field);
   border-radius: 8px;
   padding: 4px 0;
   z-index: 100;
@@ -821,7 +897,7 @@ export default {
 .v-form-footer {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--gate-border);
 }
 .v-form-btn-block {
   width: 100%;
@@ -896,8 +972,8 @@ export default {
   justify-content: center;
 }
 .unbound-dialog {
-  background: #1a1a2e;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--gate-bg-card);
+  border: 1px solid var(--gate-border);
   border-radius: 16px;
   width: 320px;
   max-width: 85vw;
@@ -906,13 +982,13 @@ export default {
 .unbound-dialog-title {
   font-size: 16px;
   font-weight: 600;
-  color: #ededf0;
+  color: var(--gate-text);
   padding: 24px 24px 8px;
   text-align: center;
 }
 .unbound-dialog-message {
   font-size: 14px;
-  color: #9ca3af;
+  color: var(--gate-text-secondary);
   line-height: 1.6;
   padding: 0 24px 20px;
 }
@@ -921,9 +997,9 @@ export default {
   width: 100%;
   padding: 14px 0;
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--gate-border);
   background: transparent;
-  color: #818cf8;
+  color: var(--gate-accent-light);
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;

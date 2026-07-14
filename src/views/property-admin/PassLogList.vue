@@ -577,6 +577,7 @@ export default {
       const map = {
         community_gate: '社区大门',
         unit_door: '单元门',
+        entrance_door: '入户门',
         dangerous_area: '危险防护区域'
       }
       return map[level] || level
@@ -585,6 +586,7 @@ export default {
       const map = {
         community_gate: 'level-community',
         unit_door: 'level-unit',
+        entrance_door: 'level-entrance',
         dangerous_area: 'level-danger'
       }
       return map[level] || ''
@@ -1100,6 +1102,12 @@ export default {
   color: #fbbf24;
   border-color: rgba(245, 158, 11, 0.3);
   background: rgba(245, 158, 11, 0.08);
+}
+
+.level-entrance {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(52, 211, 153, 0.08);
 }
 
 .level-danger {

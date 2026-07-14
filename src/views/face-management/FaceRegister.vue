@@ -6,15 +6,10 @@
     </div>
     <div class="form-area">
       <van-field v-model="personName" label="姓名" placeholder="请输入姓名" required />
-      <van-field name="personType" label="人员类型">
-        <template #input>
-          <van-radio-group v-model="personType" direction="horizontal">
-            <van-radio name="owner">业主</van-radio>
-
-            <van-radio name="blacklist">黑名单</van-radio>
-          </van-radio-group>
-        </template>
-      </van-field>
+      <van-field name="selectedGateId" label="授权入户门" readonly clickable right-icon="arrow" :value="selectedGateLabel" placeholder="请选择" @click="showGatePicker = true" />
+      <van-popup v-model="showGatePicker" position="bottom" round>
+        <van-picker :columns="gateColumns" @confirm="onGateConfirm" @cancel="showGatePicker = false" />
+      </van-popup>
       <div class="action-area">
         <van-button type="primary" block @click="captureAndRegister" :loading="loading" loading-text="录入中...">录入</van-button>
       </div>
@@ -24,6 +19,7 @@
 
 <script>
 import { registerFace } from '@/api/face'
+import { getGateList } from '@/api/property'
 
 export default {
   name: 'FaceRegister',
@@ -31,23 +27,60 @@ export default {
     return {
       personName: '',
       personType: 'owner',
+      selectedGateId: null,
+      entranceDoors: [],
+      showGatePicker: false,
       loading: false,
       stream: null
     }
   },
+  computed: {
+    selectedGateLabel () {
+      if (!this.selectedGateId) return ''
+      const door = this.entranceDoors.find(d => d.id === this.selectedGateId)
+      return door ? door.gate_name : ''
+    },
+    gateColumns () {
+      return this.entranceDoors.map(d => ({ text: d.gate_name, value: d.id }))
+    }
+  },
   mounted () {
     this.startCamera()
+    this.loadEntranceDoors()
   },
   beforeDestroy () {
     this.stopCamera()
   },
   methods: {
+    async loadEntranceDoors () {
+      try {
+        const res = await getGateList({ gate_level: 'entrance_door', per_page: 999 })
+        const data = res.data
+        this.entranceDoors = (data && data.items) ? data.items : []
+      } catch (err) {
+        this.entranceDoors = []
+      }
+    },
+    onGateConfirm (val) {
+      this.selectedGateId = val.value
+      this.showGatePicker = false
+    },
     async startCamera () {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.$message.error('当前环境不支持摄像头，请使用HTTPS或localhost访问')
+        return
+      }
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({ video: true })
         this.$refs.video.srcObject = this.stream
       } catch (err) {
-        this.$message.warning('无法访问摄像头，请检查权限设置')
+        if (err.name === 'NotAllowedError') {
+          this.$message.error('摄像头权限被拒绝，请在浏览器设置中允许访问摄像头')
+        } else if (err.name === 'NotFoundError') {
+          this.$message.error('未检测到摄像头设备')
+        } else {
+          this.$message.error('无法访问摄像头：' + err.message)
+        }
       }
     },
     stopCamera () {
@@ -70,16 +103,19 @@ export default {
       const ctx = canvas.getContext('2d')
       ctx.drawImage(video, 0, 0)
       const base64Image = canvas.toDataURL('image/jpeg').split(',')[1]
+      const allowedGates = this.selectedGateId ? [this.selectedGateId] : []
       this.loading = true
       try {
         const res = await registerFace({
           face_image: base64Image,
           person_name: this.personName,
-          person_type: this.personType
+          person_type: this.personType,
+          allowed_gates: allowedGates
         })
         if (res.code === 0) {
           this.$message.success('录入成功')
           this.personName = ''
+          this.selectedGateId = null
         }
       } catch (err) {
         if (!err.message || err.message === '请求失败') {

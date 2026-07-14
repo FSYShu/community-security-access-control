@@ -31,6 +31,12 @@ GateStreamPusher.prototype.stop = function () {
   }
 }
 
+GateStreamPusher.prototype.isAlive = function () {
+  if (!this.running) return false
+  if (Date.now() - this.lastSendTime > 10000) return false
+  return true
+}
+
 GateStreamPusher.prototype.captureAndSend = function () {
   const video = this.video
   if (!video || !video.videoWidth || !this.pushKey) return

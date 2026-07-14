@@ -14,8 +14,8 @@ export default {
 #gate-app {
   width: 100%;
   min-height: 100vh;
-  background: #0f1117;
-  color: #e5e7eb;
+  background: var(--gate-bg);
+  color: var(--gate-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
