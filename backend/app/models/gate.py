@@ -14,6 +14,7 @@ class Gate(db.Model):
 
     gate_level = db.Column(db.Text, nullable=False, default='community_gate')
     building_unit = db.Column(db.Text, default='')
+    parent_gate_id = db.Column(db.Integer, db.ForeignKey('gates.id'), nullable=True)
     camera_id = db.Column(db.Integer, nullable=True)
     stream_channel_id = db.Column(db.Text, db.ForeignKey('stream_channels.channel_id'), nullable=True)
     push_key = db.Column(db.Text, default='')
@@ -39,6 +40,7 @@ class Gate(db.Model):
 
             'gate_level': self.gate_level,
             'building_unit': self.building_unit,
+            'parent_gate_id': self.parent_gate_id,
             'camera_id': self.camera_id,
             'stream_channel_id': self.stream_channel_id,
             'push_key': self.push_key,

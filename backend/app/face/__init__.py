@@ -14,6 +14,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
 from app import db, limiter
 from app.models.face import FaceInfo
+from app.models.pass_record import PassRecord
+from app.models.visitor_auth import VisitorAuth
 from utils.response import success_response, error_response
 from utils.permissions import admin_required, owner_self_required
 from core.db_lock import with_write_lock
@@ -23,6 +25,31 @@ from core.face_recognition import FaceRecognizer, load_registered_faces
 logger = logging.getLogger(__name__)
 
 face_bp = Blueprint('face', __name__)
+
+
+def _remove_visitor_access(face_info):
+    """访客通过所有申请门禁后，删除其人脸记录和授权记录"""
+    try:
+        from flask import current_app
+        faces_file = current_app.config.get('REGISTERED_FACES_FILE')
+        if not faces_file:
+            faces_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'registered_faces.json')
+
+        registered = []
+        if os.path.exists(faces_file):
+            with open(faces_file, 'r', encoding='utf-8') as f:
+                registered = json.load(f)
+        registered = [r for r in registered if r.get('id') != face_info.id]
+        with open(faces_file, 'w', encoding='utf-8') as f:
+            json.dump(registered, f, ensure_ascii=False)
+
+        db.session.delete(face_info)
+        VisitorAuth.query.filter_by(visitor_name=face_info.person_name, approval_status='approved').delete()
+        db.session.commit()
+        logger.info('Visitor access removed: %s (face_id=%d)', face_info.person_name, face_info.id)
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Failed to remove visitor access for face_id=%d: %s', face_info.id, str(e))
 
 
 @face_bp.route('/list', methods=['GET'])
@@ -48,7 +75,7 @@ def get_face_list():
     if get_jwt().get('role') != 'admin':
         query = query.filter_by(owner_id=int(get_jwt_identity()))
 
-    query = query.order_by(FaceInfo.created_at.desc())
+    query = query.order_by(FaceInfo.created_at.asc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     return success_response(data={
@@ -69,6 +96,7 @@ def add_face():
     person_name = data.get('person_name', '')
     face_image_base64 = data.get('face_image', '')
     owner_id = data.get('owner_id')
+    entrance_door_ids = data.get('allowed_gates', [])
 
     if not person_type or not person_name:
         return error_response(message='人员类型和姓名不能为空', code=400)
@@ -78,6 +106,17 @@ def add_face():
 
     if person_type == 'visitor' and not owner_id:
         return error_response(message='访客类型必须关联业主ID', code=400)
+
+    from app.models.gate import Gate
+    full_allowed_gates = set()
+    community_gates = Gate.query.filter_by(gate_level='community_gate').all()
+    for cg in community_gates:
+        full_allowed_gates.add(cg.id)
+    for eid in entrance_door_ids:
+        entrance = Gate.query.get(eid)
+        if entrance and entrance.gate_level == 'entrance_door' and entrance.parent_gate_id:
+            full_allowed_gates.add(entrance.parent_gate_id)
+    computed_allowed_gates = sorted(full_allowed_gates)
 
     existing_count = FaceInfo.query.filter_by(person_name=person_name, person_type=person_type, status='active').count()
     if existing_count >= 3:
@@ -94,7 +133,8 @@ def add_face():
         owner_id=owner_id,
         auth_start_time=data.get('auth_start_time', ''),
         auth_end_time=data.get('auth_end_time', ''),
-        allowed_gates=json.dumps(data.get('allowed_gates', []), ensure_ascii=False),
+        allowed_gates=json.dumps(computed_allowed_gates, ensure_ascii=False) if computed_allowed_gates else None,
+        entrance_doors=json.dumps(entrance_door_ids, ensure_ascii=False) if entrance_door_ids else None,
         status=data.get('status', 'active')
     )
     db.session.add(face)
@@ -122,7 +162,19 @@ def update_face(face_id):
     if 'auth_end_time' in data:
         face.auth_end_time = data['auth_end_time']
     if 'allowed_gates' in data:
-        face.allowed_gates = json.dumps(data['allowed_gates'], ensure_ascii=False)
+        from app.models.gate import Gate
+        entrance_door_ids = data['allowed_gates']
+        full_allowed_gates = set()
+        community_gates = Gate.query.filter_by(gate_level='community_gate').all()
+        for cg in community_gates:
+            full_allowed_gates.add(cg.id)
+        for eid in entrance_door_ids:
+            entrance = Gate.query.get(eid)
+            if entrance and entrance.gate_level == 'entrance_door' and entrance.parent_gate_id:
+                full_allowed_gates.add(entrance.parent_gate_id)
+        computed = sorted(full_allowed_gates)
+        face.allowed_gates = json.dumps(computed, ensure_ascii=False) if computed else None
+        face.entrance_doors = json.dumps(entrance_door_ids, ensure_ascii=False) if entrance_door_ids else None
 
     db.session.commit()
     log_audit(operation_type='update_face', operation_content=f'更新人脸: {face_id}')
@@ -229,6 +281,33 @@ def submit_face_pass():
         except (json.JSONDecodeError, TypeError):
             pass
 
+    try:
+        gate_id_int = int(gate_id) if gate_id else 0
+        pr = PassRecord(
+            gate_id=gate_id_int,
+            face_id=face_info.id,
+            pass_result='pass',
+            pass_time=datetime.utcnow().isoformat()
+        )
+        db.session.add(pr)
+        db.session.commit()
+    except Exception as e:
+        logger.error('Failed to save pass record: %s', str(e))
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+    if face_info.person_type == 'visitor' and gate_id and face_info.allowed_gates:
+        try:
+            allowed = json.loads(face_info.allowed_gates) if isinstance(face_info.allowed_gates, str) else face_info.allowed_gates
+            if isinstance(allowed, list):
+                passed_gate_ids = [r.gate_id for r in PassRecord.query.filter_by(face_id=face_info.id, pass_result='pass').all()]
+                if all(gid in passed_gate_ids for gid in allowed):
+                    _remove_visitor_access(face_info)
+        except Exception as e:
+            logger.error('Failed to check visitor pass completion: %s', str(e))
+
     return success_response(data={'result': 'passed', 'person_name': face_info.person_name, 'person_type': face_info.person_type, 'gate_id': gate_id}, message='通行成功')
 
 
@@ -242,9 +321,21 @@ def face_register():
     face_image_base64 = data.get('face_image', '')
     person_name = data.get('person_name', '')
     person_type = data.get('person_type', 'owner')
+    entrance_door_ids = data.get('allowed_gates', [])
 
     if not face_image_base64 or not person_name:
         return error_response(message='人脸图像和姓名不能为空', code=400)
+
+    from app.models.gate import Gate
+    full_allowed_gates = set()
+    community_gates = Gate.query.filter_by(gate_level='community_gate').all()
+    for cg in community_gates:
+        full_allowed_gates.add(cg.id)
+    for eid in entrance_door_ids:
+        entrance = Gate.query.get(eid)
+        if entrance and entrance.gate_level == 'entrance_door' and entrance.parent_gate_id:
+            full_allowed_gates.add(entrance.parent_gate_id)
+    allowed_gates = sorted(full_allowed_gates)
 
     try:
         import cv2
@@ -329,6 +420,8 @@ def face_register():
             person_name=person_name,
             face_image_path=face_image_path,
             face_feature=json.dumps(encoding),
+            allowed_gates=json.dumps(allowed_gates, ensure_ascii=False) if allowed_gates else None,
+            entrance_doors=json.dumps(entrance_door_ids, ensure_ascii=False) if entrance_door_ids else None,
             status='active'
         )
         db.session.add(face_record)
