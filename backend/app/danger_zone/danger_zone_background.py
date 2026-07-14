@@ -23,7 +23,7 @@ _detect_stop_event = threading.Event()
 DETECT_LOOP_INTERVAL = 2.0
 MAX_WIDTH = 480
 _capture_entries = {}
-_CAPTURE_OPEN_TIMEOUT = 15
+_CAPTURE_OPEN_TIMEOUT = 45
 _CAPTURE_RECONNECT_INTERVAL = 5
 
 

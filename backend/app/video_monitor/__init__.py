@@ -606,7 +606,63 @@ def get_monitor_list():
     return error_response(message='监控区域列表接口开发中', code=-1)
 
 
+@video_monitor_bp.route('/detect-distance/<int:gate_id>', methods=['POST'])
+@limiter.exempt
+def detect_distance(gate_id):
+    """检测当前画面中人脸的估算距离"""
+    from app.models.gate import Gate
+    gate = Gate.query.get(gate_id)
+    if not gate or not gate.push_key:
+        return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
+
+    if not gate.calib_near_dist or not gate.calib_near_ratio:
+        return jsonify({'code': 0, 'data': {'persons': [], 'calibrated': False}})
+
+    import cv2
+    import numpy as np
+
+    frame = None
+    frame_file = flask_request.files.get('frame')
+    if frame_file:
+        try:
+            frame_bytes = frame_file.read()
+            arr = np.frombuffer(frame_bytes, dtype=np.uint8).copy()
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except Exception:
+            pass
+
+    if frame is None:
+        return jsonify({'code': 0, 'data': {'persons': [], 'calibrated': True}})
+
+    try:
+        from core.face_recognition import FaceRecognizer
+        recognizer = FaceRecognizer()
+        rgb_image = np.ascontiguousarray(frame[:, :, ::-1])
+        faces = recognizer.detect_faces_rgb(rgb_image)
+    except Exception:
+        faces = []
+
+    persons = []
+    for face_rect in faces:
+        face_pixel_height = face_rect[3] - face_rect[1]
+        frame_height = frame.shape[0]
+        face_ratio = face_pixel_height / frame_height if frame_height > 0 else 0
+        distance = None
+        if gate.calib_near_ratio and face_ratio > 0:
+            if gate.calib_far_ratio and gate.calib_far_dist and gate.calib_near_dist:
+                k1 = gate.calib_near_dist * gate.calib_near_ratio
+                k2 = gate.calib_far_dist * gate.calib_far_ratio
+                k = (k1 + k2) / 2.0
+                distance = round(k / face_ratio, 2)
+            else:
+                distance = round(gate.calib_near_dist * gate.calib_near_ratio / face_ratio, 2)
+        persons.append({'distance': distance})
+
+    return jsonify({'code': 0, 'data': {'persons': persons, 'calibrated': True}})
+
+
 @video_monitor_bp.route('/calibrate-distance/<int:gate_id>', methods=['POST'])
+@limiter.exempt
 def calibrate_distance(gate_id):
     """距离校准：支持两点校准，point=near或far"""
     from app.models.gate import Gate
@@ -614,40 +670,73 @@ def calibrate_distance(gate_id):
     if not gate or not gate.push_key:
         return jsonify({'error': '门禁终端不存在或未绑定推流码'}), 404
 
-    data = flask_request.get_json(force=True, silent=True) or {}
+    data = {}
+    try:
+        data = flask_request.get_json(force=True, silent=True) or {}
+    except Exception:
+        pass
     known_distance = data.get('distance')
-    point = data.get('point', 'near')
-    if not known_distance or known_distance <= 0:
+    point = data.get('point')
+    if not known_distance:
+        known_distance = flask_request.form.get('distance')
+    if not point:
+        point = flask_request.form.get('point', 'near')
+    try:
+        known_distance = float(known_distance)
+    except (TypeError, ValueError):
+        return jsonify({'error': '请提供有效的已知距离(米)'}), 400
+    if known_distance <= 0:
         return jsonify({'error': '请提供有效的已知距离(米)'}), 400
     if point not in ('near', 'far'):
         return jsonify({'error': 'point参数应为near或far'}), 400
 
-    config = current_app.config
-    rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
-    rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
-    stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
-
-    from core.rtmp_relay import start_rtmp_pull, read_cv2_frame_from_pull, stop_rtmp_pull
-    from core.shared_frame_store import get_frame as _get_shared_frame
     import cv2
     import numpy as np
+    import base64 as _base64
 
     frame = None
-    jpeg = _get_shared_frame(stream_url)
-    if jpeg is not None:
-        arr = np.frombuffer(jpeg, dtype=np.uint8).copy()
-        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    frame_file = flask_request.files.get('frame')
+    if frame_file:
+        try:
+            frame_bytes = frame_file.read()
+            arr = np.frombuffer(frame_bytes, dtype=np.uint8).copy()
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except Exception as e:
+            logger.warning('Failed to decode uploaded frame: {}'.format(str(e)))
+
+    frame_base64 = data.get('frame_base64')
+    if frame is None and frame_base64:
+        try:
+            jpeg_data = _base64.b64decode(frame_base64)
+            arr = np.frombuffer(jpeg_data, dtype=np.uint8).copy()
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except Exception as e:
+            logger.warning('Failed to decode frame_base64: {}'.format(str(e)))
 
     if frame is None:
-        entry = start_rtmp_pull(stream_url, fps=5, max_width=640)
-        if entry is not None:
-            for _ in range(20):
-                ok, f = read_cv2_frame_from_pull(entry)
-                if ok and f is not None:
-                    frame = f
-                    break
-                time.sleep(0.2)
-            stop_rtmp_pull(stream_url)
+        config = current_app.config
+        rtmp_host = config.get('RTMP_SERVER_HOST', '20.214.147.223')
+        rtmp_port = config.get('RTMP_SERVER_PORT', 9090)
+        stream_url = 'rtmp://{}:{}/live/{}'.format(rtmp_host, rtmp_port, gate.push_key)
+
+        from core.rtmp_relay import start_rtmp_pull, read_cv2_frame_from_pull, stop_rtmp_pull
+        from core.shared_frame_store import get_frame as _get_shared_frame
+
+        jpeg = _get_shared_frame(stream_url)
+        if jpeg is not None:
+            arr = np.frombuffer(jpeg, dtype=np.uint8).copy()
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            entry = start_rtmp_pull(stream_url, fps=5, max_width=640)
+            if entry is not None:
+                for _ in range(20):
+                    ok, f = read_cv2_frame_from_pull(entry)
+                    if ok and f is not None:
+                        frame = f
+                        break
+                    time.sleep(0.2)
+                stop_rtmp_pull(stream_url)
 
     if frame is None:
         return jsonify({'error': '无法获取视频帧，请确认摄像头在线'}), 400
