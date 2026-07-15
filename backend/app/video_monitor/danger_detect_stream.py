@@ -33,7 +33,16 @@ def generate_frames_with_danger_detect(stream_url, zones, gate_id=None, max_widt
         'last_time': 0.0,
     }
 
-    def reader():
+    def reader():    if gate_id:
+        try:
+            from app.models.gate import Gate
+            from app.danger_zone.danger_zone_detector import _update_gate_calib
+            gate = Gate.query.get(gate_id)
+            if gate and gate.calib_distance and gate.calib_face_ratio:
+                _update_gate_calib(gate_id, gate.calib_distance, gate.calib_face_ratio)
+        except Exception:
+            pass
+        
         while latest['alive']:
             if entry['process'].poll() is not None:
                 latest['alive'] = False
