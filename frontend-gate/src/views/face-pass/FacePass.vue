@@ -79,16 +79,25 @@ export default {
     async doFacePass () {
       if (this.browserCheck && !this.browserCheck.supported) return
       if (!this.$refs.camera) return
-      var base64Image = this.$refs.camera.captureFrame()
-      if (!base64Image) {
+      var frames = []
+      for (var fi = 0; fi < 6; fi++) {
+        var f = this.$refs.camera ? this.$refs.camera.captureFrame() : null
+        if (f) frames.push(f)
+        if (fi < 5) {
+          await new Promise(function (resolve) { setTimeout(resolve, 150) })
+        }
+      }
+      if (frames.length === 0) {
         this.$toast.fail('摄像头未就绪')
         return
       }
+      var base64Image = frames[frames.length - 1]
       this.loading = true
       this.result = null
       try {
         var res = await submitFacePass({
           face_image: base64Image,
+          face_frames: frames,
           gate_id: this.gateId
         })
         this.result = {
@@ -101,17 +110,21 @@ export default {
           this.result = { passed: false, reason: '网络断开，已暂存待网络恢复后自动提交' }
         } else {
           var msg = (err && err.message) || '识别失败'
-          var reasonMap = {
-            '生人': '未登记人员，禁止通行',
-            '黑名单': '黑名单人员，禁止通行',
-            '授权过期': '访客授权已过期',
-            '权限不足': '无此门禁通行权限'
+          if (msg.includes('活体检测未通过')) {
+            this.result = { passed: false, reason: '活体检测未通过，疑似非真人' }
+          } else {
+            var reasonMap = {
+              '生人': '未登记人员，禁止通行',
+              '黑名单': '黑名单人员，禁止通行',
+              '授权过期': '访客授权已过期',
+              '权限不足': '无此门禁通行权限'
+            }
+            var reason = ''
+            Object.keys(reasonMap).forEach(function (key) {
+              if (msg.includes(key)) reason = reasonMap[key]
+            })
+            this.result = { passed: false, reason: reason || msg }
           }
-          var reason = ''
-          Object.keys(reasonMap).forEach(function (key) {
-            if (msg.includes(key)) reason = reasonMap[key]
-          })
-          this.result = { passed: false, reason: reason || msg }
         }
       } finally {
         this.loading = false
