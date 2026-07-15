@@ -93,13 +93,13 @@ const routes = [
     path: '/report',
     name: 'ReportList',
     component: () => import('@/views/report/ReportList.vue'),
-    meta: { title: '安防监控日报', requiresAuth: true, roles: ['admin'] }
+    meta: { title: '安防监控日报', requiresAuth: true, roles: ['admin', 'guard'] }
   },
   {
     path: '/report/detail/:id',
     name: 'ReportDetail',
     component: () => import('@/views/report/ReportDetail.vue'),
-    meta: { title: '日报详情', requiresAuth: true, roles: ['admin'] }
+    meta: { title: '日报详情', requiresAuth: true, roles: ['admin', 'guard'] }
   }
 ]
 

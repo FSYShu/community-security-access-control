@@ -149,7 +149,7 @@
             <span>每天 {{ workflowStatus.generate_time }} 自动生成</span>
           </span>
           <span v-else class="workflow-hint"></span>
-          <div class="filter-actions-group">
+          <div v-if="isAdmin" class="filter-actions-group">
             <button class="action-btn action-btn-accent" @click="showGenerate = true">
               <i class="el-icon-magic-stick"></i>
               <span>AI生成</span>
@@ -185,7 +185,7 @@
               </div>
             </template>
             <template #right-icon>
-              <span class="cell-actions" @click.stop>
+              <span v-if="isAdmin" class="cell-actions" @click.stop>
                 <button class="cell-action-btn" :disabled="regeneratingId === item.id" @click="onRegenerate(item)">
                   <i :class="regeneratingId === item.id ? 'el-icon-loading' : 'el-icon-refresh'"></i>
                   <span>重新生成</span>
@@ -351,6 +351,9 @@ export default {
     }
   },
   computed: {
+    isAdmin () {
+      return this.$store.getters['user/isAdmin']
+    },
     workflowStateLabel () {
       if (!this.workflowStatus || !this.workflowStatus.ai_enabled) return '本地规则兜底'
       return this.workflowStatus.ai_configured ? '硅基流动API' : '硅基流动待配置'
@@ -364,7 +367,7 @@ export default {
   created () {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
     this.generateDate = this.formatDate(yesterday)
-    this.loadWorkflowStatus()
+    if (this.isAdmin) this.loadWorkflowStatus()
   },
   mounted () {
     document.addEventListener('click', this.handleClickOutside)

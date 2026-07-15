@@ -7,7 +7,7 @@ var NAV_ITEMS = [
   { label: '门禁管理', icon: 'el-icon-lock', path: '/access-control', roles: ['admin'] },
   { label: '告警中心', icon: 'el-icon-bell', path: '/alarm-center', roles: ['admin', 'guard'] },
   { label: '用户权限', icon: 'el-icon-key', path: '/user-management', roles: ['admin'] },
-  { label: '安防日报', icon: 'el-icon-document', path: '/report', roles: ['admin'] },
+  { label: '安防日报', icon: 'el-icon-document', path: '/report', roles: ['admin', 'guard'] },
   { label: '通行日志', icon: 'el-icon-notebook-2', path: '/property-admin/pass-logs', roles: ['admin', 'guard'] }
 ]
 

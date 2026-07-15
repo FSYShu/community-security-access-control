@@ -219,7 +219,7 @@
               <i class="el-icon-download"></i>
               <span>导出</span>
             </button>
-            <button class="action-btn action-btn-danger" @click="onClearConfirm">
+            <button v-if="isAdmin" class="action-btn action-btn-danger" @click="onClearConfirm">
               <i class="el-icon-delete"></i>
               <span>清空</span>
             </button>
@@ -412,6 +412,11 @@ export default {
         handle_remark: ''
       },
       perPageReady: false
+    }
+  },
+  computed: {
+    isAdmin () {
+      return this.$store.getters['user/isAdmin']
     }
   },
   mounted () {
