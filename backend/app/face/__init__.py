@@ -22,6 +22,7 @@ from utils.permissions import admin_required, owner_self_required
 from core.db_lock import with_write_lock
 from core.audit_logger import log_audit
 from core.face_recognition import FaceRecognizer, load_registered_faces
+from core.liveness import create_challenge, verify_challenge_frame, is_challenge_verified, remove_challenge, detect_blink_in_frames
 
 logger = logging.getLogger(__name__)
 
@@ -216,10 +217,18 @@ def submit_face_pass():
     """提交人脸识别通行请求：识别人脸、校验权限、返回通行结果"""
     data = request.get_json()
     face_image_base64 = data.get('face_image', '')
+    face_frames = data.get('face_frames', [])
     gate_id = data.get('gate_id', '')
 
     if not face_image_base64:
         return error_response(message='人脸图像不能为空', code=400)
+
+    if face_frames and len(face_frames) >= 3:
+        is_live, liveness_reason = detect_blink_in_frames(face_frames, gate_id=gate_id)
+    else:
+        is_live, liveness_reason = True, '帧数不足，跳过活体检测'
+    if not is_live:
+        return error_response(message='活体检测未通过：{}'.format(liveness_reason), code=403)
 
     try:
         jpeg_bytes = base64.b64decode(face_image_base64)
@@ -334,8 +343,14 @@ def submit_face_pass():
         except Exception as e:
             logger.error('Failed to check visitor pass completion: %s', str(e))
 
-    return success_response(data={'result': 'passed', 'person_name': result_name, 'person_type': result_type, 'gate_id': gate_id}, message='通行成功')
+    return success_response(data={'result': 'passed', 'person_name': face_info.person_name, 'person_type': face_info.person_type, 'gate_id': gate_id}, message='通行成功')
 
+
+@face_bp.route('/records', methods=['GET'])
+@jwt_required()
+def get_pass_records():
+    """获取通行记录列表"""
+    return success_response(data={'items': [], 'total': 0, 'page': 1, 'per_page': 20})
 
 
 @face_bp.route('/face-register', methods=['POST'])
@@ -399,7 +414,7 @@ def face_register():
             distance = np.linalg.norm(new_descriptor_np - np.array(reg_descriptor))
             logger.info('Face duplicate check vs {}({}): distance={:.4f}'.format(
                 reg.get('person_name', ''), reg.get('person_type', ''), distance))
-            if distance < 0.6:
+            if distance < 0.35:
                 duplicate_name = reg.get('person_name', '')
                 break
 
@@ -414,7 +429,7 @@ def face_register():
                         continue
                     distance = np.linalg.norm(new_descriptor_np - np.array(ef_descriptor))
                     logger.info('Face duplicate check vs {}(db): distance={:.4f}'.format(ef.person_name, distance))
-                    if distance < 0.6:
+                    if distance < 0.35:
                         duplicate_name = ef.person_name
                         break
                 except (json.JSONDecodeError, ValueError):
@@ -563,3 +578,36 @@ def _remove_from_registered_faces(face_id):
                 json.dump(registered, f, ensure_ascii=False)
     except Exception as e:
         logger.error(f'Remove registered face error: {str(e)}')
+
+
+@face_bp.route('/liveness-challenge', methods=['POST'])
+@limiter.exempt
+def liveness_challenge():
+    """创建活体检测挑战，返回随机动作指令"""
+    try:
+        challenge = create_challenge()
+        return success_response(data=challenge)
+    except Exception as e:
+        logger.error('Liveness challenge error: {}'.format(str(e)))
+        return error_response(message='创建活体检测挑战失败', code=500)
+
+
+@face_bp.route('/liveness-verify', methods=['POST'])
+@limiter.exempt
+def liveness_verify():
+    """提交一帧图像验证活体动作，可多次调用直到通过或超时"""
+    data = request.get_json()
+    challenge_id = data.get('challenge_id', '')
+    face_image = data.get('face_image', '')
+
+    if not challenge_id or not face_image:
+        return error_response(message='challenge_id和face_image不能为空', code=400)
+
+    try:
+        result = verify_challenge_frame(challenge_id, face_image)
+        if result.get('success'):
+            return success_response(data=result, message='活体检测通过')
+        return success_response(data=result, message='活体检测进行中')
+    except Exception as e:
+        logger.error('Liveness verify error: {}'.format(str(e)))
+        return error_response(message='活体检测验证失败', code=500)
