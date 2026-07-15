@@ -1,9 +1,33 @@
 """
 数据库模型 - 告警事件
 """
+import os
 from datetime import datetime, timezone, timedelta
 
 _CST = timezone(timedelta(hours=8))
+
+_CAPTURE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    'data', 'alarm_captures'
+)
+
+
+def _path_to_capture_url(abs_path):
+    if not abs_path:
+        return None
+    if abs_path.startswith('alarm_captures/'):
+        return abs_path
+    try:
+        rel = os.path.relpath(abs_path, _CAPTURE_DIR)
+        if not rel.startswith('..'):
+            return 'alarm_captures/{}'.format(rel.replace(os.sep, '/'))
+    except ValueError:
+        pass
+    if 'alarm_captures' in abs_path:
+        filename = abs_path.rsplit('alarm_captures', 1)[-1].replace(os.sep, '/').lstrip('/')
+        if filename:
+            return 'alarm_captures/{}'.format(filename)
+    return abs_path
 
 
 def _to_cst_str(time_str):
@@ -45,8 +69,8 @@ class AlarmEvent(db.Model):
             'source_id': self.source_id,
             'source_type': self.source_type,
             'alarm_description': self.alarm_description,
-            'capture_image_path': self.capture_image_path,
-            'video_path': self.video_path,
+            'capture_image_path': _path_to_capture_url(self.capture_image_path),
+            'video_path': _path_to_capture_url(self.video_path),
             'handle_status': self.handle_status,
             'handler_id': self.handler_id,
             'handle_time': _to_cst_str(self.handle_time),
