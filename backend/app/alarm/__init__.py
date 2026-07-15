@@ -4,8 +4,9 @@
 """
 import io
 import logging
+import os
 from datetime import datetime, timezone, timedelta
-from flask import Blueprint, request, send_file
+from flask import Blueprint, request, send_file, send_from_directory, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
@@ -22,6 +23,18 @@ logger = logging.getLogger(__name__)
 _CST = timezone(timedelta(hours=8))
 
 alarm_bp = Blueprint('alarm', __name__)
+
+_CAPTURE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    'data', 'alarm_captures'
+)
+
+
+@alarm_bp.route('/capture/<path:filename>', methods=['GET'])
+def serve_capture_image(filename):
+    if not filename or '..' in filename or filename.startswith('/'):
+        return error_response(message='无效文件名', code=400)
+    return send_from_directory(_CAPTURE_DIR, filename)
 
 
 @alarm_bp.route('/list', methods=['GET'])
