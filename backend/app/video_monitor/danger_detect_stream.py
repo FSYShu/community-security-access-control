@@ -16,7 +16,7 @@ DETECT_INTERVAL = 1.5
 MAX_WIDTH = 640
 
 
-def generate_frames_with_danger_detect(stream_url, zones, max_width=640):
+def generate_frames_with_danger_detect(stream_url, zones, gate_id=None, max_width=640):
     entry = start_rtmp_pull(stream_url, fps=20, max_width=max_width)
     if entry is None:
         return
@@ -70,7 +70,7 @@ def generate_frames_with_danger_detect(stream_url, zones, max_width=640):
                                        interpolation=cv2.INTER_LINEAR)
 
                 from app.danger_zone.danger_zone_detector import _detect_persons
-                persons = _detect_persons(frame)
+                persons = _detect_persons(frame, zone_id=zones[0].id if zones else None, gate_id=gate_id)
                 with detection_state['lock']:
                     detection_state['persons'] = persons
                     detection_state['last_time'] = time.time()
@@ -78,7 +78,7 @@ def generate_frames_with_danger_detect(stream_url, zones, max_width=640):
                 for zone in zones:
                     try:
                         from app.danger_zone.danger_zone_detector import process_frame_for_zone
-                        process_frame_for_zone(zone.id, frame)
+                        process_frame_for_zone(zone.id, frame, gate_id=gate_id)
                     except Exception as e:
                         logger.error('Error processing zone {}: {}'.format(zone.id, str(e)))
             except Exception as e:

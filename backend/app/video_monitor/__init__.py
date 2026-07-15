@@ -337,7 +337,7 @@ def video_feed_by_gate_with_danger_detect(gate_id):
     try:
         from .danger_detect_stream import generate_frames_with_danger_detect
         return Response(
-            generate_frames_with_danger_detect(stream_url, zones, max_width=max_width),
+            generate_frames_with_danger_detect(stream_url, zones, gate_id=gate_id, max_width=max_width),
             mimetype='multipart/x-mixed-replace; boundary=frame'
         )
     except Exception as e:
