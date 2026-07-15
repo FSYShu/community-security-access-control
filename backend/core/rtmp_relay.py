@@ -75,7 +75,7 @@ def get_ffmpeg_cmd(rtmp_url):
         '-loglevel', 'warning',
         '-f', 'image2pipe',
         '-vcodec', 'mjpeg',
-        '-use_wallclock_as_timestamps', '1',
+        '-framerate', '30',
         '-fflags', '+genpts+fastseek+discardcorrupt',
         '-i', 'pipe:0',
         '-c:v', 'libx264',
@@ -325,17 +325,6 @@ _JPEG_EOI = b'\xff\xd9'
 _READ_CHUNK = 131072
 
 
-def _validate_jpeg(jpeg_bytes):
-    try:
-        import cv2
-        import numpy as np
-        arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
-        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        return frame is not None
-    except Exception:
-        return False
-
-
 def read_jpeg_frame_from_pull(pull_entry):
     proc = pull_entry['process']
     stdout = proc.stdout
@@ -355,11 +344,8 @@ def read_jpeg_frame_from_pull(pull_entry):
         idx = scan.find(_JPEG_EOI)
         if idx >= 0:
             frame = scan[:idx + 2]
-            if _validate_jpeg(frame):
-                record_pull_frame(pull_entry['url'])
-                return frame
-            scan = scan[idx + 2:]
-            continue
+            record_pull_frame(pull_entry['url'])
+            return frame
         chunk = stdout.read(_READ_CHUNK)
         if not chunk:
             return None
