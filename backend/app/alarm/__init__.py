@@ -14,7 +14,7 @@ from app import db, limiter
 from app.models.alarm import AlarmEvent
 from app.models.user import User
 from utils.response import success_response, error_response, paginate_response
-from utils.permissions import guard_or_admin_required
+from utils.permissions import guard_or_admin_required, admin_required
 from core.audit_logger import log_audit
 
 logger = logging.getLogger(__name__)
@@ -235,7 +235,7 @@ def export_alarm_log():
 
 
 @alarm_bp.route('/clear', methods=['DELETE'])
-@guard_or_admin_required
+@admin_required
 def clear_all_alarms():
     """清空所有告警记录"""
     try:

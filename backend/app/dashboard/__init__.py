@@ -4,7 +4,7 @@
 """
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request
-from flask_jwt_extended import jwt_required, get_jwt
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from app import db
 from app.models.pass_record import PassRecord
 from app.models.alarm import AlarmEvent
@@ -22,8 +22,8 @@ def _format_alarm_time(time_str):
         return ''
     try:
         dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
-        if dt.tzinfo is not None:
-            dt = dt.astimezone(_CST)
+        if dt.tzinfo is None:
+            dt = dt.astimezone(tzinfo=timezone.utc)
         return dt.strftime('%Y-%m-%d %H:%M:%S')
     except (ValueError, AttributeError):
         return time_str[:19].replace('T', ' ') if len(time_str) >= 19 else time_str
