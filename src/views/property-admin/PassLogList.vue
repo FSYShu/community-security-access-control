@@ -598,7 +598,10 @@ export default {
     getImageUrl (path) {
       if (!path) return ''
       if (path.startsWith('http')) return path
-      return `${process.env.API_BASE_URL || '/api/v1'}/../${path}`
+      if (path.startsWith('alarm_captures/')) {
+        return `${process.env.API_BASE_URL || '/api/v1'}/alarm/capture/${path.replace('alarm_captures/', '')}`
+      }
+      return `${process.env.API_BASE_URL || '/api/v1'}/alarm/capture/${path}`
     }
   }
 }
