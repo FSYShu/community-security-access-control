@@ -84,3 +84,21 @@ export function testFace (data) {
     timeout: 60000
   })
 }
+
+/** 创建活体检测挑战 */
+export function createLivenessChallenge () {
+  return request({
+    url: '/face/liveness-challenge',
+    method: 'post'
+  })
+}
+
+/** 提交活体检测帧验证 */
+export function verifyLivenessFrame (data) {
+  return request({
+    url: '/face/liveness-verify',
+    method: 'post',
+    data,
+    timeout: 10000
+  })
+}

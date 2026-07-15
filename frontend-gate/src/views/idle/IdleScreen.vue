@@ -396,20 +396,33 @@ export default {
       ctx.drawImage(video, 0, 0)
       return canvas.toDataURL('image/jpeg').split(',')[1]
     },
+    async captureMultiFrames (count, interval) {
+      const frames = []
+      for (let i = 0; i < count; i++) {
+        const frame = this.captureFrame()
+        if (frame) frames.push(frame)
+        if (i < count - 1) {
+          await new Promise(function (resolve) { setTimeout(resolve, interval) })
+        }
+      }
+      return frames
+    },
     async doFacePass () {
       if (this.faceLoading) return
-      const base64Image = this.captureFrame()
-      if (!base64Image) {
+      const frames = await this.captureMultiFrames(6, 150)
+      if (frames.length === 0) {
         this.faceResult = { passed: false, reason: '摄像头未就绪' }
         this.startResultTimer()
         return
       }
+      const base64Image = frames[frames.length - 1]
       this.faceLoading = true
       this.faceResult = null
       this.clearResultTimer()
       try {
         const res = await submitFacePass({
           face_image: base64Image,
+          face_frames: frames,
           gate_id: this.gateId,
           _silent: true
         })
@@ -425,7 +438,9 @@ export default {
           const msg = (err && err.message) || '识别失败'
           const noFaceKeywords = ['未检测到人脸', '未找到人脸', 'no face']
           const isNoFace = noFaceKeywords.some(function (k) { return msg.includes(k) })
-          if (isNoFace) {
+          if (msg.includes('活体检测未通过')) {
+            this.faceResult = { passed: false, reason: '活体检测未通过，疑似非真人' }
+          } else if (isNoFace) {
             this.faceResult = { passed: false, reason: '未检测到人脸，请正对摄像头' }
           } else {
             const reasonMap = {
@@ -446,6 +461,7 @@ export default {
       }
       this.startResultTimer()
     },
+
     startResultTimer () {
       this.clearResultTimer()
       const self = this
@@ -710,6 +726,18 @@ export default {
   background: rgba(239, 68, 68, 0.45);
   border: 1px solid rgba(239, 68, 68, 0.6);
   color: var(--gate-danger);
+}
+.result-liveness {
+  background: rgba(64, 158, 255, 0.45);
+  border: 1px solid rgba(64, 158, 255, 0.6);
+  color: #409eff;
+}
+.liveness-action-label {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 16px;
+  letter-spacing: 2px;
 }
 .face-result-title {
   font-size: 20px;

@@ -10,6 +10,14 @@ export function submitFacePass (data) {
   return request(config)
 }
 
+export function createLivenessChallenge () {
+  return request({ url: '/face/liveness-challenge', method: 'post' })
+}
+
+export function verifyLivenessFrame (data) {
+  return request({ url: '/face/liveness-verify', method: 'post', data, timeout: 10000 })
+}
+
 export function getFaceList (params) {
   return request({ url: '/face/list', method: 'get', params })
 }

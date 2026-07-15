@@ -132,9 +132,18 @@
       <div class="form-grid">
         <div class="form-item">
           <label class="form-label">摄像头画面</label>
-          <div class="camera-area">
+          <div class="camera-area" style="position:relative">
             <video ref="testVideo" class="camera-preview" autoplay playsinline></video>
             <canvas ref="testCanvas" style="display: none;"></canvas>
+            <transition name="fade">
+              <div v-if="livenessActive" class="liveness-overlay-test">
+                <div class="liveness-hint-test">
+                  <i class="el-icon-view" style="font-size:36px;color:#409eff"></i>
+                  <div class="liveness-action-text-test">{{ livenessActionLabel }}</div>
+                  <van-loading v-if="livenessVerifying" size="20" color="#409eff" />
+                </div>
+              </div>
+            </transition>
           </div>
         </div>
       </div>
@@ -162,7 +171,7 @@
       </div>
       <div class="form-footer">
         <button class="form-btn form-btn-cancel" @click="showTestDialog = false">关闭</button>
-        <button class="form-btn form-btn-primary" @click="onTestCapture" :disabled="testLoading">
+        <button class="form-btn form-btn-primary" @click="onTestCapture" :disabled="testLoading || livenessActive">
           <i v-if="testLoading" class="el-icon-loading"></i>
           拍照识别
         </button>
@@ -173,7 +182,7 @@
 </template>
 
 <script>
-import { getFaceList, deleteFace, registerFace, testFace } from '@/api/face'
+import { getFaceList, deleteFace, registerFace, testFace, createLivenessChallenge, verifyLivenessFrame } from '@/api/face'
 import { getGateList } from '@/api/property'
 
 export default {
@@ -203,7 +212,10 @@ export default {
       addPhotoBase64: null,
       addForm: { personName: '', personType: 'owner', selectedGateId: null },
       entranceDoors: [],
-      perPageReady: false
+      perPageReady: false,
+      livenessActive: false,
+      livenessActionLabel: '',
+      livenessVerifying: false
     }
   },
   computed: {
@@ -547,6 +559,41 @@ export default {
       this.testLoading = true
       this.testResult = null
       try {
+        try {
+          const challengeRes = await createLivenessChallenge()
+          const challengeId = challengeRes.data && challengeRes.data.challenge_id
+          if (challengeId) {
+            this.livenessActive = true
+            this.livenessActionLabel = challengeRes.data.action_label || '请眨眼'
+            this.livenessVerifying = false
+            const maxAttempts = 4
+            for (let i = 0; i < maxAttempts; i++) {
+              await new Promise(resolve => setTimeout(resolve, 500))
+              ctx.drawImage(video, 0, 0)
+              const frame = canvas.toDataURL('image/jpeg').split(',')[1]
+              if (!frame) continue
+              this.livenessVerifying = true
+              try {
+                const lRes = await verifyLivenessFrame({ challenge_id: challengeId, face_image: frame })
+                if (lRes.data && lRes.data.success) {
+                  this.livenessActive = false
+                  this.livenessVerifying = false
+                  break
+                }
+              } catch (e) {
+                // continue
+              }
+              this.livenessVerifying = false
+              if (i === maxAttempts - 1) {
+                this.livenessActive = false
+                this.$message.error('活体检测未通过')
+                return
+              }
+            }
+          }
+        } catch (e) {
+          this.livenessActive = false
+        }
         const res = await testFace({ face_image: base64Image })
         if (res.code === 0) {
           this.testResult = res.data
@@ -557,6 +604,7 @@ export default {
         // 拦截器已弹出后端错误消息，此处不再重复提示
       } finally {
         this.testLoading = false
+        this.livenessActive = false
       }
     }
 
@@ -892,6 +940,31 @@ export default {
   border: 1px solid var(--dark-border);
   background: #000;
   line-height: 0;
+  position: relative;
+}
+.liveness-overlay-test {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 2;
+}
+.liveness-hint-test {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.liveness-action-text-test {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 2px;
 }
 
 .camera-preview {
